@@ -1,3 +1,4 @@
+
 // ===========================================================================
 // Diagnostics
 // ===========================================================================
@@ -16,10 +17,14 @@ unit col
 // expectation names.  The level says whether the program is refused or
 // merely remarked on -- a warning is reported and the program still
 // compiles, unless --Werror says otherwise.
+@export
 let DIAG_ERROR : i64 = 0
+@export
 let DIAG_WARNING : i64 = 1
+@export
 let DIAG_NONE : i64 = 0      // no number yet
 
+@export
 struct Diag:
     line : i64 ¤"line"
     col : i64 ¤"col"
@@ -37,11 +42,13 @@ struct Diag:
 // a byte offset is free -- it is the length so far -- while a line
 // number costs a walk of the text.  The walk is done once, and only
 // where a diagnostic is actually being written.
+@export
 struct Files:
     names : str[]
     off : i64 ¤byte[]    // the byte each one begins at
 
 // the line each source file begins on, counted from 1 over the whole
+@export
 @pre(#f.names > 0 and #f.names = #f.off)
 @post(r: #r = #f.names)
 fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
@@ -63,6 +70,7 @@ fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
     out
 
 // which file line `want` came from, as an index into the names
+@export
 @pre(want >= 1 and #starts > 0)
 @post(r: r >= 0 and r < #starts)
 fn file_of(starts : i64 ¤"line"[], want : i64 ¤"line") → i64 ¤ptrdiff:
@@ -75,6 +83,7 @@ fn file_of(starts : i64 ¤"line"[], want : i64 ¤"line") → i64 ¤ptrdiff:
     k
 
 // the text of source line n, decoded, for the excerpt under a diagnostic
+@export
 @pre(want >= 1)
 fn line_str(src : byte[], want : i64 ¤"line") → str:
     let n : i64 ¤byte = #src

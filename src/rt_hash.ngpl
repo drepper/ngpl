@@ -26,21 +26,30 @@
 // and the builder takes them as the plain numbers the instruction
 // encodes.
 
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+
 // Where things sit in a handle.  The buffer is as wide as the widest
 // block any algorithm here absorbs, so the layout does not move when
 // one is added; SHA-256's is 64 of its 136 bytes.
 
-@import("./ir.ngpl")
-@import("./lower.ngpl")
-@import("./emit.ngpl")
 
 let HS_ALG : i64 = 0        // which algorithm, or ⁻1 once the digest is taken
+@export
 let HS_TOTAL : i64 = 8      // how many bytes have been added
+@export
 let HS_FILL : i64 = 16      // how many of them are in the buffer, not yet absorbed
+@export
 let HS_BLK : i64 = 24       // how many bytes this algorithm absorbs at once
+@export
 let HS_H : i64 = 32         // the state, eight cells
+@export
 let HS_BUF : i64 = 96       // the block being filled, 136 bytes
+@export
 let HS_K : i64 = 232        // the round constants, sixty-four cells
+@export
 let HS_W : i64 = 744        // the message schedule, sixty-four cells
 let HS_SIZE : i64 = 1264    // what to allocate, sixteen-aligned
 
@@ -54,23 +63,25 @@ fn rt_hash_spent_msg() → str:
 
 // (alg) → a handle.  The generic part is the bookkeeping; what the
 // algorithm has to say about starting it says itself.
-fn rt_hstart_ir() → IrFn:
-    let b : mut RtB = rtb(1)
-    let h : i64 = b.call1(RT_ALLOC, b.cst(HS_SIZE))
+@export
+fn rt_hstart_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(1)
+    let h : i64 = b.call1(emit.RT_ALLOC, b.cst(HS_SIZE))
     let z : i64 = b.cst(0)
     // vreg 0 is the algorithm the caller asked for
     b.stn(h, HS_ALG, 0, 8)
     b.stn(h, HS_TOTAL, z, 8)
     b.stn(h, HS_FILL, z, 8)
     // one algorithm, so one call; a second adds a comparison here
-    _ ← b.call1(RT_SHA256INIT, h)
+    _ ← b.call1(emit.RT_SHA256INIT, h)
     b.ret(h)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (h, arr): every byte of arr into the block, and the block absorbed
 // each time it fills.
-fn rt_hupdate_ir(lw : &mut Lower) → IrFn:
-    let b : mut RtB = rtb(2)
+@export
+fn rt_hupdate_ir(lw : &mut lower.Lower) → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(2)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let three : i64 = b.cst(3)
@@ -99,7 +110,7 @@ fn rt_hupdate_ir(lw : &mut Lower) → IrFn:
     b.mov(fill, b.add(fill, one))
     b.jz(b.ceq(fill, blk), lroom)
     b.stn(0, HS_FILL, fill, 8)
-    _ ← b.call1(RT_SHA256BLK, 0)
+    _ ← b.call1(emit.RT_SHA256BLK, 0)
     b.mov(fill, z)
     b.lab(lroom)
     b.mov(ix, b.add(ix, one))
@@ -107,15 +118,16 @@ fn rt_hupdate_ir(lw : &mut Lower) → IrFn:
     b.lab(lend)
     b.stn(0, HS_FILL, fill, 8)
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (h, dst) → the digest written at dst, and the end of the handle.  What the handle held
 // is wiped here rather than left lying about: a bump allocator has
 // nothing to give back, so this is what freeing a hash can mean, and
 // it is the part that matters -- a message worth hashing is often a
 // message worth not leaving in memory afterwards.
-fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
-    let b : mut RtB = rtb(2)
+@export
+fn rt_hfinal_ir(lw : &mut lower.Lower) → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(2)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let three : i64 = b.cst(3)
@@ -125,7 +137,7 @@ fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
     b.abort_msg(lw.intern(rt_hash_spent_msg()))
     b.lab(lok)
     // one algorithm, so one call; a second adds a comparison here
-    let out : i64 = b.call2(RT_SHA256FIN, 0, 1)
+    let out : i64 = b.call2(emit.RT_SHA256FIN, 0, 1)
     b.stn(0, HS_ALG, b.cst(⁻1), 8)
     b.stn(0, HS_FILL, z, 8)
     b.stn(0, HS_TOTAL, z, 8)
@@ -150,4 +162,4 @@ fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
     b.jmp(lbt)
     b.lab(lbe)
     b.ret(out)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)

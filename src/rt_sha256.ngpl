@@ -30,45 +30,49 @@
 // measure nothing; they carry no unit, as everywhere else the IR is
 // built.
 
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let rt_hash := @import("./rt_hash.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+let sha256 := @import("./sha256.ngpl")
+
 // x turned right by n places, at thirty-two bits.  What falls off the
 // bottom comes back at the top, which a shift alone will not do.
 
-@import("./ir.ngpl")
-@import("./emit.ngpl")
-@import("./sha256.ngpl")
-@import("./rt_hash.ngpl")
 
 @pre(n >= 1 and n <= 31)
-fn sha_ir_rotr(b : &mut RtB, x : i64, n : i64) → i64:
+fn sha_ir_rotr(b : &mut rt_portable.RtB, x : i64, n : i64) → i64:
     b.bor(b.shr32(x, b.cst(n)), b.shl32(x, b.cst(32 - n)))
 
 // the message schedule's word at a computed index; `three` holds the
 // shift that turns an index into a byte offset
-fn sha_ir_w(b : &mut RtB, h : i64, idx : i64, three : i64) → i64:
-    b.ldn(b.add(h, b.shl(idx, three)), HS_W, 8)
+fn sha_ir_w(b : &mut rt_portable.RtB, h : i64, idx : i64, three : i64) → i64:
+    b.ldn(b.add(h, b.shl(idx, three)), rt_hash.HS_W, 8)
 
 // (h): the state, the block size, and the round constants.  The
 // constants are laid down once per handle rather than once per block,
 // and they come from the same sha_k() the language version reads --
 // one table, not two.
-fn rt_sha256init_ir() → IrFn:
-    let b : mut RtB = rtb(1)
-    b.stn(0, HS_BLK, b.cst(64), 8)
-    let h0 : u32[] = sha_h0()
+@export
+fn rt_sha256init_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(1)
+    b.stn(0, rt_hash.HS_BLK, b.cst(64), 8)
+    let h0 : u32[] = sha256.sha_h0()
     assert(@dropunit(#h0) = 8, "eight starting words")
     foreach i := 0…8:
-        b.stn(0, HS_H + i × 8, b.cst(h0[i × 1¤ptrdiff]), 8)
-    let kt : u32[] = sha_k()
+        b.stn(0, rt_hash.HS_H + i × 8, b.cst(h0[i × 1¤ptrdiff]), 8)
+    let kt : u32[] = sha256.sha_k()
     assert(@dropunit(#kt) = 64, "sixty-four round constants")
     foreach i := 0…64:
-        b.stn(0, HS_K + i × 8, b.cst(kt[i × 1¤ptrdiff]), 8)
+        b.stn(0, rt_hash.HS_K + i × 8, b.cst(kt[i × 1¤ptrdiff]), 8)
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (h): the sixty-four bytes in the handle's buffer, absorbed into its
 // state.  FIPS 180-4, section 6.2.2.
-fn rt_sha256blk_ir() → IrFn:
-    let b : mut RtB = rtb(1)
+@export
+fn rt_sha256blk_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(1)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let two : i64 = b.cst(2)
@@ -92,8 +96,8 @@ fn rt_sha256blk_ir() → IrFn:
     let lbe : i64 = b.l()
     b.lab(lbt)
     b.jz(b.cltu(bi, c64), lbe)
-    b.mov(acc, b.bor(b.shl32(acc, c8), b.ldn(b.add(0, bi), HS_BUF, 1)))
-    b.stn(b.add(0, b.shl(b.shr(bi, two), three)), HS_W, acc, 8)
+    b.mov(acc, b.bor(b.shl32(acc, c8), b.ldn(b.add(0, bi), rt_hash.HS_BUF, 1)))
+    b.stn(b.add(0, b.shl(b.shr(bi, two), three)), rt_hash.HS_W, acc, 8)
     b.mov(bi, b.add(bi, one))
     b.jmp(lbt)
     b.lab(lbe)
@@ -113,7 +117,7 @@ fn rt_sha256blk_ir() → IrFn:
                           b.shr32(a2, b.cst(10)))
     let w16 : i64 = sha_ir_w(&b, 0, b.sub(j, c16), three)
     let w7 : i64 = sha_ir_w(&b, 0, b.sub(j, seven), three)
-    b.stn(b.add(0, b.shl(j, three)), HS_W,
+    b.stn(b.add(0, b.shl(j, three)), rt_hash.HS_W,
           b.add32(b.add32(b.add32(w16, s0), w7), s1), 8)
     b.mov(j, b.add(j, one))
     b.jmp(ljt)
@@ -128,14 +132,14 @@ fn rt_sha256blk_ir() → IrFn:
     let vf : i64 = b.t()
     let vg : i64 = b.t()
     let vh : i64 = b.t()
-    b.mov(va, b.ldn(0, HS_H, 8))
-    b.mov(vb, b.ldn(0, HS_H + 8, 8))
-    b.mov(vc, b.ldn(0, HS_H + 16, 8))
-    b.mov(vd, b.ldn(0, HS_H + 24, 8))
-    b.mov(ve, b.ldn(0, HS_H + 32, 8))
-    b.mov(vf, b.ldn(0, HS_H + 40, 8))
-    b.mov(vg, b.ldn(0, HS_H + 48, 8))
-    b.mov(vh, b.ldn(0, HS_H + 56, 8))
+    b.mov(va, b.ldn(0, rt_hash.HS_H, 8))
+    b.mov(vb, b.ldn(0, rt_hash.HS_H + 8, 8))
+    b.mov(vc, b.ldn(0, rt_hash.HS_H + 16, 8))
+    b.mov(vd, b.ldn(0, rt_hash.HS_H + 24, 8))
+    b.mov(ve, b.ldn(0, rt_hash.HS_H + 32, 8))
+    b.mov(vf, b.ldn(0, rt_hash.HS_H + 40, 8))
+    b.mov(vg, b.ldn(0, rt_hash.HS_H + 48, 8))
+    b.mov(vh, b.ldn(0, rt_hash.HS_H + 56, 8))
     let t : i64 = b.t()
     b.mov(t, z)
     let ltt : i64 = b.l()
@@ -146,8 +150,8 @@ fn rt_sha256blk_ir() → IrFn:
     let big1 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, ve, 6), sha_ir_rotr(&b, ve, 11)),
                             sha_ir_rotr(&b, ve, 25))
     let ch : i64 = b.bxor(b.band(ve, vf), b.band(b.bnot32(ve), vg))
-    let kv : i64 = b.ldn(toff, HS_K, 8)
-    let wv : i64 = b.ldn(toff, HS_W, 8)
+    let kv : i64 = b.ldn(toff, rt_hash.HS_K, 8)
+    let wv : i64 = b.ldn(toff, rt_hash.HS_W, 8)
     let t1 : i64 = b.add32(b.add32(b.add32(b.add32(vh, big1), ch), kv), wv)
     let big0 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, va, 2), sha_ir_rotr(&b, va, 13)),
                             sha_ir_rotr(&b, va, 22))
@@ -167,24 +171,25 @@ fn rt_sha256blk_ir() → IrFn:
     b.jmp(ltt)
     b.lab(lte)
 
-    b.stn(0, HS_H, b.add32(b.ldn(0, HS_H, 8), va), 8)
-    b.stn(0, HS_H + 8, b.add32(b.ldn(0, HS_H + 8, 8), vb), 8)
-    b.stn(0, HS_H + 16, b.add32(b.ldn(0, HS_H + 16, 8), vc), 8)
-    b.stn(0, HS_H + 24, b.add32(b.ldn(0, HS_H + 24, 8), vd), 8)
-    b.stn(0, HS_H + 32, b.add32(b.ldn(0, HS_H + 32, 8), ve), 8)
-    b.stn(0, HS_H + 40, b.add32(b.ldn(0, HS_H + 40, 8), vf), 8)
-    b.stn(0, HS_H + 48, b.add32(b.ldn(0, HS_H + 48, 8), vg), 8)
-    b.stn(0, HS_H + 56, b.add32(b.ldn(0, HS_H + 56, 8), vh), 8)
+    b.stn(0, rt_hash.HS_H, b.add32(b.ldn(0, rt_hash.HS_H, 8), va), 8)
+    b.stn(0, rt_hash.HS_H + 8, b.add32(b.ldn(0, rt_hash.HS_H + 8, 8), vb), 8)
+    b.stn(0, rt_hash.HS_H + 16, b.add32(b.ldn(0, rt_hash.HS_H + 16, 8), vc), 8)
+    b.stn(0, rt_hash.HS_H + 24, b.add32(b.ldn(0, rt_hash.HS_H + 24, 8), vd), 8)
+    b.stn(0, rt_hash.HS_H + 32, b.add32(b.ldn(0, rt_hash.HS_H + 32, 8), ve), 8)
+    b.stn(0, rt_hash.HS_H + 40, b.add32(b.ldn(0, rt_hash.HS_H + 40, 8), vf), 8)
+    b.stn(0, rt_hash.HS_H + 48, b.add32(b.ldn(0, rt_hash.HS_H + 48, 8), vg), 8)
+    b.stn(0, rt_hash.HS_H + 56, b.add32(b.ldn(0, rt_hash.HS_H + 56, 8), vh), 8)
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (h) → the thirty-two bytes of the digest.  The padding is a set bit,
 // then zeros, then the length in bits as eight bytes, arranged so the
 // message ends on a block boundary.  It is written through the same
 // buffer the message went through, so there is one path into the
 // compression rather than two.
-fn rt_sha256fin_ir() → IrFn:
-    let b : mut RtB = rtb(2)
+@export
+fn rt_sha256fin_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(2)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let three : i64 = b.cst(3)
@@ -193,16 +198,16 @@ fn rt_sha256fin_ir() → IrFn:
     let c56 : i64 = b.cst(56)
     let c64 : i64 = b.cst(64)
     let c255 : i64 = b.cst(255)
-    let bits : i64 = b.shl(b.ldn(0, HS_TOTAL, 8), three)
+    let bits : i64 = b.shl(b.ldn(0, rt_hash.HS_TOTAL, 8), three)
     let fill : i64 = b.t()
-    b.mov(fill, b.ldn(0, HS_FILL, 8))
+    b.mov(fill, b.ldn(0, rt_hash.HS_FILL, 8))
 
     // the one bit that ends the message
-    b.stn(b.add(0, fill), HS_BUF, b.cst(128), 1)
+    b.stn(b.add(0, fill), rt_hash.HS_BUF, b.cst(128), 1)
     b.mov(fill, b.add(fill, one))
     let lf1 : i64 = b.l()
     b.jz(b.ceq(fill, c64), lf1)
-    _ ← b.call1(RT_SHA256BLK, 0)
+    _ ← b.call1(emit.RT_SHA256BLK, 0)
     b.mov(fill, z)
     b.lab(lf1)
 
@@ -214,10 +219,10 @@ fn rt_sha256fin_ir() → IrFn:
     let lz1 : i64 = b.l()
     b.lab(lzt)
     b.jz(b.cne(fill, c56), lze)
-    b.stn(b.add(0, fill), HS_BUF, z, 1)
+    b.stn(b.add(0, fill), rt_hash.HS_BUF, z, 1)
     b.mov(fill, b.add(fill, one))
     b.jz(b.ceq(fill, c64), lz1)
-    _ ← b.call1(RT_SHA256BLK, 0)
+    _ ← b.call1(emit.RT_SHA256BLK, 0)
     b.mov(fill, z)
     b.lab(lz1)
     b.jmp(lzt)
@@ -230,13 +235,13 @@ fn rt_sha256fin_ir() → IrFn:
     let lle : i64 = b.l()
     b.lab(llt)
     b.jz(b.cltu(i, c8), lle)
-    b.stn(b.add(0, b.add(c56, i)), HS_BUF,
+    b.stn(b.add(0, b.add(c56, i)), rt_hash.HS_BUF,
           b.band(b.shr(bits, b.shl(b.sub(seven, i), three)), c255), 1)
     b.mov(i, b.add(i, one))
     b.jmp(llt)
     b.lab(lle)
-    b.stn(0, HS_FILL, c64, 8)
-    _ ← b.call1(RT_SHA256BLK, 0)
+    b.stn(0, rt_hash.HS_FILL, c64, 8)
+    _ ← b.call1(emit.RT_SHA256BLK, 0)
 
     // The eight words as thirty-two bytes, most significant first,
     // written where the caller said.  They used to be an array: a
@@ -245,9 +250,9 @@ fn rt_sha256fin_ir() → IrFn:
     // answer is the bytes themselves and the caller owns the space.
     let shifts : i64[] = [24, 16, 8, 0]
     foreach k := 0…8:
-        let hv : i64 = b.ldn(0, HS_H + @dropunit(k) × 8, 8)
+        let hv : i64 = b.ldn(0, rt_hash.HS_H + @dropunit(k) × 8, 8)
         foreach si := 0…4:
             b.stn(1, @dropunit(k) × 4 + @dropunit(si),
                   b.band(b.shr32(hv, b.cst(shifts[si × 1¤ptrdiff])), c255), 1)
     b.ret(1)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)

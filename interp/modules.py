@@ -249,16 +249,22 @@ def rename_types(defs, mine: set, qualify, through=None) -> None:
     def fix(t):
         if not isinstance(t, str):
             return t
-        if t in mine:
-            return qualify(t)
-        head, dot, rest = t.partition(".")
+        # what a type is written with -- `[]`, `[N]`, `?` -- says how
+        # many and whether it is there, not which type it is
+        base, suffix = t, ""
+        cut = min((base.index(c) for c in "[?" if c in base), default=-1)
+        if cut >= 0:
+            base, suffix = base[:cut], base[cut:]
+        if base in mine:
+            return qualify(base) + suffix
+        head, dot, rest = base.partition(".")
         if dot and head in through:
             target = through[head]
             if rest not in target.exports:
                 raise KeyError(
                     f"the module {target.root} does not let others name "
                     f"'{rest}'; @export says what leaves a module")
-            return target.qualify(rest)
+            return target.qualify(rest) + suffix
         return t
 
     def walk(node):
@@ -323,6 +329,10 @@ _NAMED_TYPE_PAIRS = frozenset({"params", "fields"})
 # function's.  A struct literal writes the type it makes.
 _TYPE_NAME_BY_CLASS = {
     "StructLit": ("name",),
+    # `@sizeof(S)` writes a type where an expression is read; a type
+    # name is reserved, so a bare word that is one of ours names the
+    # type and never a binding.
+    "VarRef": ("name",),
 }
 
 
@@ -398,6 +408,12 @@ def prepare(mods):
             own = getattr(d, "module", "")
             if m.prefix:
                 d.module = f"{m.prefix}.{own}" if own else m.prefix
+                # A method is written in the module its impl block is
+                # written in, and reaches that module's names the way
+                # any other function of it does.
+                for meth in getattr(d, "methods", ()) or ():
+                    mown = getattr(meth, "module", "")
+                    meth.module = f"{m.prefix}.{mown}" if mown else m.prefix
             if isinstance(d, VarDef) and isinstance(d.init_expr, ImportExpr):
                 target = mods[m.bindings[d.name]]
                 d.import_handle = ModuleHandle(

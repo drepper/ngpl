@@ -31,15 +31,16 @@
 // program computes with, so they carry no unit -- as everywhere the IR
 // is built.
 
+let ast := @import("./ast.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+let tokens := @import("./tokens.ngpl")
+
 // How many frames are worth printing before the rest is repetition.
 
-@import("./tokens.ngpl")
-@import("./ast.ngpl")
-@import("./ir.ngpl")
-@import("./lower.ngpl")
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_a64.ngpl")
 
 let BT_MAX : i64 = 100
 
@@ -53,11 +54,11 @@ let BT_DIGITS : i64 = 16
 // up.  riscv32 is the exception: its pair still takes sixteen bytes
 // because that is what the stack is aligned to, and it puts the return
 // address at eight and the saved frame pointer at four.
-fn bt_prev_off(tg : Target) → i64:
-    if tg.id = TGT_RV32: 4 else: 0
+fn bt_prev_off(tg : elf.Target) → i64:
+    if tg.id = elf.TGT_RV32: 4 else: 0
 
-fn bt_ret_off(tg : Target) → i64:
-    if tg.id = TGT_RV32: 8 else: tg.ptr
+fn bt_ret_off(tg : elf.Target) → i64:
+    if tg.id = elf.TGT_RV32: 8 else: tg.ptr
 
 // ---------------------------------------------------------------------------
 // The table
@@ -72,7 +73,7 @@ fn bt_ret_off(tg : Target) → i64:
 // written as they will stand: the table is built once the layout is
 // settled, so nothing in it has to be relocated.
 
-fn bt_stride(tg : Target) → i64:
+fn bt_stride(tg : elf.Target) → i64:
     4 × tg.ptr
 
 // How many bytes a name is, which is not how long the string is: a
@@ -86,17 +87,18 @@ fn bt_nbytes(s : str) → i64:
 // one field, in the width the target's words have
 fn bt_word(out : &mut u8[], pw : i64, v : i64):
     if pw = 8:
-        push64(&out, v)
+        elf.push64(&out, v)
     else:
-        push32(&out, v)
+        elf.push32(&out, v)
 
 // The bytes of the table, ready to sit in the read-only data.  The
 // functions arrive in the order the code lays them out, each with
 // where it begins measured from the head of the text and how far it
 // runs.
+@export
 @pre(#names = #offs and #names = #sizes)
 @post(r: @dropunit(#r) >= tg.ptr)
-fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
+fn bt_bytes(tg : elf.Target, text_vaddr : i64, names : str[], offs : i64[],
             sizes : i64[]) → u8[]:
     let pw : i64 = tg.ptr
     let n : i64 ¤ptrdiff = #names
@@ -124,7 +126,7 @@ fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
 // The frame's number, written into the routine's own frame and said in
 // one write.  Three digits at the most, since the walk stops before a
 // fourth could be needed.
-fn bt_decimal(b : &mut RtB, v : i64, buf : i64):
+fn bt_decimal(b : &mut rt_portable.RtB, v : i64, buf : i64):
     let ten : i64 = b.cst(10)
     let one : i64 = b.cst(1)
     let asc0 : i64 = b.cst(48)
@@ -138,16 +140,17 @@ fn bt_decimal(b : &mut RtB, v : i64, buf : i64):
     b.stn(b.add(buf, p), 0, b.add(b.umod(q, ten), asc0), 1)
     b.mov(q, b.udiv(q, ten))
     b.jnz(q, ltop)
-    _ ← b.call2(RT_WRITE2, b.add(buf, p), b.sub(b.cst(BT_DIGITS), p))
+    _ ← b.call2(emit.RT_WRITE2, b.add(buf, p), b.sub(b.cst(BT_DIGITS), p))
 
 // () → nothing.  Says the program's own call stack on the error
 // stream, innermost first, in the shape the interpreter says it.  A
 // stop that no function of the program reached -- one in the startup,
 // before anything was called -- prints nothing at all, which is why
 // the heading waits for the first frame it finds a name for.
-fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
+@export
+fn rt_bt_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     let pw : i64 = tg.ptr
-    let b : mut RtB = rtb(0)
+    let b : mut rt_portable.RtB = rt_portable.rtb(0)
     let lend : i64 = b.l()
     let tbl : i64 = b.btaddr()
     let n : i64 = b.ldn(tbl, 0, 0)
@@ -162,9 +165,9 @@ fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
     // anyway; there is no branch here for the case, only a pair of
     // selections.
     let k : i64 = b.kaddr(0, 0)
-    let none : i64 = b.ceq(b.ldn(k, KB_STOP, 8), b.cst(0))
-    let lo : i64 = b.sel(none, b.cst(0), b.ldn(k, KB_GHI, 8))
-    let hi : i64 = b.sel(none, b.cst(⁻1), b.ldn(k, KB_STOP, 8))
+    let none : i64 = b.ceq(b.ldn(k, emit.KB_STOP, 8), b.cst(0))
+    let lo : i64 = b.sel(none, b.cst(0), b.ldn(k, emit.KB_GHI, 8))
+    let hi : i64 = b.sel(none, b.cst(⁻1), b.ldn(k, emit.KB_STOP, 8))
     let one : i64 = b.cst(1)
     let hdr : i64 = b.cst(pw)
     let stride : i64 = b.cst(bt_stride(tg))
@@ -208,7 +211,7 @@ fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
     b.eprint_msg(lw.intern("  #"))
     bt_decimal(&b, shown, buf)
     b.eprint_msg(lw.intern(" "))
-    _ ← b.call2(RT_WRITE2, b.add(tbl, b.ldn(e, 2 × pw, 0)), b.ldn(e, 3 × pw, 0))
+    _ ← b.call2(emit.RT_WRITE2, b.add(tbl, b.ldn(e, 2 × pw, 0)), b.ldn(e, 3 × pw, 0))
     b.eprint_msg(lw.intern("\n"))
     b.mov(shown, b.add(shown, one))
     b.jnz(b.cgeu(shown, b.cst(BT_MAX)), lcut)
@@ -222,7 +225,7 @@ fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
     b.eprint_msg(lw.intern("  (deeper frames are not shown)\n"))
     b.lab(lend)
     b.retn()
-    rtb_deep_fn(b, BT_DIGITS)
+    rt_portable.rtb_deep_fn(b, BT_DIGITS)
 
 // ---------------------------------------------------------------------------
 // What the compiler puts in the table
@@ -233,7 +236,8 @@ fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
 // behind them.  The name is what a reader wrote and not the symbol
 // table's spelling of the whole signature, because a backtrace is read
 // by a person and the symbol table is not.
-fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
+@export
+fn bt_fn_names(a : ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     let out : mut str[] = []
     if #a.fns > 0:
         foreach i := 0…#a.fns:
@@ -245,16 +249,17 @@ fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     out.push("<tests>")
     if nlams > 0:
         foreach j := 0…nlams:
-            out.push("λ#" ⧺ i64_str(j))
+            out.push("λ#" ⧺ tokens.i64_str(j))
     if npsfn > 0:
         foreach j := 0…npsfn:
-            out.push("partial#" ⧺ i64_str(j))
+            out.push("partial#" ⧺ tokens.i64_str(j))
     out
 
 // Where the program's own code ends, which is where the runtime's
 // begins.  A routine nobody reached is in no binary and has no offset,
 // and says nothing about where anything is.
-fn bt_text_end(em : &Emit, text_size : i64) → i64:
+@export
+fn bt_text_end(em : &emit.Emit, text_size : i64) → i64:
     let end : mut i64 = text_size
     if #em.rt_off > 0:
         foreach i := 0…#em.rt_off:
@@ -272,6 +277,7 @@ fn bt_text_end(em : &Emit, text_size : i64) → i64:
 // ends, and where the whole region stops, which is where the moved
 // ones do.  With none moved the two are the same question and
 // end_main answers it.
+@export
 @pre(nmoved >= 0 and nmoved <= @dropunit(#offs))
 @post(r: #r = #offs)
 fn bt_sizes(offs : i64[], nmoved : i64, end_main : i64, end_all : i64) → i64[]:

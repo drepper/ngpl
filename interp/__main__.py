@@ -3680,7 +3680,15 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             # installed, so what it objects to is reported the way the
             # checks around it are rather than as a bare traceback.
             try:
-                value = evaluator.eval_expr(defn.init_expr)
+                # A global is written in a module as a function is, and
+                # what its initialiser names is looked for there first:
+                # its own module's enums and types by their bare names.
+                was_mod = evaluator._cur_module
+                evaluator._cur_module = getattr(defn, "module", "")
+                try:
+                    value = evaluator.eval_expr(defn.init_expr)
+                finally:
+                    evaluator._cur_module = was_mod
                 unit = None
                 if defn.unit_spec is not None:
                     from interp.units import eval_unit_formula
@@ -3811,6 +3819,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                postconditions=method_def.postconditions)
                 fv.ret_ref = getattr(method_def, "ret_ref", None)
                 fv.ret_origins = getattr(method_def, "ret_origins", None)
+                # A method is written in a module as any function is,
+                # and reaches that module's names while it runs.
+                fv.module = getattr(method_def, "module", "")
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "

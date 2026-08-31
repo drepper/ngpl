@@ -1,3 +1,6 @@
+let emit := @import("./emit.ngpl")
+let ir_m := @import("./ir.ngpl")
+
 // ===========================================================================
 // x86-64: the hand-tuned emitter
 // ===========================================================================
@@ -7,18 +10,16 @@
 // are checked against; it did not change when that path was built.
 // Its runtime is beside it, in rt_x86_64.ngpl.
 
-@import("./ir.ngpl")
-@import("./emit.ngpl")
 
 
 @pre(j >= 0 and j <= 5)
 fn arg_reg(j : i64) → i64:
-    if j = 0: return R_DI
-    if j = 1: return R_SI
-    if j = 2: return R_DX
-    if j = 3: return R_CX
-    if j = 4: return R_R8
-    R_R9
+    if j = 0: return emit.R_DI
+    if j = 1: return emit.R_SI
+    if j = 2: return emit.R_DX
+    if j = 3: return emit.R_CX
+    if j = 4: return emit.R_R8
+    emit.R_R9
 
 // Where an argument travels, for a function nobody outside can call.
 //
@@ -32,31 +33,32 @@ fn arg_reg(j : i64) → i64:
 // The rest keep their places as far as they can, rdi and rsi taking the
 // two the front of the list gave up.  Six arguments still travel in
 // registers; what changes is which.
+@export
 @pre(j >= 0)
 fn arg_reg_p(j : i64, priv : i64) → i64:
     if priv = 0:
         return arg_reg(j)
-    if j = 0: return R_AX
-    if j = 1: return R_CX
-    if j = 2: return R_DX
-    if j = 3: return R_SI
-    if j = 4: return R_DI
-    R_R8
+    if j = 0: return emit.R_AX
+    if j = 1: return emit.R_CX
+    if j = 2: return emit.R_DX
+    if j = 3: return emit.R_SI
+    if j = 4: return emit.R_DI
+    emit.R_R8
 
 // the setcc condition for a comparison at a signedness
 @pre(sgn = 0 or sgn = 1)
 @post(r: r >= 146 and r <= 159)
 fn cc_of(o : i64, sgn : i64) → i64:
-    if o = IR_CEQ: return 148
-    if o = IR_CNE: return 149
+    if o = ir_m.IR_CEQ: return 148
+    if o = ir_m.IR_CNE: return 149
     if sgn = 1:
-        if o = IR_CLT: return 156
-        if o = IR_CLE: return 158
-        if o = IR_CGT: return 159
+        if o = ir_m.IR_CLT: return 156
+        if o = ir_m.IR_CLE: return 158
+        if o = ir_m.IR_CGT: return 159
         return 157
-    if o = IR_CLT: return 146
-    if o = IR_CLE: return 150
-    if o = IR_CGT: return 151
+    if o = ir_m.IR_CLT: return 146
+    if o = ir_m.IR_CLE: return 150
+    if o = ir_m.IR_CGT: return 151
     147
 
 // Whether an operation begins by loading its first operand into rax.
@@ -71,9 +73,9 @@ fn cc_of(o : i64, sgn : i64) → i64:
 // write over rax before it was read.  Checked against the emitter
 // below, one branch at a time.
 fn se_reads_a_first(o : i64) → bool:
-    if o >= IR_CEQ and o <= IR_CGE:
+    if o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
         return true
-    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW or o = IR_RET or o = IR_EXT
+    o = ir_m.IR_MOV or o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW or o = ir_m.IR_MUL or o = ir_m.IR_MULW or o = ir_m.IR_NEG or o = ir_m.IR_NEGW or o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR or o = ir_m.IR_BNOTT or o = ir_m.IR_SHLL or o = ir_m.IR_SHRR or o = ir_m.IR_MAXX or o = ir_m.IR_MINN or o = ir_m.IR_DIVV or o = ir_m.IR_MODD or o = ir_m.IR_JZ or o = ir_m.IR_JNZ or o = ir_m.IR_AIDX or o = ir_m.IR_AREF or o = ir_m.IR_APOP or o = ir_m.IR_AGET or o = ir_m.IR_ALEN or o = ir_m.IR_LDN or o = ir_m.IR_FLD or o = ir_m.IR_HLEN or o = ir_m.IR_CHR or o = ir_m.IR_NARROW or o = ir_m.IR_RET or o = ir_m.IR_EXT
 
 // Whether the store this operation ends with may be dropped.
 //
@@ -84,17 +86,17 @@ fn se_reads_a_first(o : i64) → bool:
 // not a label and a jump has nowhere else to land.  What holds the
 // value between the two is rax, which is where the memo is already
 // looking.
-fn se_can_drop(ir : IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
+fn se_can_drop(ir : ir_m.IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
     let d : i64 = ir.id[i]
     if d < 0 or d >= nv or i + 1 >= n:
         return false
     let nx : i64 = ir.op[i + 1]
-    if nx = IR_LABEL or not se_reads_a_first(nx):
+    if nx = ir_m.IR_LABEL or not se_reads_a_first(nx):
         return false
     if ir.ia[i + 1] ≠ d:
         return false
     // every naming of it outside this operation is that one read
-    cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
+    cnt[d × 1¤ptrdiff] - ir_m.se_here(ir, i, d) = ir_m.se_here(ir, i + 1, d) and ir_m.se_here(ir, i + 1, d) = 1
 
 // What the first operation reads, where that is known exactly.
 //
@@ -108,11 +110,11 @@ fn se_can_drop(ir : IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv 
 // here: what matters is that the reads come first, and nothing is
 // believed about a register once the first operation is done.
 fn p_class(o : i64) → i64:
-    if o >= IR_CEQ and o <= IR_CGE:
+    if o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
         return 2
-    if o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_AIDX or o = IR_AREF or o = IR_AGET:
+    if o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW or o = ir_m.IR_MUL or o = ir_m.IR_MULW or o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR or o = ir_m.IR_SHLL or o = ir_m.IR_SHRR or o = ir_m.IR_MAXX or o = ir_m.IR_MINN or o = ir_m.IR_DIVV or o = ir_m.IR_MODD or o = ir_m.IR_AIDX or o = ir_m.IR_AREF or o = ir_m.IR_AGET:
         return 2
-    if o = IR_EXT or o = IR_MOV or o = IR_NEG or o = IR_NEGW or o = IR_BNOTT or o = IR_JZ or o = IR_JNZ or o = IR_RET or o = IR_APOP or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW:
+    if o = ir_m.IR_EXT or o = ir_m.IR_MOV or o = ir_m.IR_NEG or o = ir_m.IR_NEGW or o = ir_m.IR_BNOTT or o = ir_m.IR_JZ or o = ir_m.IR_JNZ or o = ir_m.IR_RET or o = ir_m.IR_APOP or o = ir_m.IR_ALEN or o = ir_m.IR_LDN or o = ir_m.IR_FLD or o = ir_m.IR_HLEN or o = ir_m.IR_CHR or o = ir_m.IR_NARROW:
         return 1
     0
 
@@ -125,14 +127,14 @@ fn p_class(o : i64) → i64:
 // of them as raw bytes, which no memo could follow -- so nothing beyond
 // the first operation is claimed.
 // Whether anything jumps to a label.
-fn p_jumped_to(ir : IrFn, n : i64 ¤ptrdiff, lab : i64) → bool:
+fn p_jumped_to(ir : ir_m.IrFn, n : i64 ¤ptrdiff, lab : i64) → bool:
     let hit : mut bool = false
     foreach i := 0…n:
         let o : i64 = ir.op[i]
         // a table keeps its labels in extra, where this does not look
-        hit ← hit or o = IR_JTAB or o = IR_VTAB
-        hit ← hit or (o = IR_JMP and ir.ia[i] = lab)
-        hit ← hit or ((o = IR_JZ or o = IR_JNZ) and ir.ib[i] = lab)
+        hit ← hit or o = ir_m.IR_JTAB or o = ir_m.IR_VTAB
+        hit ← hit or (o = ir_m.IR_JMP and ir.ia[i] = lab)
+        hit ← hit or ((o = ir_m.IR_JZ or o = ir_m.IR_JNZ) and ir.ib[i] = lab)
     hit
 
 // The first operation that does anything, and ⁻1 where control could
@@ -143,9 +145,9 @@ fn p_jumped_to(ir : IrFn, n : i64 ¤ptrdiff, lab : i64) → bool:
 // still hold what the caller put in them.  Where something does, the
 // tail call has written the parameters to their slots and the registers
 // say nothing about them -- so the spill those slots need is made.
-fn p_first(ir : IrFn, n : i64 ¤ptrdiff) → i64 ¤ptrdiff:
+fn p_first(ir : ir_m.IrFn, n : i64 ¤ptrdiff) → i64 ¤ptrdiff:
     let i : mut i64 ¤ptrdiff = 0¤ptrdiff
-    while i < n and ir.op[i] = IR_LABEL:
+    while i < n and ir.op[i] = ir_m.IR_LABEL:
         if p_jumped_to(ir, n, ir.ia[i]):
             return ⁻1¤ptrdiff
         i ← i + 1
@@ -153,7 +155,7 @@ fn p_first(ir : IrFn, n : i64 ¤ptrdiff) → i64 ¤ptrdiff:
         return ⁻1¤ptrdiff
     i
 
-fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64 ¤ptrdiff, priv : i64) → bool:
+fn p_keep(ir : ir_m.IrFn, j : i64, cnt : i64[], nv : i64, first : i64 ¤ptrdiff, priv : i64) → bool:
     if first < 0 or j < 0 or j >= nv:
         return false
     let c : i64 = p_class(ir.op[first])
@@ -165,7 +167,7 @@ fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64 ¤ptrdiff, priv
     // gone before it was read, so neither is kept and both are spilled.
     let ia0 : i64 = ir.ia[first]
     let ib0 : i64 = ir.ib[first]
-    if c = 2 and ia0 ≠ ib0 and ib0 >= 0 and ib0 < 6 and arg_reg_p(ib0, priv) = R_AX:
+    if c = 2 and ia0 ≠ ib0 and ib0 >= 0 and ib0 < 6 and arg_reg_p(ib0, priv) = emit.R_AX:
         return false
     let ha : i64 = if ia0 = j: 1 else: 0
     let hb : i64 = if c = 2 and ib0 = j: 1 else: 0
@@ -183,7 +185,7 @@ fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64 ¤ptrdiff, priv
 // cmp rax against a value, at the width the division is running at.
 // The widest needs a register to hold the number; the others say it
 // where they stand.
-fn cmpimm_ax(em : &mut Emit, dw : i64, v : i64):
+fn cmpimm_ax(em : &mut emit.Emit, dw : i64, v : i64):
     if dw = 16:
         em.b2(102, 61)                       // cmp ax, imm16
         em.b1(v & 255)
@@ -192,7 +194,7 @@ fn cmpimm_ax(em : &mut Emit, dw : i64, v : i64):
         em.b1(61)                            // cmp eax, imm32
         em.w32(v)
     else:
-        em.movimm(R_R10, v)
+        em.movimm(emit.R_R10, v)
         em.b3(76, 57, 208)                   // cmp rax, r10
 
 // The least value a width holds, which over minus one is the division
@@ -204,13 +206,15 @@ fn least_at(dw : i64) → i64:
         return ⁻2147483648
     ⁻9223372036854775807 - 1
 
+@export
 fn want_canon(cwant : i64[], d : i64, w : i64) → bool:
     let bits : i64 = w & 255
     if bits ≠ 8 and bits ≠ 16 and bits ≠ 32:
         return false
     d >= 0 and d < @dropunit(#cwant) and cwant[d × 1¤ptrdiff] = 1
 
-fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
+@export
+fn emit_fn(em : &mut emit.Emit, ir : ir_m.IrFn, np : i64, strs : str[],
            priv : i64, priv_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     em.begin_fn(ir.nlabels)
@@ -223,9 +227,9 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     let frame : i64 = 8 × (ir.nvregs + nobj) + 8
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.w32(frame)
-    let secnt : i64[] = se_counts(ir, ir.nvregs)
+    let secnt : i64[] = ir_m.se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
-    let cwant : i64[] = canon_wanted(ir, ir.nvregs, 7, 7)
+    let cwant : i64[] = ir_m.canon_wanted(ir, ir.nvregs, 7, 7)
     let nops : i64 ¤ptrdiff = #ir.op
     let pfirst : i64 ¤ptrdiff = p_first(ir, nops)
     // one function's answer is not the next one's
@@ -242,7 +246,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         else:
             em.b3(72, 139, 133)
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
-            em.store(R_AX, j)
+            em.store(emit.R_AX, j)
     let n : i64 ¤ptrdiff = nops
     foreach i := 0¤ptrdiff…n:
         let o : i64 = ir.op[i]
@@ -254,40 +258,40 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         let bits : i64 = w & 255
         em.drop_slot ← if se_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
         let sgn : i64 = w » 8
-        if o = IR_CONST:
-            em.movimm(R_AX, a)
-            em.store(R_AX, d)
-        elif o = IR_MOV:
-            em.load(R_AX, a)
-            em.store(R_AX, d)
-        elif o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+        if o = ir_m.IR_CONST:
+            em.movimm(emit.R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_MOV:
+            em.load(emit.R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             // A checked type is worked out at its own width so that the
             // machine's flag is the answer; a wrapping one at 64, being
             // narrowed afterwards in either case.
-            let ck : bool = o = IR_ADD or o = IR_SUB
+            let ck : bool = o = ir_m.IR_ADD or o = ir_m.IR_SUB
             let dw : i64 = if ck: bits else: 64
-            em.opw(dw, if o = IR_ADD or o = IR_ADDW: 1 else: 41, 200)
+            em.opw(dw, if o = ir_m.IR_ADD or o = ir_m.IR_ADDW: 1 else: 41, 200)
             if ck:
-                em.jabort(if sgn = 1: 128 else: 130, RT_OV)  // jo / jc
+                em.jabort(if sgn = 1: 128 else: 130, emit.RT_OV)  // jo / jc
             if want_canon(cwant, d, w):
                 em.canon_at(w, dw)
-            em.store(R_AX, d)
-        elif o = IR_MUL or o = IR_MULW:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
-            if sgn = 1 or o = IR_MULW:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_MUL or o = ir_m.IR_MULW:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
+            if sgn = 1 or o = ir_m.IR_MULW:
                 // imul has no 8-bit two-operand form, so a checked
                 // signed byte keeps the old shape and its range check
-                if o = IR_MUL and bits ≠ 8:
+                if o = ir_m.IR_MUL and bits ≠ 8:
                     em.imulw(bits)
-                    em.jabort(128, RT_OV)
+                    em.jabort(128, emit.RT_OV)
                     if want_canon(cwant, d, w):
                         em.canon(w)
                 else:
                     em.b4(72, 15, 175, 193)  // imul rax, rcx
-                    if o = IR_MUL:
+                    if o = ir_m.IR_MUL:
                         em.range_check(w)
                     elif want_canon(cwant, d, w):
                         em.canon(w)
@@ -295,45 +299,45 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                 // mul sets carry when the half above the width is not
                 // zero, which for this width is exactly the overflow
                 em.opw(bits, 247, 225)       // mul rcx
-                em.jabort(130, RT_OV)    // jc
+                em.jabort(130, emit.RT_OV)    // jc
                 if want_canon(cwant, d, w):
                     em.canon_at(w, bits)
-            em.store(R_AX, d)
-        elif o = IR_NEG or o = IR_NEGW:
-            em.load(R_AX, a)
-            let nw : i64 = if o = IR_NEG: bits else: 64
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_NEG or o = ir_m.IR_NEGW:
+            em.load(emit.R_AX, a)
+            let nw : i64 = if o = ir_m.IR_NEG: bits else: 64
             em.opw(nw, 247, 216)                            // neg
-            if o = IR_NEG:
+            if o = ir_m.IR_NEG:
                 // overflow for a signed negation is the least value
                 // alone, and for an unsigned one is anything but zero:
                 // at this width the machine says both
-                em.jabort(if sgn = 1: 128 else: 130, RT_OV)
+                em.jabort(if sgn = 1: 128 else: 130, emit.RT_OV)
             if want_canon(cwant, d, w):
                 em.canon_at(w, nw)
-            em.store(R_AX, d)
-        elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
-            if o = IR_BAND:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
+            if o = ir_m.IR_BAND:
                 em.b3(72, 33, 200)
-            elif o = IR_BORR:
+            elif o = ir_m.IR_BORR:
                 em.b3(72, 9, 200)
             else:
                 em.b3(72, 49, 200)
-            em.store(R_AX, d)
-        elif o = IR_BNOTT:
-            em.load(R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_BNOTT:
+            em.load(emit.R_AX, a)
             em.b3(72, 247, 208)              // not rax
             if want_canon(cwant, d, w):
                 em.canon(w)
-            em.store(R_AX, d)
-        elif o = IR_SHLL or o = IR_SHRR:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SHLL or o = ir_m.IR_SHRR:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             em.b3(72, 131, 249)              // cmp rcx, value-bits
             em.b1(bits - sgn)
-            em.jabort(131, RT_SHIFT)     // jae
-            if o = IR_SHLL:
+            em.jabort(131, emit.RT_SHIFT)     // jae
+            if o = ir_m.IR_SHLL:
                 em.b3(72, 211, 224)          // shl rax, cl
                 if want_canon(cwant, d, w):
                     em.canon(w)
@@ -342,37 +346,37 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                     em.b3(72, 211, 248)      // sar rax, cl
                 else:
                     em.b3(72, 211, 232)      // shr rax, cl
-            em.store(R_AX, d)
-        elif o >= IR_CEQ and o <= IR_CGE:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             // at the width the values are, so that what stands above it
             // is not asked about and need not be true
             em.opw(bits, 57, 200)            // cmp
             em.b3(15, cc_of(o, sgn), 192)    // setcc al
             em.b4(72, 15, 182, 192)          // movzx rax, al
-            em.store(R_AX, d)
-        elif o = IR_MAXX or o = IR_MINN:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_MAXX or o = ir_m.IR_MINN:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             em.opw(bits, 57, 200)            // cmp, at the values' width
             let cmov : mut i64 = 0
-            if o = IR_MAXX:
+            if o = ir_m.IR_MAXX:
                 cmov ← if sgn = 1: 76 else: 66// cmovl / cmovb
             else:
                 cmov ← if sgn = 1: 79 else: 71// cmovg / cmova
             em.b4(72, 15, cmov, 193)             // cmovcc rax, rcx
-            em.store(R_AX, d)
-        elif o = IR_SEL:
-            em.load(R_R10, a)
-            em.load(R_AX, b)
-            em.load(R_CX, c)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SEL:
+            em.load(emit.R_R10, a)
+            em.load(emit.R_AX, b)
+            em.load(emit.R_CX, c)
             em.b3(77, 133, 210)              // test r10, r10
             em.b4(72, 15, 68, 193)           // cmovz rax, rcx
-            em.store(R_AX, d)
-        elif o = IR_DIVV or o = IR_MODD:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_DIVV or o = ir_m.IR_MODD:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             // A byte-wide division is the one the machine puts in ah
             // rather than in dx, so it is done a word wider with its
             // operands brought up first.  Every other width divides as
@@ -381,12 +385,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             let dw : i64 = if bits = 8: 32 else: bits
             if bits = 8:
                 em.canon(w)
-                em.canon_reg(w, R_CX)
+                em.canon_reg(w, emit.R_CX)
             em.opw(dw, 133, 201)             // test rcx, rcx
             em.b2(15, 133)                   // jnz over the default
             let p1 : i64 = em.here()
             em.w32(0)
-            em.load(R_AX, c)
+            em.load(emit.R_AX, c)
             em.b1(233)
             let p2 : i64 = em.here()
             em.w32(0)
@@ -406,7 +410,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                     em.w32(0)
                     em.opw(dw, 131, 249)     // cmp rcx, ⁻1
                     em.b1(255)
-                    if o = IR_MODD:
+                    if o = ir_m.IR_MODD:
                         // The least integer divided by minus one has
                         // no quotient this type can hold, and the
                         // machine faults working the quotient and the
@@ -423,7 +427,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                         em.w32(0)
                         em.patch32(p4, em.here() - (p4 + 4))
                     else:
-                        em.jabort(132, RT_OV)    // je
+                        em.jabort(132, emit.RT_OV)    // je
                     em.patch32(p3, em.here() - (p3 + 4))
                 if dw = 16:
                     em.b2(102, 153)          // cwd
@@ -435,7 +439,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             else:
                 em.b2(49, 210)               // xor edx, edx
                 em.opw(dw, 247, 241)         // div rcx
-            if o = IR_MODD:
+            if o = ir_m.IR_MODD:
                 em.b3(72, 137, 208)          // mov rax, rdx
             if sgn = 1 and bits = 8:
                 // the wider division leaves its answer zero-extended
@@ -450,23 +454,23 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             if want_canon(cwant, d, w):
                 em.canon(w)
             em.raxbar()
-            em.store(R_AX, d)
-        elif o = IR_JMP:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_JMP:
             em.jlocal(⁻1, a)
-        elif o = IR_JZ or o = IR_JNZ:
-            em.load(R_AX, a)
+        elif o = ir_m.IR_JZ or o = ir_m.IR_JNZ:
+            em.load(emit.R_AX, a)
             em.b3(72, 133, 192)
-            em.jlocal(if o = IR_JZ: 132 else: 133, b)
-        elif o = IR_LABEL:
+            em.jlocal(if o = ir_m.IR_JZ: 132 else: 133, b)
+        elif o = ir_m.IR_LABEL:
             em.set_label(a)
-        elif o = IR_CALL:
+        elif o = ir_m.IR_CALL:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
             let cp : i64 = if a >= 0 and a < @dropunit(#priv_of): priv_of[a × 1¤ptrdiff] else: 0
             if argc > 6:
                 // the seventh argument onward rides the stack, pushed
                 // last-first so the seventh sits at [rbp+16]
                 foreach x := argc - 1…5:
-                    em.load(R_AX, ir.extra[(b + 1 + x) × 1¤ptrdiff])
+                    em.load(emit.R_AX, ir.extra[(b + 1 + x) × 1¤ptrdiff])
                     em.b1(80)                    // push rax
             foreach k := 0…(argc ⌊ 6):
                 em.load(arg_reg_p(k, cp), ir.extra[(b + 1 + k) × 1¤ptrdiff])
@@ -478,95 +482,95 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             // caller wants more, this caller is the one that says so
             if want_canon(cwant, d, w):
                 em.canon(w)
-            em.store(R_AX, d)
-        elif o = IR_FADDR:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FADDR:
             em.raxbar()
             em.b2(72, 141)                   // lea rax, [rip+disp32]
             em.jglobal(5, ⁻1, a)
-            em.store(R_AX, d)
-        elif o = IR_CALLI:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_CALLI:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
             foreach ki := 0…argci:
                 em.load(arg_reg(ki), ir.extra[(b + 1 + ki) × 1¤ptrdiff])
-            em.load(R_R11, a)
+            em.load(emit.R_R11, a)
             em.raxbar()
             em.b3(65, 255, 211)              // call r11
             if want_canon(cwant, d, w):
                 em.canon(w)
-            em.store(R_AX, d)
-        elif o = IR_RET:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_RET:
             if a ≠ ⁻1:
-                em.load(R_AX, a)
+                em.load(emit.R_AX, a)
             em.b1(201)
             em.b1(195)
-        elif o = IR_PRINTS:
-            em.sref(R_DI, a)
-            em.movimm(R_SI, str_len(strs[a × 1¤ptrdiff]))
-            em.jglobal(232, ⁻1, RT_WRITE1)
-        elif o = IR_EPRINTS:
-            em.sref(R_DI, a)
-            em.movimm(R_SI, str_len(strs[a × 1¤ptrdiff]))
-            em.jglobal(232, ⁻1, RT_WRITE2)
-        elif o = IR_PRINTI:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_PRINTI)
-        elif o = IR_PRINTU:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_PRINTU)
-        elif o = IR_EXIT:
-            em.load(R_DI, a)
-            em.movimm(R_AX, 60)
+        elif o = ir_m.IR_PRINTS:
+            em.sref(emit.R_DI, a)
+            em.movimm(emit.R_SI, emit.str_len(strs[a × 1¤ptrdiff]))
+            em.jglobal(232, ⁻1, emit.RT_WRITE1)
+        elif o = ir_m.IR_EPRINTS:
+            em.sref(emit.R_DI, a)
+            em.movimm(emit.R_SI, emit.str_len(strs[a × 1¤ptrdiff]))
+            em.jglobal(232, ⁻1, emit.RT_WRITE2)
+        elif o = ir_m.IR_PRINTI:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_PRINTI)
+        elif o = ir_m.IR_PRINTU:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_PRINTU)
+        elif o = ir_m.IR_EXIT:
+            em.load(emit.R_DI, a)
+            em.movimm(emit.R_AX, 60)
             em.b2(15, 5)
-        elif o = IR_ABORT:
-            em.sref(R_SI, a)
-            em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
-            em.jglobal(232, ⁻1, RT_ABORT)
-        elif o = IR_GLOAD:
-            em.gref(R_R11, a)
+        elif o = ir_m.IR_ABORT:
+            em.sref(emit.R_SI, a)
+            em.movimm(emit.R_DX, emit.str_len(strs[a × 1¤ptrdiff]))
+            em.jglobal(232, ⁻1, emit.RT_ABORT)
+        elif o = ir_m.IR_GLOAD:
+            em.gref(emit.R_R11, a)
             em.b3(73, 139, 3)                // mov rax, [r11]
-            em.store(R_AX, d)
-        elif o = IR_GSTORE:
-            em.load(R_AX, b)
-            em.gref(R_R11, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_GSTORE:
+            em.load(emit.R_AX, b)
+            em.gref(emit.R_R11, a)
             em.b3(73, 137, 3)                // mov [r11], rax
-        elif o = IR_ANEW:
-            em.movimm(R_DI, a)
-            em.jglobal(232, ⁻1, RT_ARRNEW)
-            em.store(R_AX, d)
-        elif o = IR_APUSH:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_ARRPUSH)
-        elif o = IR_AIDX:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+        elif o = ir_m.IR_ANEW:
+            em.movimm(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_ARRNEW)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_APUSH:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_ARRPUSH)
+        elif o = ir_m.IR_AIDX:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             em.b4(72, 59, 72, 8)             // cmp rcx, [rax+8]
-            em.jabort(131, RT_BOUNDS)    // jae
+            em.jabort(131, emit.RT_BOUNDS)    // jae
             em.b3(72, 139, 16)               // mov rdx, [rax]
             em.b4(72, 139, 4, 202)           // mov rax, [rdx+rcx*8]
-            em.store(R_AX, d)
-        elif o = IR_DENTS:
-            em.jglobal(232, ⁻1, RT_DENTS)
-            em.store(R_AX, d)
-        elif o = IR_AREF:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_DENTS:
+            em.jglobal(232, ⁻1, emit.RT_DENTS)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_AREF:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             em.b4(72, 59, 72, 8)             // cmp rcx, [rax+8]
-            em.jabort(131, RT_BOUNDS)    // jae
+            em.jabort(131, emit.RT_BOUNDS)    // jae
             em.b3(72, 139, 16)               // mov rdx, [rax]
             em.b4(72, 141, 4, 202)           // lea rax, [rdx+rcx*8]
             em.raxbar()
-            em.store(R_AX, d)
-        elif o = IR_ASTO:
-            em.load(R_R10, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ASTO:
+            em.load(emit.R_R10, a)
+            em.load(emit.R_CX, b)
             em.b4(73, 59, 74, 8)             // cmp rcx, [r10+8]
-            em.jabort(131, RT_BOUNDS)
+            em.jabort(131, emit.RT_BOUNDS)
             em.b3(73, 139, 18)               // mov rdx, [r10]
-            em.load(R_AX, c)
+            em.load(emit.R_AX, c)
             em.b4(72, 137, 4, 202)           // mov [rdx+rcx*8], rax
-        elif o = IR_APOP:
-            em.load(R_AX, a)
+        elif o = ir_m.IR_APOP:
+            em.load(emit.R_AX, a)
             em.b4(72, 139, 72, 8)            // mov rcx, [rax+8]
             em.b3(72, 133, 201)              // test rcx, rcx
             em.b2(15, 132)                   // jz to the default
@@ -580,13 +584,13 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             let p2 : i64 = em.here()
             em.w32(0)
             em.patch32(p1, em.here() - (p1 + 4))
-            em.load(R_AX, b)
+            em.load(emit.R_AX, b)
             em.patch32(p2, em.here() - (p2 + 4))
             em.raxbar()
-            em.store(R_AX, d)
-        elif o = IR_AGET:
-            em.load(R_AX, a)
-            em.load(R_CX, b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_AGET:
+            em.load(emit.R_AX, a)
+            em.load(emit.R_CX, b)
             em.b4(72, 59, 72, 8)             // cmp rcx, [rax+8]
             em.b2(15, 131)                   // jae to the default
             let p1 : i64 = em.here()
@@ -597,80 +601,80 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             let p2 : i64 = em.here()
             em.w32(0)
             em.patch32(p1, em.here() - (p1 + 4))
-            em.load(R_AX, c)
+            em.load(emit.R_AX, c)
             em.patch32(p2, em.here() - (p2 + 4))
             em.raxbar()
-            em.store(R_AX, d)
-        elif o = IR_ALEN:
-            em.load(R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ALEN:
+            em.load(emit.R_AX, a)
             em.b4(72, 139, 64, 8)            // mov rax, [rax+8]
-            em.store(R_AX, d)
-        elif o = IR_SC:
-            em.sdref(R_AX, a)
-            em.store(R_AX, d)
-        elif o = IR_SCCAT:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_CONCAT)
-            em.store(R_AX, d)
-        elif o = IR_SEQV:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_STREQ)
-            em.store(R_AX, d)
-        elif o = IR_SLENV:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_STRCHARS)
-            em.store(R_AX, d)
-        elif o = IR_PRINTSV:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_PRINTSTR)
-        elif o = IR_VTAB:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SC:
+            em.sdref(emit.R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SCCAT:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_CONCAT)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SEQV:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_STREQ)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SLENV:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_STRCHARS)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_PRINTSV:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_PRINTSTR)
+        elif o = ir_m.IR_VTAB:
             let vmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            em.load(R_AX, a)
-            em.movimm(R_R10, vmin)
+            em.load(emit.R_AX, a)
+            em.movimm(emit.R_R10, vmin)
             em.b3(76, 41, 208)               // sub rax, r10
             em.b3(72, 49, 201)               // xor rcx, rcx, before the flags matter
-            em.movimm(R_R11, span)
+            em.movimm(emit.R_R11, span)
             em.b3(76, 57, 216)               // cmp rax, r11
             em.b4(65, 15, 146, 194)          // setb r10b: inside the table
             em.b4(77, 15, 182, 210)          // movzx r10, r10b
             em.b4(72, 15, 67, 193)           // cmovae rax, rcx: clamp the load
             let id2 : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            em.jtref(R_DX, id2)
+            em.jtref(emit.R_DX, id2)
             em.b4(72, 139, 4, 194)           // mov rax, [rdx+rax*8]
-            em.movimm(R_CX, defv)
+            em.movimm(emit.R_CX, defv)
             em.b3(77, 133, 210)              // test r10, r10
             em.b4(72, 15, 68, 193)           // cmovz rax, rcx: outside answers the default
-            em.store(R_AX, d)
+            em.store(emit.R_AX, d)
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(0 - span)         // negative: raw values, not labels
             foreach e2 := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
-        elif o = IR_FRAME:
+        elif o = ir_m.IR_FRAME:
             // the object region sits below the slots, and a is an
             // offset from its bottom, which is the bottom of the frame
             em.b3(72, 141, 133)             // lea rax, [rbp+imm32]
             em.w32(0 - 8 × (ir.nvregs + nobj) + a)
-            em.store(R_AX, d)
-        elif o = IR_GIVEBACK:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_FREE)
-        elif o = IR_SNEW:
-            em.movimm(R_DI, 8 × a)
-            em.jglobal(232, ⁻1, RT_ALLOC)
-            em.store(R_AX, d)
-        elif o = IR_LDN:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_GIVEBACK:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_FREE)
+        elif o = ir_m.IR_SNEW:
+            em.movimm(emit.R_DI, 8 × a)
+            em.jglobal(232, ⁻1, emit.RT_ALLOC)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_LDN:
             // d ← mem[a + b], w bytes wide, w = 0 meaning a pointer and
             // +256 meaning the bytes are read as signed.  The five
             // widths are five spellings of one instruction; each was
             // checked against llvm-mc before it was written down.
-            em.load(R_AX, a)
+            em.load(emit.R_AX, a)
             let lw : i64 = w & 255
             let lsg : bool = (w » 8) & 1 = 1
             if lw = 0 or lw = 8:
@@ -691,11 +695,11 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                 else:
                     em.b3(15, 182, 128)      // movzx eax, byte [rax+disp32]
             em.w32(b)
-            em.store(R_AX, d)
-        elif o = IR_STN:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_STN:
             // mem[a + b] ← c, w bytes of it
-            em.load(R_R10, a)
-            em.load(R_AX, c)
+            em.load(emit.R_R10, a)
+            em.load(emit.R_AX, c)
             let sw : i64 = w & 255
             if sw = 0 or sw = 8:
                 em.b3(73, 137, 130)          // mov [r10+disp32], rax
@@ -706,151 +710,151 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             else:
                 em.b3(65, 136, 130)          // mov [r10+disp32], al
             em.w32(b)
-        elif o = IR_KADDR:
+        elif o = ir_m.IR_KADDR:
             // the address of a block the runtime keeps in the data
             // segment: 0 is the kernel's, 1 the allocator's
-            em.dref(R_AX, (if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
-            em.store(R_AX, d)
-        elif o = IR_FPTR:
+            em.dref(emit.R_AX, (if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FPTR:
             em.b3(72, 137, 232)              // mov rax, rbp
-            em.store(R_AX, d)
-        elif o = IR_BTADDR:
-            em.btref(R_AX)
-            em.store(R_AX, d)
-        elif o = IR_FLD:
-            em.load(R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_BTADDR:
+            em.btref(emit.R_AX)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FLD:
+            em.load(emit.R_AX, a)
             em.b3(72, 139, 128)              // mov rax, [rax+disp32]
             em.w32(8 × b)
-            em.store(R_AX, d)
-        elif o = IR_FSTO:
-            em.load(R_R10, a)
-            em.load(R_AX, c)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FSTO:
+            em.load(emit.R_R10, a)
+            em.load(emit.R_AX, c)
             em.b3(73, 137, 130)              // mov [r10+disp32], rax
             em.w32(8 × b)
-        elif o = IR_HNEW:
-            em.movimm(R_DI, a)
-            em.movimm(R_SI, b)
-            em.jglobal(232, ⁻1, RT_HNEW)
-            em.store(R_AX, d)
-        elif o = IR_HPUT:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.load(R_DX, c)
-            em.jglobal(232, ⁻1, RT_HPUT)
-        elif o = IR_HGET:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_HGET)
-            em.store(R_AX, d)
-        elif o = IR_HELEM:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_HELEM)
-            em.store(R_AX, d)
-        elif o = IR_HLEN:
-            em.load(R_AX, a)
+        elif o = ir_m.IR_HNEW:
+            em.movimm(emit.R_DI, a)
+            em.movimm(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_HNEW)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HPUT:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.load(emit.R_DX, c)
+            em.jglobal(232, ⁻1, emit.RT_HPUT)
+        elif o = ir_m.IR_HGET:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_HGET)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HELEM:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_HELEM)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HLEN:
+            em.load(emit.R_AX, a)
             em.b4(72, 139, 64, 16)           // mov rax, [rax+16]
-            em.store(R_AX, d)
-        elif o = IR_CHR:
-            em.load(R_AX, a)
-            em.movimm(R_R10, 1114111)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_CHR:
+            em.load(emit.R_AX, a)
+            em.movimm(emit.R_R10, 1114111)
             em.b3(76, 57, 208)               // cmp rax, r10
-            em.jabort(135, RT_BADCHAR)   // ja: past the last, negatives included
+            em.jabort(135, emit.RT_BADCHAR)   // ja: past the last, negatives included
             em.b3(72, 141, 136)
             em.w32(⁻55296)                   // lea rcx, [rax - 0xD800]
-            em.movimm(R_R10, 2048)
+            em.movimm(emit.R_R10, 2048)
             em.b3(76, 57, 209)               // cmp rcx, r10
-            em.jabort(130, RT_BADCHAR)   // jb: a surrogate
-            em.store(R_AX, d)
-        elif o = IR_SIDX:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_STRIDX)
-            em.store(R_AX, d)
-        elif o = IR_CHARS:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_CHARS)
-            em.store(R_AX, d)
-        elif o = IR_CHARSTR:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_CHARSTR)
-            em.store(R_AX, d)
-        elif o = IR_SDEC:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_STRNEXT)
-            em.store(R_AX, d)
-            em.store(R_DX, c)
-        elif o = IR_AUXV:
-            em.movimm(R_DI, a)
-            em.jglobal(232, ⁻1, RT_AUXV)
-            em.store(R_AX, d)
-        elif o = IR_EXECFN:
-            em.jglobal(232, ⁻1, RT_EXECFN)
-            em.store(R_AX, d)
-        elif o = IR_ENVN:
-            em.jglobal(232, ⁻1, RT_ENVN)
-            em.store(R_AX, d)
-        elif o = IR_ENVG:
-            em.load(R_R11, a)
+            em.jabort(130, emit.RT_BADCHAR)   // jb: a surrogate
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SIDX:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_STRIDX)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_CHARS:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_CHARS)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_CHARSTR:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_CHARSTR)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SDEC:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_STRNEXT)
+            em.store(emit.R_AX, d)
+            em.store(emit.R_DX, c)
+        elif o = ir_m.IR_AUXV:
+            em.movimm(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_AUXV)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_EXECFN:
+            em.jglobal(232, ⁻1, emit.RT_EXECFN)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ENVN:
+            em.jglobal(232, ⁻1, emit.RT_ENVN)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ENVG:
+            em.load(emit.R_R11, a)
             em.b3(73, 139, 51)                   // mov rsi, [r11]: the name's bytes
             em.b4(73, 139, 83, 8)                // mov rdx, [r11+8]: how many
-            em.jglobal(232, ⁻1, RT_ENVG)
-            em.store(R_AX, d)
-        elif o = IR_ARGS:
-            em.jglobal(232, ⁻1, RT_ARGS)
-            em.store(R_AX, d)
-        elif o = IR_FOPEN:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_FOPEN)
-            em.store(R_AX, d)
-        elif o = IR_FCREATE:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_FCREATE)
-            em.store(R_AX, d)
-        elif o = IR_FREAD:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_FREAD)
-            em.store(R_AX, d)
-        elif o = IR_FWRITE:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_FWRITE)
-        elif o = IR_TORAW:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_TORAW)
-            em.store(R_AX, d)
-        elif o = IR_WRITEV:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_WRITEV)
-        elif o = IR_FCLOSE:
-            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_ENVG)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ARGS:
+            em.jglobal(232, ⁻1, emit.RT_ARGS)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FOPEN:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_FOPEN)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FCREATE:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_FCREATE)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FREAD:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_FREAD)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FWRITE:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_FWRITE)
+        elif o = ir_m.IR_TORAW:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_TORAW)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_WRITEV:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_WRITEV)
+        elif o = ir_m.IR_FCLOSE:
+            em.load(emit.R_DI, a)
             em.b3(72, 137, 248)              // mov rax, rdi -- the fd
             em.b3(72, 137, 199)              // mov rdi, rax
-            em.movimm(R_AX, 3)
+            em.movimm(emit.R_AX, 3)
             em.b2(15, 5)                     // close
             em.raxbar()
-        elif o = IR_EXT:
+        elif o = ir_m.IR_EXT:
             // What a wider read is about to believe.  The value was
             // asked for canonical and so arrives canonical, and this
             // has nothing left to do but hand it on.
-            em.load(R_AX, a)
-            em.store(R_AX, d)
-        elif o = IR_NARROW:
-            em.load(R_AX, a)
+            em.load(emit.R_AX, a)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_NARROW:
+            em.load(emit.R_AX, a)
             let nbits : i64 = w & 255
             let nsgn : i64 = w » 8
             if nbits = 64:
                 // crossing between i64 and u64 either way: the value
                 // is out of reach exactly when its top bit is set
                 em.b3(72, 133, 192)              // test rax, rax
-                em.jabort(136, RT_BADFIT)    // js
+                em.jabort(136, emit.RT_BADFIT)    // js
             elif nsgn = 0:
-                em.movimm(R_R10, (1 « nbits) - 1)
+                em.movimm(emit.R_R10, (1 « nbits) - 1)
                 em.b3(76, 57, 208)               // cmp rax, r10
-                em.jabort(135, RT_BADFIT)    // ja
+                em.jabort(135, emit.RT_BADFIT)    // ja
             else:
                 if nbits = 8:
                     em.b4(72, 15, 190, 200)      // movsx rcx, al
@@ -859,134 +863,134 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                 else:
                     em.b3(72, 99, 200)           // movsxd rcx, eax
                 em.b3(72, 57, 193)               // cmp rcx, rax
-                em.jabort(133, RT_BADFIT)    // jne
-            em.store(R_AX, d)
-        elif o = IR_SBYTES:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_SBYTES)
-            em.store(R_AX, d)
-        elif o = IR_HSTART:
-            em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_HSTART)
-            em.store(R_AX, d)
-        elif o = IR_HFINAL:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_HFINAL)
-            em.store(R_AX, d)
-        elif o = IR_HUPDATE:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_HUPDATE)
-        elif o = IR_ACAT:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_ACAT)
-            em.store(R_AX, d)
-        elif o = IR_AFILL:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_AFILL)
-            em.store(R_AX, d)
-        elif o = IR_ACYC:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.jglobal(232, ⁻1, RT_ACYC)
-            em.store(R_AX, d)
-        elif o = IR_AFIND:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.movimm(R_DX, c)
-            em.jglobal(232, ⁻1, RT_AFIND)
-            em.store(R_AX, d)
-        elif o = IR_ASLICE:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.load(R_DX, c)
-            em.jglobal(232, ⁻1, RT_ASLICE)
-            em.store(R_AX, d)
-        elif o = IR_SSLICE:
-            em.load(R_DI, a)
-            em.load(R_SI, b)
-            em.load(R_DX, c)
-            em.jglobal(232, ⁻1, RT_SSLICE)
-            em.store(R_AX, d)
-        elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
+                em.jabort(133, emit.RT_BADFIT)    // jne
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SBYTES:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_SBYTES)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HSTART:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_HSTART)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HFINAL:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_HFINAL)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_HUPDATE:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_HUPDATE)
+        elif o = ir_m.IR_ACAT:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_ACAT)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_AFILL:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_AFILL)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ACYC:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_ACYC)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_AFIND:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.movimm(emit.R_DX, c)
+            em.jglobal(232, ⁻1, emit.RT_AFIND)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_ASLICE:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.load(emit.R_DX, c)
+            em.jglobal(232, ⁻1, emit.RT_ASLICE)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SSLICE:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.load(emit.R_DX, c)
+            em.jglobal(232, ⁻1, emit.RT_SSLICE)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_SATADD or o = ir_m.IR_SATSUB or o = ir_m.IR_SATMUL:
             // held at the type's edge with selects, never a branch:
             // a narrow width computes exactly in 64 bits and clamps by
             // compare; the full width reads the flags the op leaves,
             // the saturation target chosen before the flags matter
             let sbits : i64 = w & 255
             let ssgn : i64 = w » 8
-            em.load(R_AX, a)
-            em.load(R_R11, b)
+            em.load(emit.R_AX, a)
+            em.load(emit.R_R11, b)
             if sbits < 64:
-                if o = IR_SATADD:
+                if o = ir_m.IR_SATADD:
                     em.b3(76, 1, 216)            // add rax, r11
-                elif o = IR_SATSUB:
+                elif o = ir_m.IR_SATSUB:
                     em.b3(76, 41, 216)           // sub rax, r11
                 else:
                     em.b4(73, 15, 175, 195)      // imul rax, r11
                 if ssgn = 1:
-                    em.movimm(R_CX, 0 - (1 « (sbits - 1)))
+                    em.movimm(emit.R_CX, 0 - (1 « (sbits - 1)))
                     em.b3(72, 57, 200)           // cmp rax, rcx
                     em.b4(72, 15, 76, 193)       // cmovl rax, rcx
-                    em.movimm(R_R10, (1 « (sbits - 1)) - 1)
+                    em.movimm(emit.R_R10, (1 « (sbits - 1)) - 1)
                     em.b3(76, 57, 208)           // cmp rax, r10
                     em.b4(73, 15, 79, 194)       // cmovg rax, r10
-                elif o = IR_SATSUB:
+                elif o = ir_m.IR_SATSUB:
                     em.b3(72, 49, 201)           // xor rcx, rcx
                     em.b3(72, 133, 192)          // test rax, rax
                     em.b4(72, 15, 72, 193)       // cmovs rax, rcx
                 else:
-                    em.movimm(R_R10, (1 « sbits) - 1)
+                    em.movimm(emit.R_R10, (1 « sbits) - 1)
                     em.b3(76, 57, 208)           // cmp rax, r10
                     em.b4(73, 15, 71, 194)       // cmova rax, r10
             elif ssgn = 1:
-                em.movimm(R_CX, 9223372036854775807)
-                em.movimm(R_DX, 0 - 9223372036854775807 - 1)
-                if o = IR_SATMUL:
+                em.movimm(emit.R_CX, 9223372036854775807)
+                em.movimm(emit.R_DX, 0 - 9223372036854775807 - 1)
+                if o = ir_m.IR_SATMUL:
                     em.b3(73, 137, 194)          // mov r10, rax
                     em.b3(77, 49, 218)           // xor r10, r11
                     em.b3(77, 133, 210)          // test r10, r10
                 else:
                     em.b3(72, 133, 192)          // test rax, rax
                 em.b4(72, 15, 72, 202)           // cmovs rcx, rdx
-                if o = IR_SATADD:
+                if o = ir_m.IR_SATADD:
                     em.b3(76, 1, 216)            // add rax, r11
-                elif o = IR_SATSUB:
+                elif o = ir_m.IR_SATSUB:
                     em.b3(76, 41, 216)           // sub rax, r11
                 else:
                     em.b4(73, 15, 175, 195)      // imul rax, r11
                 em.b4(72, 15, 64, 193)           // cmovo rax, rcx
             else:
-                if o = IR_SATADD:
-                    em.movimm(R_CX, ⁻1)
+                if o = ir_m.IR_SATADD:
+                    em.movimm(emit.R_CX, ⁻1)
                     em.b3(76, 1, 216)            // add rax, r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
-                elif o = IR_SATSUB:
+                elif o = ir_m.IR_SATSUB:
                     em.b3(72, 49, 201)           // xor rcx, rcx
                     em.b3(76, 41, 216)           // sub rax, r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
                 else:
-                    em.movimm(R_CX, ⁻1)
+                    em.movimm(emit.R_CX, ⁻1)
                     em.b3(73, 247, 227)          // mul r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
             em.raxbar()
-            em.store(R_AX, d)
-        elif o = IR_JTAB:
+            em.store(emit.R_AX, d)
+        elif o = ir_m.IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            em.load(R_AX, a)
-            em.movimm(R_R10, jmin)
+            em.load(emit.R_AX, a)
+            em.movimm(emit.R_R10, jmin)
             em.b3(76, 41, 208)               // sub rax, r10
-            em.movimm(R_R11, span)
+            em.movimm(emit.R_R11, span)
             em.b3(76, 57, 216)               // cmp rax, r11
             em.jlocal(131, ldef)             // jae: outside the table
             let id : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            em.jtref(R_R10, id)
+            em.jtref(emit.R_R10, id)
             em.b4(65, 255, 36, 194)          // jmp [r10 + rax*8]
             em.pj_id.push(id)
             em.pj_start.push(@dropunit(#em.pj_labels))
@@ -1001,4 +1005,3 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     em.abort_stubs()
     em.resolve_locals()
     em.resolve_jtabs()
-

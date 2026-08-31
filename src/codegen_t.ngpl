@@ -5,39 +5,41 @@
 // same driver it serves.
 // ===========================================================================
 
+let abi := @import("./abi.ngpl")
+let arch_a64 := @import("./arch_a64.ngpl")
+let arch_arm := @import("./arch_arm.ngpl")
+let arch_i386 := @import("./arch_i386.ngpl")
+let arch_rv32 := @import("./arch_rv32.ngpl")
+let arch_rv64 := @import("./arch_rv64.ngpl")
+let ast := @import("./ast.ngpl")
+let check := @import("./check.ngpl")
+let codegen := @import("./codegen.ngpl")
+let diag := @import("./diag.ngpl")
+let dispatch := @import("./dispatch.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let incr_m := @import("./incr.ngpl")
+let ir_m := @import("./ir.ngpl")
+let lex := @import("./lex.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_backtrace := @import("./rt_backtrace.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+let symbols := @import("./symbols.ngpl")
+let tdriver_m := @import("./tdriver.ngpl")
+let tokens := @import("./tokens.ngpl")
+let types := @import("./types.ngpl")
+
 // How many arguments a target takes in registers today, and how many
 // more a function nobody outside can call could take.  The three
 // 32-bit targets take none: an i64 arrives as a pair, and the simple
 // course was to put every pair on the stack -- which is why the private
 // convention is worth most exactly there.
 
-@import("./tokens.ngpl")
-@import("./types.ngpl")
-@import("./diag.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
-@import("./check.ngpl")
-@import("./abi.ngpl")
-@import("./ir.ngpl")
-@import("./lower.ngpl")
-@import("./emit.ngpl")
-@import("./symbols.ngpl")
-@import("./incr.ngpl")
-@import("./elf.ngpl")
-@import("./arch_a64.ngpl")
-@import("./arch_rv64.ngpl")
-@import("./arch_i386.ngpl")
-@import("./arch_arm.ngpl")
-@import("./arch_rv32.ngpl")
-@import("./dispatch.ngpl")
-@import("./tdriver.ngpl")
-@import("./rt_backtrace.ngpl")
-@import("./rt_portable.ngpl")
 
-fn abi_argregs(tg : Target) → i64:
+fn abi_argregs(tg : elf.Target) → i64:
     match tg.id:
-        Tgt.a64: 8
-        Tgt.rv64: 8
+        elf.Tgt.a64: 8
+        elf.Tgt.rv64: 8
         _: 0
 
 // How many arguments past the architecture's own convention a private
@@ -50,18 +52,19 @@ fn abi_argregs(tg : Target) → i64:
 // frame: eax:edx is the only pair a body touches, so ecx, ebx, esi and
 // edi are free from one end of a function to the other, and nothing
 // needs preserving because a caller keeps nothing across a call.
-fn abi_spent(tg : Target) → i64:
+fn abi_spent(tg : elf.Target) → i64:
     match tg.id:
-        Tgt.i386: 3         // eax:edx, ecx:ebx, esi:edi
-        Tgt.a32: 2          // r0:r1, r2:r3
-        Tgt.rv32: 4         // a0…a7, a pair each
+        elf.Tgt.i386: 3         // eax:edx, ecx:ebx, esi:edi
+        elf.Tgt.a32: 2          // r0:r1, r2:r3
+        elf.Tgt.rv32: 4         // a0…a7, a pair each
         _: 0
 
+@export
 @pre(olevel >= 0)
-fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
+fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : elf.Target,
              stack_size : i64, guard_size : i64, olevel : i64, want_log : bool,
-             incr : Incr) → Compiled:
-    let ab : Abi = analyze_abi(a, toks, abi_argregs(tgt), abi_spent(tgt), want_log)
+             incr : incr_m.Incr) → codegen.Compiled:
+    let ab : abi.Abi = abi.analyze_abi(a, toks, abi_argregs(tgt), abi_spent(tgt), want_log)
     // What the driver routes through the private convention, per
     // function.  Zero says the architecture's own path carries every
     // argument, which is what every target but i386 still does.
@@ -76,7 +79,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
-    let lw : mut Lower = (Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
+    let lw : mut lower.Lower = (lower.Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
                                 nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0,
                                 op: [], ia: [], ib: [], ic: [], idd: [],
                                 iww: [], extra: [], tbase: 0, tnext: 0,
@@ -87,7 +90,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                                 res_vreg: ⁻1, old_base: 0, inv_subject: ⁻1, tail_label: ⁻1, tail_fn: ⁻1, tail_np: 0, cur_fname: "", dlog: [],
                                 argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1,
                                 olevel: olevel})
-    let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
+    let em : mut emit.Emit = (emit.Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
                               lf_pos: [], lf_label: [], fn_off: [],
@@ -120,9 +123,9 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             elif is_relro[i] = 1:
                 n_relro ← n_relro + 1
     let args_off : i64 = 8 × n_relro
-    let relro_size : i64 = align_up(args_off + KB_SIZE, PAGE)
+    let relro_size : i64 = elf.align_up(args_off + emit.KB_SIZE, elf.PAGE)
     // the signal structures sit at the head of the writable data
-    let alloc_off : i64 = relro_size + SIG_SIZE + 8 × n_rw
+    let alloc_off : i64 = relro_size + emit.SIG_SIZE + 8 × n_rw
     em.k_args ← args_off
     em.k_alloc ← alloc_off
     em.k_sig ← relro_size
@@ -133,7 +136,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals:
             if a.globals[i].is_mut:
                 em.gseg.push(1)
-                em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
+                em.gmap.push(relro_size + emit.SIG_SIZE + 8 × k_rw)
                 k_rw ← k_rw + 1
             elif is_relro[i] = 1:
                 em.gseg.push(1)
@@ -154,7 +157,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     lw.lambase ← nfns + g1 + 2
     lw.shimbase ← lw.lambase + @dropunit(#chk.lams)
     let tdriver : i64 = nfns + g1 + 1
-    let sret : bool = start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT
+    let sret : bool = start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ types.TY_UNIT
     t_startup(&em, &lw, tgt, args_off, stack_size, guard_size,
               if ninit > 0: nfns else: ⁻1, tdriver, start_fn, sret)
     // the program's own code, then the whole runtime: nothing is
@@ -165,7 +168,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let dfr_fn : mut i64[] = []
     let dfr_at : mut i64[] = []
     let dfr_np : mut i64[] = []
-    let dfr_ir : mut IrFn[] = []
+    let dfr_ir : mut ir_m.IrFn[] = []
     let dfr_rt : mut i64[] = []
     // A function nothing reaches is in no binary.  Its slot in the
     // schedule stays, so every index into it still means what it meant
@@ -173,7 +176,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // and its offset is the one no call may land on, so a call that
     // somehow reaches for it is caught where the calls are resolved
     // rather than jumping into whatever stands at the front.
-    let live : bool[] = reached_fns(a, toks, src)
+    let live : bool[] = incr_m.reached_fns(a, toks, src)
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         if not live[i]:
@@ -186,21 +189,21 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             em.fn_off.push(⁻1)
             continue
         // the space for a sized answer arrives as one more argument
-        let np : i64 = a.extra[a.fns[i].params_off] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
-        let symnm : str = fn_symbol(a, toks, src, f)
+        let np : i64 = a.extra[a.fns[i].params_off] + (if check.farr_is_packed(a, a.fns[i].ret): 1 else: 0)
+        let symnm : str = symbols.fn_symbol(a, toks, src, f)
         // lowered whether or not it is emitted: see the same loop in
         // codegen.ngpl for why the string table has to be complete
-        let ir := if chk.skipfn[i] = 1: lower_stub_fn(&lw, np) else: lower_fn(&lw, a, chk, f)
+        let ir := if chk.skipfn[i] = 1: lower.lower_stub_fn(&lw, np) else: lower.lower_fn(&lw, a, chk, f)
         // a function an earlier build moved lives past .text, which is
         // past where the runtime goes: it is written with the rest of
         // the overflow, and emitted here only to find out what it
         // calls while that can still be answered
-        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_text_size(incr)
+        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_m.incr_text_size(incr)
         if away:
             if incr.fresh[i]:
                 let mk0 := em.mark()
-                t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
-                incr_harvest(&em, mk0, &dfr_rt)
+                tdriver_m.t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
+                incr_m.incr_harvest(&em, mk0, &dfr_rt)
                 em.rewind(mk0)
             dfr_fn.push(f)
             dfr_at.push(incr.at_of(symnm))
@@ -208,61 +211,61 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             dfr_ir.push(ir)
             em.fn_off.push(0)
             continue
-        incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, symnm))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, symnm))
         em.fn_off.push(em.here())
         let began : i64 = em.here()
         if incr.mode = 2 and incr_why = "" and not incr.fresh[i]:
-            incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, symnm))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, incr, symnm))
         else:
             let mk := em.mark()
-            t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
+            tdriver_m.t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
             if incr.mode = 2 and em.here() > incr.end_of(symnm):
-                incr_harvest(&em, mk, &dfr_rt)
+                incr_m.incr_harvest(&em, mk, &dfr_rt)
                 em.rewind(mk)
                 dfr_fn.push(f)
                 dfr_at.push(⁻1)
                 dfr_np.push(np)
                 dfr_ir.push(ir)
                 em.fn_off[i] ← 0
-        incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, symnm, began))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, symnm, began))
     if ninit > 0:
-        let gir := lower_ginit(&lw, a, chk)
-        incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<globals>"))
+        let gir := codegen.lower_ginit(&lw, a, chk)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<globals>"))
         em.fn_off.push(em.here())
         let b1 : i64 = em.here()
-        t_emit_fn(&em, tgt, gir, 0, lw.strs, 0, nregs)
-        incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<globals>", b1))
-    let fir := lower_argsfilter(&lw)
-    incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<args>"))
+        tdriver_m.t_emit_fn(&em, tgt, gir, 0, lw.strs, 0, nregs)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<globals>", b1))
+    let fir := codegen.lower_argsfilter(&lw)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<args>"))
     em.fn_off.push(em.here())
     let b2 : i64 = em.here()
-    t_emit_fn(&em, tgt, fir, 0, lw.strs, 0, nregs)
-    incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<args>", b2))
-    let dir := lower_testdriver(&lw, a)
-    incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<tests>"))
+    tdriver_m.t_emit_fn(&em, tgt, fir, 0, lw.strs, 0, nregs)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<args>", b2))
+    let dir := codegen.lower_testdriver(&lw, a)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<tests>"))
     em.fn_off.push(em.here())
     let b3 : i64 = em.here()
-    t_emit_fn(&em, tgt, dir, 0, lw.strs, 0, nregs)
-    incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<tests>", b3))
+    tdriver_m.t_emit_fn(&em, tgt, dir, 0, lw.strs, 0, nregs)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<tests>", b3))
     if #chk.lams > 0:
         foreach j := 0…#chk.lams:
-            let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
-            let lnm : str = "λ#" ⧺ i64_str(@dropunit(j))
-            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, lnm))
+            let lir := lower.lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            let lnm : str = "λ#" ⧺ tokens.i64_str(@dropunit(j))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, lnm))
             em.fn_off.push(em.here())
             let b4 : i64 = em.here()
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
-            t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs, 0, nregs)
-            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, lnm, b4))
+            tdriver_m.t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs, 0, nregs)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, lnm, b4))
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn:
-            let sir := lower_shim_fn(&lw, chk, @dropunit(j))
-            let pnm : str = "partial#" ⧺ i64_str(@dropunit(j))
-            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, pnm))
+            let sir := lower.lower_shim_fn(&lw, chk, @dropunit(j))
+            let pnm : str = "partial#" ⧺ tokens.i64_str(@dropunit(j))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, pnm))
             em.fn_off.push(em.here())
             let b5 : i64 = em.here()
-            t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
-            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, pnm, b5))
+            tdriver_m.t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, pnm, b5))
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What is emitted so far is the program's own, and the calls it
     // made name the runtime it reaches for.  Emitting those reveals
@@ -294,7 +297,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach i := 0…nrt:
         rt_order.push(@dropunit(i))
     if incr.mode = 2:
-        let rtn0 := rt_names()
+        let rtn0 := emit.rt_names()
         let key : mut i64[] = []
         foreach i := 0…nrt:
             let rt_at : i64 = incr.at_of(rtn0[i])
@@ -338,7 +341,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 em.rt_off[id0] ← em.here()
                 let rid : i64 = 0 - @dropunit(id0) - 1
                 let np9 : i64 = rt_nargs(rid)
-                t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
+                tdriver_m.t_emit_fn(&em, tgt, rt_portable.rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
                 more ← true
 
     // The overflow: what would not fit where it stood.  See the same
@@ -366,36 +369,36 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach ov_kk := ov_ord:
             let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
             let ov_f : i64 = dfr_fn[ov_i]
-            let ov_nm : str = fn_symbol(a, toks, src, ov_f)
-            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, ov_nm))
+            let ov_nm : str = symbols.fn_symbol(a, toks, src, ov_f)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, ov_nm))
             em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
             let ov_beg : i64 = em.here()
             if not incr.fresh[ov_f × 1¤ptrdiff]:
-                incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, ov_nm))
+                incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, incr, ov_nm))
             else:
                 let ov_mark := em.mark()
-                t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                tdriver_m.t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
                 if em.here() > incr.end_of(ov_nm):
                     em.rewind(ov_mark)
                     ov_late.push(ov_kk)
                     em.fn_off[ov_f × 1¤ptrdiff] ← 0
-            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, ov_nm, ov_beg))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, ov_nm, ov_beg))
             if em.fn_off[ov_f × 1¤ptrdiff] ≠ 0:
                 placed.push(ov_f)
         foreach ov_k := 0…#dfr_fn:
             if dfr_at[ov_k] < 0:
                 ov_late.push(@dropunit(ov_k))
         if #ov_late > 0:
-            assert(em.here() <= incr_text_end(incr), "the overflow begins past what the last build used")
-            while em.here() < incr_text_end(incr):
+            assert(em.here() <= incr_m.incr_text_end(incr), "the overflow begins past what the last build used")
+            while em.here() < incr_m.incr_text_end(incr):
                 em.b1(incr.fill)
             foreach ov_kk := ov_late:
                 let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
                 let ov_f : i64 = dfr_fn[ov_i]
                 em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
                 let ov_beg2 : i64 = em.here()
-                t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
-                let ov_pad : i64 = @dropunit(incr_padding((em.here() - ov_beg2) × 1¤byte))
+                tdriver_m.t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                let ov_pad : i64 = @dropunit(incr_m.incr_padding((em.here() - ov_beg2) × 1¤byte))
                 foreach _ := 0…ov_pad:
                     em.b1(incr.fill)
                 placed.push(ov_f)
@@ -407,23 +410,23 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             let t : i64 = em.cf_target[i]
             let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
             assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
-            g_patch_call(&em, tgt, pos, dest)
+            dispatch.g_patch_call(&em, tgt, pos, dest)
     // a function's address, taken as a value
     if #em.ff_pos > 0:
         foreach i := 0…#em.ff_pos:
             let ff : i64 = em.ff_fn[i]
             let fat : i64 = if ff >= 0: em.fn_off[ff × 1¤ptrdiff] else: em.rt_off[(0 - ff - 1) × 1¤ptrdiff]
             assert(fat ≠ ⁻1, "the address taken is of a routine that was emitted")
-            g_patch_abs(&em, tgt, em.ff_pos[i], IMAGE_BASE + PAGE + fat)
+            dispatch.g_patch_abs(&em, tgt, em.ff_pos[i], elf.IMAGE_BASE + elf.PAGE + fat)
     // rodata: the strings' bytes, then their descriptors, then the
     // tables -- the same layout the x86-64 path writes
     let text_size : i64 = em.here()
     // What the text region is given, which is where the read-only
     // data begins; see incr_room_text for why this is not #code.
-    let text_room : i64 ¤byte = incr_room_text(incr, text_size × 1¤byte)
-    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + @dropunit(text_room), PAGE)
+    let text_room : i64 ¤byte = incr_m.incr_room_text(incr, text_size × 1¤byte)
+    let ro_vaddr : i64 = elf.IMAGE_BASE + elf.align_up(elf.PAGE + @dropunit(text_room), elf.PAGE)
     // only the strings something reads reach the image; see str_uses
-    let used : i64[] = if incr.mode = 0: str_uses(&em, @dropunit(#lw.strs)) else: incr_all_used(#lw.strs)
+    let used : i64[] = if incr.mode = 0: emit.str_uses(&em, @dropunit(#lw.strs)) else: incr_m.incr_all_used(#lw.strs)
     let stroffs : mut i64[] = []
     let descidx : mut i64[] = []
     let acc : mut i64 = 0
@@ -433,15 +436,15 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             stroffs.push(acc)
             descidx.push(nstr)
             if used[i] = 1:
-                acc ← acc + str_len(lw.strs[i])
+                acc ← acc + emit.str_len(lw.strs[i])
                 nstr ← nstr + 1
-    let descbase : i64 = align_up(acc, 8)
+    let descbase : i64 = elf.align_up(acc, 8)
     if #em.sf_pos > 0:
         foreach i := 0…#em.sf_pos:
-            g_patch_abs(&em, tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
         foreach i := 0…#em.sd_pos:
-            g_patch_abs(&em, tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
     let rodata : mut u8[] = []
     if #lw.strs > 0:
         foreach i := 0…#lw.strs:
@@ -453,8 +456,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     if #lw.strs > 0:
         foreach i := 0…#lw.strs:
             if used[i] = 1:
-                push64(&rodata, ro_vaddr + stroffs[i])
-                push64(&rodata, str_len(lw.strs[i]))
+                elf.push64(&rodata, ro_vaddr + stroffs[i])
+                elf.push64(&rodata, emit.str_len(lw.strs[i]))
     // The table a backtrace reads: where every function of the program
     // begins, how far it runs, and what it is called.  Built here
     // because here is where all three are known, and read by RT_BT,
@@ -465,82 +468,82 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let bt_at : mut i64 = 0
     let bt_to : mut i64 = 0
     if #em.bt_pos > 0:
-        let bt_base : i64 = align_up(@dropunit(#rodata), 8)
+        let bt_base : i64 = elf.align_up(@dropunit(#rodata), 8)
         while @dropunit(#rodata) < bt_base:
             rodata.push(0)
         bt_at ← bt_base
-        let bt_nm0 : str[] = incr_reorder_names(bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
-        let bt_of0 : i64[] = incr_reorder(em.fn_off, placed)
-        let bt_nm : str[] = bt_keep_names(bt_nm0, bt_of0)
-        let bt_of : i64[] = bt_keep_offs(bt_of0)
-        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE, bt_nm, bt_of,
-                              bt_sizes(bt_of, @dropunit(#placed),
-                                       bt_text_end(&em, text_size), text_size)):
+        let bt_nm0 : str[] = incr_m.incr_reorder_names(rt_backtrace.bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
+        let bt_of0 : i64[] = incr_m.incr_reorder(em.fn_off, placed)
+        let bt_nm : str[] = incr_m.bt_keep_names(bt_nm0, bt_of0)
+        let bt_of : i64[] = incr_m.bt_keep_offs(bt_of0)
+        foreach c := rt_backtrace.bt_bytes(tgt, elf.IMAGE_BASE + elf.PAGE, bt_nm, bt_of,
+                              rt_backtrace.bt_sizes(bt_of, @dropunit(#placed),
+                                       rt_backtrace.bt_text_end(&em, text_size), text_size)):
             rodata.push(c)
         foreach i := 0…#em.bt_pos:
-            g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
+            dispatch.g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
         bt_to ← @dropunit(#rodata)
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
         foreach i := 0…nglobals:
             if em.gseg[i] = 0:
-                push64(&rodata, chk.gvals[i])
+                elf.push64(&rodata, chk.gvals[i])
     let gro_end : i64 = @dropunit(#rodata)
     if #em.gr_pos > 0:
         foreach i := 0…#em.gr_pos:
-            g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+            dispatch.g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
     // A jump table holds code addresses, a value table its data, and
     // both come last: see incr_jt_prefix for why the end is where they
     // have to be.
-    let jt_base : i64 = align_up(@dropunit(#rodata), 8)
+    let jt_base : i64 = elf.align_up(@dropunit(#rodata), 8)
     while @dropunit(#rodata) < jt_base:
         rodata.push(0)
-    let jt_kept : i64 = incr_jt_prefix(&rodata, incr, jt_base)
+    let jt_kept : i64 = incr_m.incr_jt_prefix(&rodata, incr, jt_base)
     if #em.jt_pos > 0:
         foreach i := 0…#em.jt_pos:
-            g_patch_abs(&em, tgt, em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, tgt, em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     if #em.jt_starts > 0:
         foreach t := 0…#em.jt_starts:
             let lo2 : i64 = em.jt_starts[t]
             let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
-            let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
+            let base2 : i64 = if em.jt_is_code[t] = 1: elf.IMAGE_BASE + elf.PAGE else: 0
             foreach e3 := lo2…hi2:
-                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
-    let ro_room : i64 ¤byte = incr_room_ro(incr, #rodata)
-    let d_vaddr : i64 = IMAGE_BASE + align_up(ro_vaddr - IMAGE_BASE + @dropunit(ro_room), PAGE)
+                elf.push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
+    let ro_room : i64 ¤byte = incr_m.incr_room_ro(incr, #rodata)
+    let d_vaddr : i64 = elf.IMAGE_BASE + elf.align_up(ro_vaddr - elf.IMAGE_BASE + @dropunit(ro_room), elf.PAGE)
     if #em.df_pos > 0:
         foreach i := 0…#em.df_pos:
-            g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
+            dispatch.g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
         foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] < relro_size:
-                push64(&data, chk.gvals[i])
+                elf.push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
-    foreach _ := 0…KB_SIZE:
+    foreach _ := 0…emit.KB_SIZE:
         data.push(0)
     while @dropunit(#data) < relro_size:
         data.push(0)
     // the structures the kernel is handed when the handler is installed
-    foreach _ := 0…SIG_SIZE:
+    foreach _ := 0…emit.SIG_SIZE:
         data.push(0)
     if nglobals > 0:
         foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
-                push64(&data, chk.gvals[i])
+                elf.push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
-    foreach _ := 0…AL_SIZE:
+    foreach _ := 0…emit.AL_SIZE:
         data.push(0)
-    assert(@dropunit(#data) = alloc_off + AL_SIZE, "the data segment is as long as it was planned")
-    let cdiags : mut Diag[] = []
+    assert(@dropunit(#data) = alloc_off + emit.AL_SIZE, "the data segment is as long as it was planned")
+    let cdiags : mut diag.Diag[] = []
     if em.max_frame > guard_size:
-        cdiags.push(Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size", level: DIAG_ERROR, code: DIAG_NONE})
+        cdiags.push(diag.Diag{line: 1¤"line", col: 1¤"col",
+                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ tokens.i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
     if em.max_frame >= stack_size:
-        cdiags.push(Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size", level: DIAG_ERROR, code: DIAG_NONE})
+        cdiags.push(diag.Diag{line: 1¤"line", col: 1¤"col",
+                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ tokens.i64_str(stack_size) ⧺ "; raise --stack-size", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
     // the symbols, in address order: the entry point, the functions,
     // the synthetics, and the runtime, which here is emitted in id
     // order and so already ascends
@@ -555,8 +558,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach i := 0…#a.fns:
         // a function nothing reached is in no binary, and so is no
         // symbol either -- as a runtime routine nobody reached is not
-        if not incr_moved(placed, @dropunit(i)) and em.fn_off[i] ≠ ⁻1:
-            sname.push(fn_symbol(a, toks, src, @dropunit(i)))
+        if not incr_m.incr_moved(placed, @dropunit(i)) and em.fn_off[i] ≠ ⁻1:
+            sname.push(symbols.fn_symbol(a, toks, src, @dropunit(i)))
             soffs.push(em.fn_off[i])
             sglob.push(a.fns[i].is_export)
     let synth : mut str[] = []
@@ -566,10 +569,10 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     synth.push("<tests>")
     if #chk.lams > 0:
         foreach j := 0…#chk.lams:
-            synth.push("λ#" ⧺ i64_str(@dropunit(j)))
+            synth.push("λ#" ⧺ tokens.i64_str(@dropunit(j)))
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn:
-            synth.push("partial#" ⧺ i64_str(@dropunit(j)))
+            synth.push("partial#" ⧺ tokens.i64_str(@dropunit(j)))
     foreach j := 0…#synth:
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
@@ -578,7 +581,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // either.  The rest go in by address: a routine's id is its place
     // in the list rather than in the code, and a symbol's size is the
     // distance to the next one, which must never run backwards.
-    let rtn := rt_names()
+    let rtn := emit.rt_names()
     let rname : mut str[] = []
     let roff : mut i64[] = []
     if #em.rt_off > 0:
@@ -601,15 +604,15 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             soffs.push(roff[i])
             sglob.push(false)
     foreach mv := placed:
-        sname.push(fn_symbol(a, toks, src, mv))
+        sname.push(symbols.fn_symbol(a, toks, src, mv))
         soffs.push(em.fn_off[mv × 1¤ptrdiff])
         sglob.push(a.fns[mv × 1¤ptrdiff].is_export)
-    let syms : mut Sym[] = []
+    let syms : mut elf.Sym[] = []
     foreach i := 0…#sname:
         let here : i64 ¤byte = soffs[i]
         let next : i64 ¤byte = if i + 1 < #soffs: soffs[i + 1] else: text_size
         assert(next >= here, "the symbols run up the text")
-        syms.push(Sym{name: sname[i], value: here, size: next - here,
+        syms.push(elf.Sym{name: sname[i], value: here, size: next - here,
                       is_global: sglob[i]})
     // what the convention analysis decided, then what the lowering did
     let dlog : mut str[] = []
@@ -617,7 +620,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         dlog.push(l)
     foreach l := lw.dlog:
         dlog.push(l)
-    (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
+    (codegen.Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
               text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
               ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
               ro_bt: bt_at × 1¤byte, ro_bt_end: bt_to × 1¤byte, code: em.code, rodata: rodata, data: data,
@@ -625,91 +628,91 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
               log: dlog, diags: cdiags})
 
 // the same door, spelled in RV64
-fn rv_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
               stack_size : i64, guard_size : i64, ginit : i64,
               tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
-    let pos : i64 = rv_absref(&em, RV_RB)
+    let pos : i64 = arch_rv64.rv_absref(&em, arch_rv64.RV_RB)
     em.df_pos.push(pos)
     em.df_off.push(args_off)
-    rv_I(&em, 0, 2, 3, RV_RA, 3)                 // ld t0, 0(sp): argc
-    rv_S(&em, 0, RV_RA, RV_RB, 3)
-    rv_I(&em, 8, 2, 0, RV_RC, 19)                // addi t2, sp, 8: argv
-    rv_S(&em, 8, RV_RC, RV_RB, 3)
-    rv_I(&em, 3, RV_RA, 1, RV_T, 19)             // slli t3, argc, 3
-    rv_R(&em, 0, RV_RC, RV_T, 0, RV_T, 51)       // add t3, t3, argv
-    rv_I(&em, 8, RV_T, 0, RV_T, 19)              // envp
-    rv_S(&em, 16, RV_T, RV_RB, 3)
+    arch_rv64.rv_I(&em, 0, 2, 3, arch_rv64.RV_RA, 3)                 // ld t0, 0(sp): argc
+    arch_rv64.rv_S(&em, 0, arch_rv64.RV_RA, arch_rv64.RV_RB, 3)
+    arch_rv64.rv_I(&em, 8, 2, 0, arch_rv64.RV_RC, 19)                // addi t2, sp, 8: argv
+    arch_rv64.rv_S(&em, 8, arch_rv64.RV_RC, arch_rv64.RV_RB, 3)
+    arch_rv64.rv_I(&em, 3, arch_rv64.RV_RA, 1, arch_rv64.RV_T, 19)             // slli t3, argc, 3
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RC, arch_rv64.RV_T, 0, arch_rv64.RV_T, 51)       // add t3, t3, argv
+    arch_rv64.rv_I(&em, 8, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)              // envp
+    arch_rv64.rv_S(&em, 16, arch_rv64.RV_T, arch_rv64.RV_RB, 3)
     em.set_label(0)                              // walk to the env's end
-    rv_I(&em, 0, RV_T, 3, RV_S1, 3)              // ld t5, 0(t3)
-    rv_I(&em, 8, RV_T, 0, RV_T, 19)
-    rv_bshort(&em, 0, RV_S1, 0, 8)               // beq t5, x0, +8
-    rvg_jmp(&em, tg, 0)
-    rv_S(&em, 24, RV_T, RV_RB, 3)                // auxv
-    rv_movimm(&em, 10, 0)
-    rv_movimm(&em, 11, guard_size + stack_size)
-    rv_movimm(&em, 12, 0)
-    rv_movimm(&em, 13, 147490)
-    rv_movimm(&em, 14, ⁻1)
-    rv_movimm(&em, 15, 0)
-    rv_movimm(&em, 17, sc_number(tg, SC_MMAP))
+    arch_rv64.rv_I(&em, 0, arch_rv64.RV_T, 3, arch_rv64.RV_S1, 3)              // ld t5, 0(t3)
+    arch_rv64.rv_I(&em, 8, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)
+    arch_rv64.rv_bshort(&em, 0, arch_rv64.RV_S1, 0, 8)               // beq t5, x0, +8
+    arch_rv64.rvg_jmp(&em, tg, 0)
+    arch_rv64.rv_S(&em, 24, arch_rv64.RV_T, arch_rv64.RV_RB, 3)                // auxv
+    arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 11, guard_size + stack_size)
+    arch_rv64.rv_movimm(&em, 12, 0)
+    arch_rv64.rv_movimm(&em, 13, 147490)
+    arch_rv64.rv_movimm(&em, 14, ⁻1)
+    arch_rv64.rv_movimm(&em, 15, 0)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_MMAP))
     em.aw(115)
-    rv_bshort(&em, 5, 10, 0, 8)                  // bge a0, x0, +8
-    rvg_jmp(&em, tg, 1)                          // the kernel refused
-    rv_mv(&em, RV_RB, 10)                        // the region's foot
-    rv_movimm(&em, 10, guard_size)
-    rv_R(&em, 0, RV_RB, 10, 0, 10, 51)
-    rv_movimm(&em, 11, stack_size)
-    rv_movimm(&em, 12, 3)
-    rv_movimm(&em, 17, sc_number(tg, SC_MPROT))
+    arch_rv64.rv_bshort(&em, 5, 10, 0, 8)                  // bge a0, x0, +8
+    arch_rv64.rvg_jmp(&em, tg, 1)                          // the kernel refused
+    arch_rv64.rv_mv(&em, arch_rv64.RV_RB, 10)                        // the region's foot
+    arch_rv64.rv_movimm(&em, 10, guard_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, 10, 0, 10, 51)
+    arch_rv64.rv_movimm(&em, 11, stack_size)
+    arch_rv64.rv_movimm(&em, 12, 3)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
     em.aw(115)
-    rv_bshort(&em, 5, 10, 0, 8)
-    rvg_jmp(&em, tg, 1)
-    rv_movimm(&em, RV_RA, guard_size + stack_size)
-    rv_R(&em, 0, RV_RB, RV_RA, 0, 2, 51)         // sp = foot + whole
-    rvg_jmp(&em, tg, 2)
+    arch_rv64.rv_bshort(&em, 5, 10, 0, 8)
+    arch_rv64.rvg_jmp(&em, tg, 1)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_RA, guard_size + stack_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RA, 0, 2, 51)         // sp = foot + whole
+    arch_rv64.rvg_jmp(&em, tg, 2)
     em.set_label(1)
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
-    let spos : i64 = rv_absref(&em, 10)
+    let spos : i64 = arch_rv64.rv_absref(&em, 10)
     em.sf_pos.push(spos)
     em.sf_str.push(smsg)
-    rv_movimm(&em, 11, str_len("the stack could not be reserved\n"))
-    rvg_call(&em, tg, RT_ABORT)
+    arch_rv64.rv_movimm(&em, 11, emit.str_len("the stack could not be reserved\n"))
+    arch_rv64.rvg_call(&em, tg, emit.RT_ABORT)
     em.set_label(2)
     // Where the guard is, for the handler to compare a faulting
     // address against, and then the handler itself.  Both before the
     // relro is sealed: the bounds live in it.
-    let gpos : i64 = rv_absref(&em, RV_RA)
+    let gpos : i64 = arch_rv64.rv_absref(&em, arch_rv64.RV_RA)
     em.df_pos.push(gpos)
     em.df_off.push(args_off)
-    rv_S(&em, KB_GLO, RV_RB, RV_RA, 3)
-    rv_movimm(&em, RV_RC, guard_size)
-    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
-    rv_S(&em, KB_GHI, RV_RC, RV_RA, 3)
-    rv_movimm(&em, RV_RC, guard_size + stack_size)
-    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
-    rv_S(&em, KB_STOP, RV_RC, RV_RA, 3)
-    rvg_call(&em, tg, RT_SIGINIT)
+    arch_rv64.rv_S(&em, emit.KB_GLO, arch_rv64.RV_RB, arch_rv64.RV_RA, 3)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_RC, guard_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RC, 0, arch_rv64.RV_RC, 51)
+    arch_rv64.rv_S(&em, emit.KB_GHI, arch_rv64.RV_RC, arch_rv64.RV_RA, 3)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_RC, guard_size + stack_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RC, 0, arch_rv64.RV_RC, 51)
+    arch_rv64.rv_S(&em, emit.KB_STOP, arch_rv64.RV_RC, arch_rv64.RV_RA, 3)
+    arch_rv64.rvg_call(&em, tg, emit.RT_SIGINIT)
     if ginit >= 0:
-        rvg_call(&em, tg, ginit)
-    rvg_call(&em, tg, RT_RELRO)
-    rvg_call(&em, tg, tdriver)
+        arch_rv64.rvg_call(&em, tg, ginit)
+    arch_rv64.rvg_call(&em, tg, emit.RT_RELRO)
+    arch_rv64.rvg_call(&em, tg, tdriver)
     if start_fn >= 0:
-        rvg_call(&em, tg, start_fn)
+        arch_rv64.rvg_call(&em, tg, start_fn)
     if not sret:
-        rv_movimm(&em, 10, 0)
-    rv_movimm(&em, 17, sc_number(tg, SC_EXIT))
+        arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
     em.aw(115)
-    rvg_resolve(&em, tg)
+    arch_rv64.rvg_resolve(&em, tg)
 
 // the door on 32-bit x86: the kernel's words are four bytes, the
 // cells they land in stay eight
-fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn i3_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
               stack_size : i64, guard_size : i64, ginit : i64,
               tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
     let pos : i64 = em.here() + 1
-    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    arch_i386.i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
     em.df_pos.push(pos)
     em.df_off.push(args_off)
     em.b3(139, 4, 36)                // mov eax, [esp]: argc
@@ -728,45 +731,45 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.b2(139, 17)                   // mov edx, [ecx]
     em.b3(131, 193, 4)               // add ecx, 4
     em.b2(133, 210)                  // test edx, edx
-    i3_jcc(&em, 133, 0)              // jnz
+    arch_i386.i3_jcc(&em, 133, 0)              // jnz
     em.b3(137, 78, 24)               // mov [esi+24], ecx: auxv
     em.b3(199, 70, 28)
     em.w32(0)
     // the stack: mmap2, then the top opened, then the move
-    i3_movimm(&em, 0, sc_number(tg, SC_MMAP))
+    arch_i386.i3_movimm(&em, 0, arch_a64.sc_number(tg, arch_a64.SC_MMAP))
     em.b2(49, 219)                   // xor ebx, ebx
-    i3_movimm(&em, 1, guard_size + stack_size)
+    arch_i386.i3_movimm(&em, 1, guard_size + stack_size)
     em.b2(49, 210)                   // xor edx, edx: PROT_NONE
-    i3_movimm(&em, 6, 147490)
-    i3_movimm(&em, 7, ⁻1)
+    arch_i386.i3_movimm(&em, 6, 147490)
+    arch_i386.i3_movimm(&em, 7, ⁻1)
     em.b1(85)                        // push ebp
     em.b2(49, 237)                   // xor ebp, ebp: page offset 0
     em.b2(205, 128)                  // int 0x80
     em.b1(93)                        // pop ebp
     em.b1(61)
     em.w32(⁻4096)                    // cmp eax, -4096
-    i3_jcc(&em, 131, 1)              // jae: the kernel refused
+    arch_i386.i3_jcc(&em, 131, 1)              // jae: the kernel refused
     em.b2(137, 199)                  // mov edi, eax: the region's foot
-    i3_movimm(&em, 0, sc_number(tg, SC_MPROT))
+    arch_i386.i3_movimm(&em, 0, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
     em.b2(137, 251)                  // mov ebx, edi
     em.b2(129, 195)
     em.w32(guard_size)               // add ebx, guard
-    i3_movimm(&em, 1, stack_size)
-    i3_movimm(&em, 2, 3)
+    arch_i386.i3_movimm(&em, 1, stack_size)
+    arch_i386.i3_movimm(&em, 2, 3)
     em.b2(205, 128)
     em.b1(61)
     em.w32(⁻4096)
-    i3_jcc(&em, 131, 1)
+    arch_i386.i3_jcc(&em, 131, 1)
     em.b2(137, 252)                  // mov esp, edi
     em.b2(129, 196)
     em.w32(guard_size + stack_size)  // add esp, the whole reservation
-    i3g_jmp(&em, tg, 2)
+    arch_i386.i3g_jmp(&em, tg, 2)
     em.set_label(1)
     em.b2(131, 236)
     em.b1(16)                       // sub esp, 16: room for the message
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
     let spos : i64 = em.here() + 1
-    i3_movimm(&em, 0, 0)
+    arch_i386.i3_movimm(&em, 0, 0)
     em.sf_pos.push(spos)
     em.sf_str.push(smsg)
     em.b3(137, 4, 36)                // mov [esp], eax
@@ -775,11 +778,11 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.w32(0)
     em.b3(199, 68, 36)
     em.b1(8)
-    em.w32(str_len("the stack could not be reserved\n"))
+    em.w32(emit.str_len("the stack could not be reserved\n"))
     em.b3(199, 68, 36)
     em.b1(12)
     em.w32(0)
-    i3_call(&em, RT_ABORT)
+    arch_i386.i3_call(&em, emit.RT_ABORT)
     em.set_label(2)
     em.b2(131, 236)
     em.b1(96)                        // sub esp, 96: the door's own outgoing area
@@ -787,109 +790,109 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     // address against, and then the handler itself.  Both before the
     // relro is sealed: the bounds live in it.
     let gpos : i64 = em.here() + 1
-    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    arch_i386.i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
     em.df_pos.push(gpos)
     em.df_off.push(args_off)
-    em.b3(137, 126, KB_GLO)          // mov [esi+KB_GLO], edi
-    em.b3(199, 70, KB_GLO + 4)
+    em.b3(137, 126, emit.KB_GLO)          // mov [esi+KB_GLO], edi
+    em.b3(199, 70, emit.KB_GLO + 4)
     em.w32(0)                        // the cell's high half
     em.b2(137, 248)                  // mov eax, edi
     em.b1(5)
     em.w32(guard_size)               // add eax, guard
-    em.b3(137, 70, KB_GHI)           // mov [esi+KB_GHI], eax
-    em.b3(199, 70, KB_GHI + 4)
+    em.b3(137, 70, emit.KB_GHI)           // mov [esi+KB_GHI], eax
+    em.b3(199, 70, emit.KB_GHI + 4)
     em.w32(0)
     em.b2(137, 248)                  // mov eax, edi
     em.b1(5)
     em.w32(guard_size + stack_size)  // add eax, guard + stack
-    em.b3(137, 70, KB_STOP)          // mov [esi+KB_STOP], eax
-    em.b3(199, 70, KB_STOP + 4)
+    em.b3(137, 70, emit.KB_STOP)          // mov [esi+KB_STOP], eax
+    em.b3(199, 70, emit.KB_STOP + 4)
     em.w32(0)
-    i3_call(&em, RT_SIGINIT)
+    arch_i386.i3_call(&em, emit.RT_SIGINIT)
     if ginit >= 0:
-        i3_call(&em, ginit)
-    i3_call(&em, RT_RELRO)
-    i3_call(&em, tdriver)
+        arch_i386.i3_call(&em, ginit)
+    arch_i386.i3_call(&em, emit.RT_RELRO)
+    arch_i386.i3_call(&em, tdriver)
     if start_fn >= 0:
-        i3_call(&em, start_fn)
+        arch_i386.i3_call(&em, start_fn)
     if sret:
         em.b2(137, 195)              // mov ebx, eax: the status
     else:
         em.b2(49, 219)
-    i3_movimm(&em, 0, sc_number(tg, SC_EXIT))
+    arch_i386.i3_movimm(&em, 0, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
     em.b2(205, 128)
-    i3g_resolve(&em, tg)
+    arch_i386.i3g_resolve(&em, tg)
 
 // the door on 32-bit ARM
-fn a32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
+fn a32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
     let pos : i64 = em.here()
-    a32_movw(&em, 4, 0)                          // r4 = args-block (patched)
-    a32_movt(&em, 4, 0)
+    arch_arm.a32_movw(&em, 4, 0)                          // r4 = args-block (patched)
+    arch_arm.a32_movt(&em, 4, 0)
     em.df_pos.push(pos)
     em.df_off.push(args_off)
-    em.aw(A32_LDRR + (13 « 16) + (0 « 12))       // ldr r0, [sp]: argc
-    em.aw(A32_STRR + (4 « 16) + (0 « 12))
-    a32_zero9(&em, 5)
-    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 4)
-    em.aw(A32_ADDI + (13 « 16) + (1 « 12) + 4)   // add r1, sp, #4: argv
-    em.aw(A32_STRR + (4 « 16) + (1 « 12) + 8)
-    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 12)
+    em.aw(arch_arm.A32_LDRR + (13 « 16) + (0 « 12))       // ldr r0, [sp]: argc
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (0 « 12))
+    arch_arm.a32_zero9(&em, 5)
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (5 « 12) + 4)
+    em.aw(arch_arm.A32_ADDI + (13 « 16) + (1 « 12) + 4)   // add r1, sp, #4: argv
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (1 « 12) + 8)
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (5 « 12) + 12)
     // envp = argv + 4×argc + 4
-    em.aw(A32_ADD + (1 « 16) + (2 « 12) + (0 « 8) + (0 « 5) + 256 + 0)  // add r2, r1, r0 lsl #2
-    em.aw(A32_ADDI + (2 « 16) + (2 « 12) + 4)
-    em.aw(A32_STRR + (4 « 16) + (2 « 12) + 16)
-    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 20)
+    em.aw(arch_arm.A32_ADD + (1 « 16) + (2 « 12) + (0 « 8) + (0 « 5) + 256 + 0)  // add r2, r1, r0 lsl #2
+    em.aw(arch_arm.A32_ADDI + (2 « 16) + (2 « 12) + 4)
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (2 « 12) + 16)
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (5 « 12) + 20)
     em.set_label(0)
-    em.aw(A32_LDRR + (2 « 16) + (3 « 12))         // ldr r3, [r2]
-    em.aw(A32_ADDI + (2 « 16) + (2 « 12) + 4)
-    em.aw(A32_CMP0 + (3 « 16) + 0)               // cmp r3, #0
+    em.aw(arch_arm.A32_LDRR + (2 « 16) + (3 « 12))         // ldr r3, [r2]
+    em.aw(arch_arm.A32_ADDI + (2 « 16) + (2 « 12) + 4)
+    em.aw(arch_arm.A32_CMP0 + (3 « 16) + 0)               // cmp r3, #0
     em.tf_pos.push(em.here())
     em.tf_lab.push(0)
-    em.tf_form.push(A32F_B24)
-    em.aw((A32_NE « 28) + (A32_B & 268435455))
-    em.aw(A32_STRR + (4 « 16) + (2 « 12) + 24)    // auxv
-    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 28)
+    em.tf_form.push(arch_arm.A32F_B24)
+    em.aw((arch_arm.A32_NE « 28) + (arch_arm.A32_B & 268435455))
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (2 « 12) + 24)    // auxv
+    em.aw(arch_arm.A32_STRR + (4 « 16) + (5 « 12) + 28)
     // stack: mmap2 takes the offset in pages, which is zero here
-    a32_movimm(&em, 0, 0)
-    a32_movimm(&em, 1, guard_size + stack_size)
-    a32_zero9(&em, 2)
-    a32_movimm(&em, 3, 147490)
-    a32_movimm(&em, 4, 4294967295)
-    a32_zero9(&em, 5)
-    a32_movimm(&em, 7, sc_number(tg, SC_MMAP))
-    em.aw(A32_SVC)
-    a32_movimm(&em, 12, 4294963200)
-    a32_dp(&em, A32_CMP, 0, 0, 12)
+    arch_arm.a32_movimm(&em, 0, 0)
+    arch_arm.a32_movimm(&em, 1, guard_size + stack_size)
+    arch_arm.a32_zero9(&em, 2)
+    arch_arm.a32_movimm(&em, 3, 147490)
+    arch_arm.a32_movimm(&em, 4, 4294967295)
+    arch_arm.a32_zero9(&em, 5)
+    arch_arm.a32_movimm(&em, 7, arch_a64.sc_number(tg, arch_a64.SC_MMAP))
+    em.aw(arch_arm.A32_SVC)
+    arch_arm.a32_movimm(&em, 12, 4294963200)
+    arch_arm.a32_dp(&em, arch_arm.A32_CMP, 0, 0, 12)
     em.tf_pos.push(em.here())
     em.tf_lab.push(1)
-    em.tf_form.push(A32F_B24)
-    em.aw((A32_CS « 28) + (A32_B & 268435455))   // bhs failed
-    a32_dp(&em, A32_MOVR, 6, 0, 0)               // r6 = foot
-    a32_movimm(&em, 0, 0)
-    a32_dp(&em, A32_ADD, 0, 6, 0)                // pointless; overwrite below
-    a32_dp(&em, A32_MOVR, 1, 0, 6)               // r1 = foot
-    a32_movimm(&em, 12, guard_size)
-    a32_dp(&em, A32_ADD, 1, 1, 12)               // r1 = foot + guard
-    a32_movimm(&em, 0, sc_number(tg, SC_MPROT))
+    em.tf_form.push(arch_arm.A32F_B24)
+    em.aw((arch_arm.A32_CS « 28) + (arch_arm.A32_B & 268435455))   // bhs failed
+    arch_arm.a32_dp(&em, arch_arm.A32_MOVR, 6, 0, 0)               // r6 = foot
+    arch_arm.a32_movimm(&em, 0, 0)
+    arch_arm.a32_dp(&em, arch_arm.A32_ADD, 0, 6, 0)                // pointless; overwrite below
+    arch_arm.a32_dp(&em, arch_arm.A32_MOVR, 1, 0, 6)               // r1 = foot
+    arch_arm.a32_movimm(&em, 12, guard_size)
+    arch_arm.a32_dp(&em, arch_arm.A32_ADD, 1, 1, 12)               // r1 = foot + guard
+    arch_arm.a32_movimm(&em, 0, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
     // mprotect(r0=addr, r1=len, r2=prot) — EABI: r0 addr, r1 len, r2 prot
-    a32_dp(&em, A32_MOVR, 0, 0, 1)
-    a32_movimm(&em, 1, stack_size)
-    a32_movimm(&em, 2, 3)
-    a32_movimm(&em, 7, sc_number(tg, SC_MPROT))
-    em.aw(A32_SVC)
-    a32_movimm(&em, 12, guard_size + stack_size)
-    a32_dp(&em, A32_ADD, 13, 6, 12)              // sp = foot + whole
-    a32g_jmp(&em, tg, 2)
+    arch_arm.a32_dp(&em, arch_arm.A32_MOVR, 0, 0, 1)
+    arch_arm.a32_movimm(&em, 1, stack_size)
+    arch_arm.a32_movimm(&em, 2, 3)
+    arch_arm.a32_movimm(&em, 7, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
+    em.aw(arch_arm.A32_SVC)
+    arch_arm.a32_movimm(&em, 12, guard_size + stack_size)
+    arch_arm.a32_dp(&em, arch_arm.A32_ADD, 13, 6, 12)              // sp = foot + whole
+    arch_arm.a32g_jmp(&em, tg, 2)
     em.set_label(1)
-    a32_movimm(&em, 7, sc_number(tg, SC_EXIT))
-    a32_movimm(&em, 0, 1)
-    em.aw(A32_SVC)
+    arch_arm.a32_movimm(&em, 7, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
+    arch_arm.a32_movimm(&em, 0, 1)
+    em.aw(arch_arm.A32_SVC)
     em.set_label(2)
-    a32_movimm(&em, 12, 256)
-    a32_dp(&em, A32_SUB, 13, 13, 12)             // room for outgoing args
+    arch_arm.a32_movimm(&em, 12, 256)
+    arch_arm.a32_dp(&em, arch_arm.A32_SUB, 13, 13, 12)             // room for outgoing args
     // No handler here yet.  A handler is entered with the kernel's own
     // calling convention, and this target takes a routine's arguments
     // on the stack where the kernel puts them in registers, so what the
@@ -900,74 +903,74 @@ fn a32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
     // stack that runs out here dies the way it always has, of a plain
     // SIGSEGV.  See TODO-compiler.md.
     if ginit >= 0:
-        a32_call(&em, ginit)
-    a32_call(&em, RT_RELRO)
-    a32_call(&em, tdriver)
+        arch_arm.a32_call(&em, ginit)
+    arch_arm.a32_call(&em, emit.RT_RELRO)
+    arch_arm.a32_call(&em, tdriver)
     if start_fn >= 0:
-        a32_call(&em, start_fn)
+        arch_arm.a32_call(&em, start_fn)
     if sret:
-        a32_dp(&em, A32_MOVR, 0, 0, 0)
+        arch_arm.a32_dp(&em, arch_arm.A32_MOVR, 0, 0, 0)
     else:
-        a32_zero9(&em, 0)
-    a32_movimm(&em, 7, sc_number(tg, SC_EXIT))
-    em.aw(A32_SVC)
-    a32g_resolve(&em, tg)
+        arch_arm.a32_zero9(&em, 0)
+    arch_arm.a32_movimm(&em, 7, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
+    em.aw(arch_arm.A32_SVC)
+    arch_arm.a32g_resolve(&em, tg)
 
 // the door on RV32
-fn r32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
+fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
     let pos : i64 = em.here()
-    rv_U(&em, 0, RV_RB, 55)
-    rv_I(&em, 0, RV_RB, 0, RV_RB, 19)
+    arch_rv64.rv_U(&em, 0, arch_rv64.RV_RB, 55)
+    arch_rv64.rv_I(&em, 0, arch_rv64.RV_RB, 0, arch_rv64.RV_RB, 19)
     em.df_pos.push(pos)
     em.df_off.push(args_off)
-    rv_I(&em, 0, 2, 2, RV_RA, 3)                 // lw t0, 0(sp): argc
-    rv_S(&em, 0, RV_RA, RV_RB, 2)
-    rv_movimm(&em, RV_S1, 0)                     // t5 = 0: the cells' high halves
-    rv_S(&em, 4, RV_S1, RV_RB, 2)
-    rv_I(&em, 4, 2, 0, RV_RC, 19)                // argv = sp + 4
-    rv_S(&em, 8, RV_RC, RV_RB, 2)
-    rv_S(&em, 12, RV_S1, RV_RB, 2)
-    rv_I(&em, 2, RV_RA, 1, RV_T, 19)             // slli t3, argc, 2
-    rv_R(&em, 0, RV_RC, RV_T, 0, RV_T, 51)
-    rv_I(&em, 4, RV_T, 0, RV_T, 19)              // envp
-    rv_S(&em, 16, RV_T, RV_RB, 2)
-    rv_S(&em, 20, RV_S1, RV_RB, 2)
+    arch_rv64.rv_I(&em, 0, 2, 2, arch_rv64.RV_RA, 3)                 // lw t0, 0(sp): argc
+    arch_rv64.rv_S(&em, 0, arch_rv64.RV_RA, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_S1, 0)                     // t5 = 0: the cells' high halves
+    arch_rv64.rv_S(&em, 4, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_I(&em, 4, 2, 0, arch_rv64.RV_RC, 19)                // argv = sp + 4
+    arch_rv64.rv_S(&em, 8, arch_rv64.RV_RC, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_S(&em, 12, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_I(&em, 2, arch_rv64.RV_RA, 1, arch_rv64.RV_T, 19)             // slli t3, argc, 2
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RC, arch_rv64.RV_T, 0, arch_rv64.RV_T, 51)
+    arch_rv64.rv_I(&em, 4, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)              // envp
+    arch_rv64.rv_S(&em, 16, arch_rv64.RV_T, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_S(&em, 20, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
     em.set_label(0)
-    rv_I(&em, 0, RV_T, 2, RV_S0, 3)              // lw t4, 0(t3)
-    rv_I(&em, 4, RV_T, 0, RV_T, 19)
-    rv_bshort(&em, 0, RV_S0, 0, 8)
-    rvg_jmp(&em, tg, 0)
-    rv_S(&em, 24, RV_T, RV_RB, 2)                // auxv
-    rv_movimm(&em, RV_S1, 0)
-    rv_S(&em, 28, RV_S1, RV_RB, 2)
-    rv_movimm(&em, 10, 0)
-    rv_movimm(&em, 11, guard_size + stack_size)
-    rv_movimm(&em, 12, 0)
-    rv_movimm(&em, 13, 147490)
-    rv_movimm(&em, 14, ⁻1)
-    rv_movimm(&em, 15, 0)
-    rv_movimm(&em, 17, sc_number(tg, SC_MMAP))
+    arch_rv64.rv_I(&em, 0, arch_rv64.RV_T, 2, arch_rv64.RV_S0, 3)              // lw t4, 0(t3)
+    arch_rv64.rv_I(&em, 4, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)
+    arch_rv64.rv_bshort(&em, 0, arch_rv64.RV_S0, 0, 8)
+    arch_rv64.rvg_jmp(&em, tg, 0)
+    arch_rv64.rv_S(&em, 24, arch_rv64.RV_T, arch_rv64.RV_RB, 2)                // auxv
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_S1, 0)
+    arch_rv64.rv_S(&em, 28, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 11, guard_size + stack_size)
+    arch_rv64.rv_movimm(&em, 12, 0)
+    arch_rv64.rv_movimm(&em, 13, 147490)
+    arch_rv64.rv_movimm(&em, 14, ⁻1)
+    arch_rv64.rv_movimm(&em, 15, 0)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_MMAP))
     em.aw(115)
-    rv_movimm(&em, 5, ⁻4096)
-    rv_R(&em, 0, 5, 10, 3, 6, 51)                // sltu t1, a0, -4096(unsigned): fits→1
-    rv_bshort(&em, 1, 6, 0, 8)                   // bne t1, x0, +8 (ok)
-    rvg_jmp(&em, tg, 1)
-    rv_mv(&em, RV_RB, 10)
-    rv_movimm(&em, 10, guard_size)
-    rv_R(&em, 0, RV_RB, 10, 0, 10, 51)
-    rv_movimm(&em, 11, stack_size)
-    rv_movimm(&em, 12, 3)
-    rv_movimm(&em, 17, sc_number(tg, SC_MPROT))
+    arch_rv64.rv_movimm(&em, 5, ⁻4096)
+    arch_rv64.rv_R(&em, 0, 5, 10, 3, 6, 51)                // sltu t1, a0, -4096(unsigned): fits→1
+    arch_rv64.rv_bshort(&em, 1, 6, 0, 8)                   // bne t1, x0, +8 (ok)
+    arch_rv64.rvg_jmp(&em, tg, 1)
+    arch_rv64.rv_mv(&em, arch_rv64.RV_RB, 10)
+    arch_rv64.rv_movimm(&em, 10, guard_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, 10, 0, 10, 51)
+    arch_rv64.rv_movimm(&em, 11, stack_size)
+    arch_rv64.rv_movimm(&em, 12, 3)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
     em.aw(115)
-    rv_movimm(&em, RV_RA, guard_size + stack_size)
-    rv_R(&em, 0, RV_RB, RV_RA, 0, 2, 51)
-    rvg_jmp(&em, tg, 2)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_RA, guard_size + stack_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RA, 0, 2, 51)
+    arch_rv64.rvg_jmp(&em, tg, 2)
     em.set_label(1)
-    rv_movimm(&em, 10, 1)
-    rv_movimm(&em, 17, sc_number(tg, SC_EXIT))
+    arch_rv64.rv_movimm(&em, 10, 1)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
     em.aw(115)
     em.set_label(2)
     // No handler here yet.  A handler is entered with the kernel's own
@@ -980,52 +983,52 @@ fn r32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
     // stack that runs out here dies the way it always has, of a plain
     // SIGSEGV.  See TODO-compiler.md.
     if ginit >= 0:
-        r32_call(&em, ginit)
-    r32_call(&em, RT_RELRO)
-    r32_call(&em, tdriver)
+        arch_rv32.r32_call(&em, ginit)
+    arch_rv32.r32_call(&em, emit.RT_RELRO)
+    arch_rv32.r32_call(&em, tdriver)
     if start_fn >= 0:
-        r32_call(&em, start_fn)
+        arch_rv32.r32_call(&em, start_fn)
     if not sret:
-        rv_movimm(&em, 10, 0)
-    rv_movimm(&em, 17, sc_number(tg, SC_EXIT))
+        arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 17, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
     em.aw(115)
-    rvg_resolve(&em, tg)
+    arch_rv64.rvg_resolve(&em, tg)
 
 // how many arguments each runtime routine takes, for the prologue
 fn rt_nargs(id : i64) → i64:
-    if id = RT_WRITE1 or id = RT_WRITE2 or id = RT_ABORT: return 2
-    if id = RT_ALLOC or id = RT_ARRNEW or id = RT_PRINTI or id = RT_PRINTU: return 1
-    if id = RT_ARRPUSH or id = RT_CONCAT or id = RT_STREQ: return 2
-    if id = RT_STRCHARS or id = RT_PRINTSTR: return 1
-    if id = RT_HNEW: return 2
-    if id = RT_HFIND or id = RT_HGET or id = RT_HELEM: return 2
-    if id = RT_HPUT: return 3
-    if id = RT_HGROW: return 1
-    if id = RT_STRIDX or id = RT_STRNEXT: return 2
-    if id = RT_CHARS or id = RT_CHARSTR: return 1
-    if id = RT_FOPEN or id = RT_FREAD or id = RT_TORAW or id = RT_SBYTES: return 1
-    if id = RT_FCREATE or id = RT_FWRITE or id = RT_WRITEV: return 2
-    if id = RT_AFIND: return 3
-    if id = RT_ASLICE: return 3
-    if id = RT_AFILL or id = RT_ACYC or id = RT_ACAT: return 2
-    if id = RT_ENVG or id = RT_AUXV: return 1
-    if id = RT_DIVU64 or id = RT_MODU64 or id = RT_DIVS64 or id = RT_MODS64: return 2
-    if id = RT_MULOV64: return 3
-    if id = RT_BT: return 0
-    if id = RT_SSLICE: return 3
-    if id = RT_HSTART: return 1
-    if id = RT_HFINAL: return 2
-    if id = RT_HUPDATE: return 2
-    if id = RT_SHA256INIT or id = RT_SHA256BLK: return 1
-    if id = RT_SHA256FIN: return 2
-    if id = RT_SEGV: return 3
-    if id = RT_SIGINIT: return 0
-    if id = RT_FREE: return 2
-    if id = RT_BIGFROM: return 1
-    if id = RT_BIGCMP: return 2
-    if id = RT_BIGADD: return 3
-    if id = RT_BIGMUL: return 2
-    if id = RT_BIGPRINT: return 1
+    if id = emit.RT_WRITE1 or id = emit.RT_WRITE2 or id = emit.RT_ABORT: return 2
+    if id = emit.RT_ALLOC or id = emit.RT_ARRNEW or id = emit.RT_PRINTI or id = emit.RT_PRINTU: return 1
+    if id = emit.RT_ARRPUSH or id = emit.RT_CONCAT or id = emit.RT_STREQ: return 2
+    if id = emit.RT_STRCHARS or id = emit.RT_PRINTSTR: return 1
+    if id = emit.RT_HNEW: return 2
+    if id = emit.RT_HFIND or id = emit.RT_HGET or id = emit.RT_HELEM: return 2
+    if id = emit.RT_HPUT: return 3
+    if id = emit.RT_HGROW: return 1
+    if id = emit.RT_STRIDX or id = emit.RT_STRNEXT: return 2
+    if id = emit.RT_CHARS or id = emit.RT_CHARSTR: return 1
+    if id = emit.RT_FOPEN or id = emit.RT_FREAD or id = emit.RT_TORAW or id = emit.RT_SBYTES: return 1
+    if id = emit.RT_FCREATE or id = emit.RT_FWRITE or id = emit.RT_WRITEV: return 2
+    if id = emit.RT_AFIND: return 3
+    if id = emit.RT_ASLICE: return 3
+    if id = emit.RT_AFILL or id = emit.RT_ACYC or id = emit.RT_ACAT: return 2
+    if id = emit.RT_ENVG or id = emit.RT_AUXV: return 1
+    if id = emit.RT_DIVU64 or id = emit.RT_MODU64 or id = emit.RT_DIVS64 or id = emit.RT_MODS64: return 2
+    if id = emit.RT_MULOV64: return 3
+    if id = emit.RT_BT: return 0
+    if id = emit.RT_SSLICE: return 3
+    if id = emit.RT_HSTART: return 1
+    if id = emit.RT_HFINAL: return 2
+    if id = emit.RT_HUPDATE: return 2
+    if id = emit.RT_SHA256INIT or id = emit.RT_SHA256BLK: return 1
+    if id = emit.RT_SHA256FIN: return 2
+    if id = emit.RT_SEGV: return 3
+    if id = emit.RT_SIGINIT: return 0
+    if id = emit.RT_FREE: return 2
+    if id = emit.RT_BIGFROM: return 1
+    if id = emit.RT_BIGCMP: return 2
+    if id = emit.RT_BIGADD: return 3
+    if id = emit.RT_BIGMUL: return 2
+    if id = emit.RT_BIGPRINT: return 1
     0
 
 // the door of the program: keep what the kernel handed over, stand up
@@ -1034,97 +1037,97 @@ fn rt_nargs(id : i64) → i64:
 // dispatch below fell through to, which made it the machine a
 // seventh would have been given; a match wants every arm to name
 // something, so it names this.
-fn a64_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
     // the kernel block: argc, argv, envp, auxv as four 8-byte cells
-    let pos : i64 = a64_absref(&em, A64_RB)
+    let pos : i64 = arch_a64.a64_absref(&em, arch_a64.A64_RB)
     em.df_pos.push(pos)
     em.df_off.push(args_off)
-    a64_ldo(&em, A64_RA, 31, 0)                  // argc
-    a64_sto(&em, A64_RA, A64_RB, 0)
-    a64_addi(&em, A64_RC, 31, 8)                 // argv
-    a64_sto(&em, A64_RC, A64_RB, 8)
-    em.aw(3544186880 + (61 « 16) + (60 « 10) + (A64_RA « 5) + A64_T0)  // lsl t0, argc, #3
-    a64_addr_(&em, A64_T0, A64_T0, A64_RC)
-    a64_addi(&em, A64_T0, A64_T0, 8)             // envp = argv + 8×argc + 8
-    a64_sto(&em, A64_T0, A64_RB, 16)
+    arch_a64.a64_ldo(&em, arch_a64.A64_RA, 31, 0)                  // argc
+    arch_a64.a64_sto(&em, arch_a64.A64_RA, arch_a64.A64_RB, 0)
+    arch_a64.a64_addi(&em, arch_a64.A64_RC, 31, 8)                 // argv
+    arch_a64.a64_sto(&em, arch_a64.A64_RC, arch_a64.A64_RB, 8)
+    em.aw(3544186880 + (61 « 16) + (60 « 10) + (arch_a64.A64_RA « 5) + arch_a64.A64_T0)  // lsl t0, argc, #3
+    arch_a64.a64_addr_(&em, arch_a64.A64_T0, arch_a64.A64_T0, arch_a64.A64_RC)
+    arch_a64.a64_addi(&em, arch_a64.A64_T0, arch_a64.A64_T0, 8)             // envp = argv + 8×argc + 8
+    arch_a64.a64_sto(&em, arch_a64.A64_T0, arch_a64.A64_RB, 16)
     em.set_label(0)                              // walk to the env's end
-    a64_ldw(&em, A64_T1, A64_T0, 8, 0)
-    a64_addi(&em, A64_T0, A64_T0, 8)
-    a64_cbnz(&em, A64_T1, 0)
-    a64_sto(&em, A64_T0, A64_RB, 24)             // auxv
+    arch_a64.a64_ldw(&em, arch_a64.A64_T1, arch_a64.A64_T0, 8, 0)
+    arch_a64.a64_addi(&em, arch_a64.A64_T0, arch_a64.A64_T0, 8)
+    arch_a64.a64_cbnz(&em, arch_a64.A64_T1, 0)
+    arch_a64.a64_sto(&em, arch_a64.A64_T0, arch_a64.A64_RB, 24)             // auxv
     // the stack: one PROT_NONE reservation, the top opened RW
-    a64_movimm(&em, 0, 0)
-    a64_movimm(&em, 1, guard_size + stack_size)
-    a64_movimm(&em, 2, 0)
-    a64_movimm(&em, 3, 147490)
-    a64_movimm(&em, 4, ⁻1)
-    a64_movimm(&em, 5, 0)
-    a64_movimm(&em, 8, sc_number(tg, SC_MMAP))
-    a64_svc(&em)
-    a64_cmpr(&em, 0, 31)                         // the flags of x0 - xzr
-    a64_bcond(&em, A64_MI, 1)                    // the kernel refused
-    a64_movr(&em, A64_RB, 0)                     // the region's foot
-    a64_movimm(&em, 0, guard_size)
-    a64_addr_(&em, 0, 0, A64_RB)
-    a64_movimm(&em, 1, stack_size)
-    a64_movimm(&em, 2, 3)
-    a64_movimm(&em, 8, sc_number(tg, SC_MPROT))
-    a64_svc(&em)
-    a64_cmpr(&em, 0, 31)
-    a64_bcond(&em, A64_MI, 1)
-    a64_movimm(&em, A64_RA, guard_size + stack_size)
-    a64_addr_(&em, A64_RA, A64_RA, A64_RB)
-    em.aw(2432696320 + (A64_RA « 5) + 31)        // mov sp, ra
-    a64_jmp(&em, 2)
+    arch_a64.a64_movimm(&em, 0, 0)
+    arch_a64.a64_movimm(&em, 1, guard_size + stack_size)
+    arch_a64.a64_movimm(&em, 2, 0)
+    arch_a64.a64_movimm(&em, 3, 147490)
+    arch_a64.a64_movimm(&em, 4, ⁻1)
+    arch_a64.a64_movimm(&em, 5, 0)
+    arch_a64.a64_movimm(&em, 8, arch_a64.sc_number(tg, arch_a64.SC_MMAP))
+    arch_a64.a64_svc(&em)
+    arch_a64.a64_cmpr(&em, 0, 31)                         // the flags of x0 - xzr
+    arch_a64.a64_bcond(&em, arch_a64.A64_MI, 1)                    // the kernel refused
+    arch_a64.a64_movr(&em, arch_a64.A64_RB, 0)                     // the region's foot
+    arch_a64.a64_movimm(&em, 0, guard_size)
+    arch_a64.a64_addr_(&em, 0, 0, arch_a64.A64_RB)
+    arch_a64.a64_movimm(&em, 1, stack_size)
+    arch_a64.a64_movimm(&em, 2, 3)
+    arch_a64.a64_movimm(&em, 8, arch_a64.sc_number(tg, arch_a64.SC_MPROT))
+    arch_a64.a64_svc(&em)
+    arch_a64.a64_cmpr(&em, 0, 31)
+    arch_a64.a64_bcond(&em, arch_a64.A64_MI, 1)
+    arch_a64.a64_movimm(&em, arch_a64.A64_RA, guard_size + stack_size)
+    arch_a64.a64_addr_(&em, arch_a64.A64_RA, arch_a64.A64_RA, arch_a64.A64_RB)
+    em.aw(2432696320 + (arch_a64.A64_RA « 5) + 31)        // mov sp, ra
+    arch_a64.a64_jmp(&em, 2)
     em.set_label(1)
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
-    let spos : i64 = a64_absref(&em, 0)
+    let spos : i64 = arch_a64.a64_absref(&em, 0)
     em.sf_pos.push(spos)
     em.sf_str.push(smsg)
-    a64_movimm(&em, 1, str_len("the stack could not be reserved\n"))
-    a64_call(&em, RT_ABORT)
+    arch_a64.a64_movimm(&em, 1, emit.str_len("the stack could not be reserved\n"))
+    arch_a64.a64_call(&em, emit.RT_ABORT)
     em.set_label(2)
     // Where the guard is, for the handler to compare a faulting
     // address against, and then the handler itself.  Both before the
     // relro is sealed: the bounds live in it.
-    let gpos : i64 = a64_absref(&em, A64_T0)
+    let gpos : i64 = arch_a64.a64_absref(&em, arch_a64.A64_T0)
     em.df_pos.push(gpos)
     em.df_off.push(args_off)
-    a64_sto(&em, A64_RB, A64_T0, KB_GLO)
-    a64_movimm(&em, A64_T1, guard_size)
-    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
-    a64_sto(&em, A64_T1, A64_T0, KB_GHI)
-    a64_movimm(&em, A64_T1, guard_size + stack_size)
-    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
-    a64_sto(&em, A64_T1, A64_T0, KB_STOP)
-    a64_call(&em, RT_SIGINIT)
+    arch_a64.a64_sto(&em, arch_a64.A64_RB, arch_a64.A64_T0, emit.KB_GLO)
+    arch_a64.a64_movimm(&em, arch_a64.A64_T1, guard_size)
+    arch_a64.a64_addr_(&em, arch_a64.A64_T1, arch_a64.A64_T1, arch_a64.A64_RB)
+    arch_a64.a64_sto(&em, arch_a64.A64_T1, arch_a64.A64_T0, emit.KB_GHI)
+    arch_a64.a64_movimm(&em, arch_a64.A64_T1, guard_size + stack_size)
+    arch_a64.a64_addr_(&em, arch_a64.A64_T1, arch_a64.A64_T1, arch_a64.A64_RB)
+    arch_a64.a64_sto(&em, arch_a64.A64_T1, arch_a64.A64_T0, emit.KB_STOP)
+    arch_a64.a64_call(&em, emit.RT_SIGINIT)
     if ginit >= 0:
-        a64_call(&em, ginit)
-    a64_call(&em, RT_RELRO)
-    a64_call(&em, tdriver)
+        arch_a64.a64_call(&em, ginit)
+    arch_a64.a64_call(&em, emit.RT_RELRO)
+    arch_a64.a64_call(&em, tdriver)
     if start_fn >= 0:
-        a64_call(&em, start_fn)
+        arch_a64.a64_call(&em, start_fn)
     if not sret:
-        a64_movimm(&em, 0, 0)
-    a64_movimm(&em, 8, sc_number(tg, SC_EXIT))
-    a64_svc(&em)
-    a64_resolve(&em)
+        arch_a64.a64_movimm(&em, 0, 0)
+    arch_a64.a64_movimm(&em, 8, arch_a64.sc_number(tg, arch_a64.SC_EXIT))
+    arch_a64.a64_svc(&em)
+    arch_a64.a64_resolve(&em)
 
-fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn t_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
              stack_size : i64, guard_size : i64, ginit : i64,
              tdriver : i64, start_fn : i64, sret : bool):
     match tg.id:
-        Tgt.a64: a64_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.a64: a64_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        Tgt.rv64: rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.rv64: rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        Tgt.i386: i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.i386: i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        Tgt.a32: a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.a32: a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        Tgt.rv32: r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.rv32: r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                                ginit, tdriver, start_fn, sret)
-        Tgt.x64: g_pioneer()
+        elf.Tgt.x64: dispatch.g_pioneer()

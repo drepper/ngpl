@@ -24,18 +24,20 @@
 // program computes with, so they carry no unit -- as everywhere the IR
 // is built.
 
+let arch_a64 := @import("./arch_a64.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+
 // Where the mask sits in the kernel's struct sigaction.  Three
 // architectures put a restorer between the flags and the mask and
 // three do not, and the field is there or not there in the layout
 // whether or not the flag that uses it is set.
 
-@import("./ir.ngpl")
-@import("./lower.ngpl")
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_a64.ngpl")
 
-fn sa_mask_off(tg : Target) → i64:
+fn sa_mask_off(tg : elf.Target) → i64:
     if tg.sa_restorer_off >= 0:
         return tg.sa_restorer_off + tg.ptr
     2 × tg.ptr
@@ -43,40 +45,41 @@ fn sa_mask_off(tg : Target) → i64:
 // Where the faulting address sits in the siginfo the kernel hands
 // over: past the signal number, the errno and the code, which are
 // three ints, and past the padding a 64-bit machine adds to them.
-fn si_addr_off(tg : Target) → i64:
+fn si_addr_off(tg : elf.Target) → i64:
     if tg.is64: 16 else: 12
 
 // () → nothing.  Called from the startup once the stack is standing
 // and the guard's bounds are written down, since both of those are
 // what the handler will want.
-fn rt_siginit_ir(tg : Target) → IrFn:
+@export
+fn rt_siginit_ir(tg : elf.Target) → ir.IrFn:
     let pw : i64 = tg.ptr
-    let b : mut RtB = rtb(0)
+    let b : mut rt_portable.RtB = rt_portable.rtb(0)
     let z : i64 = b.cst(0)
     let s : i64 = b.kaddr(2, 0)
     // A stack for the handler.  If the kernel will not give one there
     // is no handler to install: a handler without a stack is worse
     // than none, because it turns a report into a second fault.
-    let m : i64 = b.sys6(SC_MMAP, z, b.cst(SIGALT_BYTES), b.cst(3),
+    let m : i64 = b.sys6(arch_a64.SC_MMAP, z, b.cst(emit.SIGALT_BYTES), b.cst(3),
                          b.cst(16418), b.cst(⁻1), z)
     let bad : i64 = b.clts(m, z)
     let lout : i64 = b.l()
     b.jnz(bad, lout)
-    b.stn(s, SIG_ALT, m, pw)
-    b.stn(s, SIG_ALT + pw, z, 4)
-    b.stn(s, SIG_ALT + 2 × pw, b.cst(SIGALT_BYTES), pw)
-    _ ← b.sys2(SC_SIGALTSTACK, b.add(s, b.cst(SIG_ALT)), z)
+    b.stn(s, emit.SIG_ALT, m, pw)
+    b.stn(s, emit.SIG_ALT + pw, z, 4)
+    b.stn(s, emit.SIG_ALT + 2 × pw, b.cst(emit.SIGALT_BYTES), pw)
+    _ ← b.sys2(arch_a64.SC_SIGALTSTACK, b.add(s, b.cst(emit.SIG_ALT)), z)
     // and the action: the handler, and the flags that ask for the
     // faulting address and for the handler's own stack
-    let h : i64 = b.faddr(RT_SEGV)
-    b.stn(s, SIG_ACT, h, pw)
-    b.stn(s, SIG_ACT + pw, b.cst(SA_FLAGS_N), pw)
-    b.stn(s, SIG_ACT + sa_mask_off(tg), z, 8)
-    _ ← b.sys4(SC_RT_SIGACTION, b.cst(SIGSEGV_NO),
-               b.add(s, b.cst(SIG_ACT)), z, b.cst(8))
+    let h : i64 = b.faddr(emit.RT_SEGV)
+    b.stn(s, emit.SIG_ACT, h, pw)
+    b.stn(s, emit.SIG_ACT + pw, b.cst(emit.SA_FLAGS_N), pw)
+    b.stn(s, emit.SIG_ACT + sa_mask_off(tg), z, 8)
+    _ ← b.sys4(arch_a64.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
+               b.add(s, b.cst(emit.SIG_ACT)), z, b.cst(8))
     b.lab(lout)
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (signum, siginfo, ucontext), entered by the kernel on the stack
 // above.  One comparison is what makes it worth having: the faulting
@@ -88,9 +91,10 @@ fn rt_siginit_ir(tg : Target) → IrFn:
 // best thing to do is get out of the way: put the default action back
 // and return, so the faulting instruction runs again and the program
 // dies of it exactly as it would have, core dump and all.
-fn rt_segv_ir(tg : Target, lw : &mut Lower) → IrFn:
+@export
+fn rt_segv_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     let pw : i64 = tg.ptr
-    let b : mut RtB = rtb(3)
+    let b : mut rt_portable.RtB = rt_portable.rtb(3)
     let z : i64 = b.cst(0)
     let k : i64 = b.kaddr(0, 0)
     // Where the siginfo the kernel handed over is.  A routine here
@@ -102,15 +106,15 @@ fn rt_segv_ir(tg : Target, lw : &mut Lower) → IrFn:
     let info : i64 = if tg.is64: 1 else: b.shr(0, b.cst(32))
     let at : i64 = b.ldn(info, si_addr_off(tg), pw)
     let lnot : i64 = b.l()
-    b.jnz(b.cltu(at, b.ldn(k, KB_GLO, 8)), lnot)
-    b.jnz(b.cgeu(at, b.ldn(k, KB_GHI, 8)), lnot)
-    b.eprint_msg(lw.intern(stack_overflow_msg()))
-    _ ← b.sys1(SC_EXIT, b.cst(EXIT_STACK_OVERFLOW))
+    b.jnz(b.cltu(at, b.ldn(k, emit.KB_GLO, 8)), lnot)
+    b.jnz(b.cgeu(at, b.ldn(k, emit.KB_GHI, 8)), lnot)
+    b.eprint_msg(lw.intern(emit.stack_overflow_msg()))
+    _ ← b.sys1(arch_a64.SC_EXIT, b.cst(emit.EXIT_STACK_OVERFLOW))
     b.lab(lnot)
     let s : i64 = b.kaddr(2, 0)
-    b.stn(s, SIG_ACT, z, pw)
-    b.stn(s, SIG_ACT + pw, z, pw)
-    _ ← b.sys4(SC_RT_SIGACTION, b.cst(SIGSEGV_NO),
-               b.add(s, b.cst(SIG_ACT)), z, b.cst(8))
+    b.stn(s, emit.SIG_ACT, z, pw)
+    b.stn(s, emit.SIG_ACT + pw, z, pw)
+    _ ← b.sys4(arch_a64.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
+               b.add(s, b.cst(emit.SIG_ACT)), z, b.cst(8))
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)

@@ -13,15 +13,17 @@
 // two builds differ when they do not.  What the lexer kept is exactly
 // what the program is, so that is what is hashed.
 
+let ast := @import("./ast.ngpl")
+let diag := @import("./diag.ngpl")
+let lex := @import("./lex.ngpl")
+let sha256 := @import("./sha256.ngpl")
+let tokens := @import("./tokens.ngpl")
+
 // What a row is about.  A fixed representation, since these are read
 // out of a file by whoever wants to know.
 
-@import("./tokens.ngpl")
-@import("./diag.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
-@import("./sha256.ngpl")
 
+@export
 enum Sbomkind : u32:
     compiler         // which compiler built it
     source           // one of the sources it was built from
@@ -34,6 +36,7 @@ enum Sbomkind : u32:
     function         // one function, over the tokens it is written in
 
 // A row before it is laid out: the strings still strings.
+@export
 struct SbomRow:
     kind : Sbomkind
     name : str
@@ -43,6 +46,7 @@ struct SbomRow:
 // it, and this is that name; it is a constant so that two builds of the
 // same program by the same compiler agree, which is what a bill of
 // materials is for.
+@export
 fn sbom_compiler_name() → str:
     "ngplc core-2"
 
@@ -88,11 +92,11 @@ let TC_SEP : i64 = 3         // a newline, or ;
 
 @post(r: r >= 0)
 fn canon_kind(k : i64) → i64:
-    if k = TK_INDENT or k = TK_LBRACE:
+    if k = tokens.TK_INDENT or k = tokens.TK_LBRACE:
         return TC_OPEN
-    if k = TK_DEDENT or k = TK_RBRACE:
+    if k = tokens.TK_DEDENT or k = tokens.TK_RBRACE:
         return TC_CLOSE
-    if k = TK_NL or k = TK_SEMI:
+    if k = tokens.TK_NL or k = tokens.TK_SEMI:
         return TC_SEP
     // the rest keep their own kind, moved past the three codes above
     k + 8
@@ -102,19 +106,19 @@ fn canon_kind(k : i64) → i64:
 // lexer kept neither.  A number is written out in decimal rather than
 // as it was spelled, so 0x10 and 16 hash alike if the lexer read them
 // alike.
-fn token_bytes(t : Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
+fn token_bytes(t : lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
     let k0 : i64 = t.kind[i]
     let k : i64 = canon_kind(k0)
     into.push(k & 255)
     into.push((k » 8) & 255)
-    if k0 = TK_IDENT or k0 = TK_INT or k0 = TK_STR:
+    if k0 = tokens.TK_IDENT or k0 = tokens.TK_INT or k0 = tokens.TK_STR:
         // an identifier and a string say their text; a number says the
         // value the lexer read, and whether it needed all sixty-four
         // bits to hold it
-        let what : str = if k0 = TK_STR: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = TK_INT: i64_str(t.val[i]) else: run_str(src, t.off[i], t.len[i]))
+        let what : str = if k0 = tokens.TK_STR: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = tokens.TK_INT: tokens.i64_str(t.val[i]) else: tokens.run_str(src, t.off[i], t.len[i]))
         foreach b := std.bytes(what):
             into.push(b)
-        if k0 = TK_INT:
+        if k0 = tokens.TK_INT:
             into.push(t.big[i] & 255)
     into.push(0)
 
@@ -150,7 +154,8 @@ fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
 // SBOM_CHUNK and never the message.
 // `live` says which functions the build is writing: a bill names what
 // the binary is made of, and a function nothing reached is not in it.
-fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files,
+@export
+fn sbom_sources(a : ast.Ast, t : lex.Toks, src : byte[], files : diag.Files,
                 live : bool[]) → SbomRow[]:
     let rows : mut SbomRow[] = []
     let nf : i64 ¤ptrdiff = #files.names
@@ -183,7 +188,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files,
             whole.update(feed)
             feed ← []
             rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
-                              hash: hex_digest(one.digest())})
+                              hash: sha256.hex_digest(one.digest())})
             one ← std.hash.sha256.start()
             fi ← fi + 1
             hi ← if fi + 1 < nf: files.off[fi + 1¤ptrdiff] else: total
@@ -218,7 +223,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files,
                 let nm : str = if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
                 if live[(fnext - 1¤ptrdiff)]:
                     fnrows.push(SbomRow{kind: Sbomkind.function, name: nm,
-                                        hash: hex_digest(fnh.digest())})
+                                        hash: sha256.hex_digest(fnh.digest())})
                 fopen ← false
             elif #ffeed >= SBOM_CHUNK:
                 fnh.update(ffeed)
@@ -230,9 +235,9 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files,
     one.update(feed)
     whole.update(feed)
     rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
-                      hash: hex_digest(one.digest())})
+                      hash: sha256.hex_digest(one.digest())})
     rows.push(SbomRow{kind: Sbomkind.sources, name: "",
-                      hash: hex_digest(whole.digest())})
+                      hash: sha256.hex_digest(whole.digest())})
     foreach r := fnrows:
         rows.push(r)
     rows

@@ -1354,8 +1354,9 @@ class Parser:
                 if self._at_tuple_type():
                     field_type = self._parse_tuple_type()
                 else:
-                    self.pos += 1
-                    field_type = type_tok.value
+                    # `m.Name`, a type of another module, is read the
+                    # way it is written everywhere else
+                    field_type = self._parse_base_type_name()
                 # a field states its measure against its type, as a
                 # parameter and a binding do
                 field_unit = self._unit_after_type(field_unit, None)
@@ -2249,6 +2250,15 @@ class Parser:
                 # which one it is.
                 self.pos += 1
                 member = self._eat(TokenType.IDENT).value
+                # `m.Enum.value`: which module the enum is of is settled
+                # by what is being matched, so the binding is read past
+                # and the arm names the enum as the subject knows it.
+                if self._check(TokenType.PUNCT) and self._cur().value == ".":
+                    # `m.Enum.value`: the whole name is kept, so that
+                    # the module the enum belongs to is the one asked
+                    self.pos += 1
+                    type_name = f"{type_name}.{member}"
+                    member = self._eat(TokenType.IDENT).value
                 body = self._parse_block()
                 return self._set_pos(
                     MatchArm("enum", None, body, type_name=type_name,

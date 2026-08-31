@@ -7,6 +7,16 @@
 // which writes them once as IR and lets the driver spell them; these
 // are what those are checked against.
 
+let arch_x86_64 := @import("./arch_x86_64.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_backtrace := @import("./rt_backtrace.ngpl")
+let rt_bigint := @import("./rt_bigint.ngpl")
+let rt_hash := @import("./rt_hash.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+let rt_sha256 := @import("./rt_sha256.ngpl")
+
 // A write takes (buf, len) in the ordinary argument registers -- the
 // way every other routine takes its arguments, and the way
 // rt_portable.ngpl writes this one for the other five targets.  It once
@@ -19,20 +29,16 @@
 // The loop is the other half of the agreement: write says how much it
 // took, and a pipe is free to take less than it was offered.
 
-@import("./lower.ngpl")
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_x86_64.ngpl")
 
-fn emit_write(em : &mut Emit, fd : i64):
+fn emit_write(em : &mut emit.Emit, fd : i64):
     em.begin_fn(2)
     em.b3(72, 137, 242)             // mov rdx, rsi -- what is left
     em.b3(72, 137, 254)             // mov rsi, rdi -- where it stands
-    em.movimm(R_DI, fd)
+    em.movimm(emit.R_DI, fd)
     em.set_label(0)
     em.b3(72, 133, 210)             // test rdx, rdx
     em.jlocal(132, 1)               // jz: nothing left
-    em.movimm(R_AX, 1)              // SYS_write
+    em.movimm(emit.R_AX, 1)              // SYS_write
     em.b2(15, 5)                    // syscall
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(142, 1)               // jle: an error, or nothing taken
@@ -43,10 +49,11 @@ fn emit_write(em : &mut Emit, fd : i64):
     em.b1(195)
     em.resolve_locals()
 
-fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, args_off : i64,
+@export
+fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, alloc_off : i64, args_off : i64,
                 relro_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
-    em.rt_begin(RT_PRINTI)
+    em.rt_begin(emit.RT_PRINTI)
     em.begin_fn(3)
     em.b4(72, 131, 236, 40)         // sub rsp, 40
     em.b3(76, 141, 76)
@@ -78,22 +85,22 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b2(36, 39)                   // lea rdx, [rsp+39]
     em.b3(76, 41, 202)              // sub rdx, r9
     em.b3(76, 137, 206)             // mov rsi, r9
-    em.movimm(R_DI, 1)
-    em.movimm(R_AX, 1)
+    em.movimm(emit.R_DI, 1)
+    em.movimm(emit.R_AX, 1)
     em.b2(15, 5)
     em.b4(72, 131, 196, 40)         // add rsp, 40
     em.b1(195)
     em.resolve_locals()
 
     // RT_WRITE1: (buf, len) onto the output stream
-    em.rt_begin(RT_WRITE1)
+    em.rt_begin(emit.RT_WRITE1)
     emit_write(&em, 1)
 
     // RT_ABORT: rsi = message, rdx = its length.  Say it, then leave
     // through exit with a status rather than through a signal: a
     // signal is not a status, and a caller should not have to know to
     // look for one.
-    em.rt_begin(RT_ABORT)
+    em.rt_begin(emit.RT_ABORT)
     // A frame of its own, which this routine wanted for nothing until
     // there was a backtrace to make.  The chain a walk follows is one
     // of frames, and a frameless routine is a step the walk cannot
@@ -105,52 +112,52 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // returns from here, so there is no epilogue to match.
     em.b1(85)                       // push rbp
     em.b3(72, 137, 229)             // mov rbp, rsp
-    em.movimm(R_AX, 1)
-    em.movimm(R_DI, 2)
+    em.movimm(emit.R_AX, 1)
+    em.movimm(emit.R_DI, 2)
     em.b2(15, 5)                    // write(2, rsi, rdx)
     // …and how the program got here.  Nothing pushed a frame between
     // the stop and this call, so rbp is still the frame the stop
     // happened in and the walk starts where it should.
-    em.jglobal(232, ⁻1, RT_BT)
-    em.movimm(R_DI, EXIT_STOP)
-    em.movimm(R_AX, 60)
+    em.jglobal(232, ⁻1, emit.RT_BT)
+    em.movimm(emit.R_DI, emit.EXIT_STOP)
+    em.movimm(emit.R_AX, 60)
     em.b2(15, 5)                    // exit
     em.b2(15, 11)                   // ud2, which nothing reaches
 
     // RT_OV
-    em.rt_begin(RT_OV)
+    em.rt_begin(emit.RT_OV)
     let ovm : i64 = lw.intern("integer overflow\n")
-    em.sref(R_SI, ovm)
-    em.movimm(R_DX, str_len(lw.strs[ovm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, ovm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[ovm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_SHIFT
-    em.rt_begin(RT_SHIFT)
+    em.rt_begin(emit.RT_SHIFT)
     let shm : i64 = lw.intern("shift count is past the type\n")
-    em.sref(R_SI, shm)
-    em.movimm(R_DX, str_len(lw.strs[shm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, shm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[shm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_BOUNDS
-    em.rt_begin(RT_BOUNDS)
+    em.rt_begin(emit.RT_BOUNDS)
     let bdm : i64 = lw.intern("index out of range\n")
-    em.sref(R_SI, bdm)
-    em.movimm(R_DX, str_len(lw.strs[bdm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, bdm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[bdm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_OOM
-    em.rt_begin(RT_OOM)
+    em.rt_begin(emit.RT_OOM)
     let oom : i64 = lw.intern("out of memory\n")
-    em.sref(R_SI, oom)
-    em.movimm(R_DX, str_len(lw.strs[oom × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, oom)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[oom × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_ALLOC: rdi = size → rax; a bump pointer over mmap regions
-    em.rt_begin(RT_ALLOC)
+    em.rt_begin(emit.RT_ALLOC)
     em.begin_fn(2)
     em.b4(76, 141, 87, 15)          // lea r10, [rdi+15]
     em.b4(73, 131, 226, 240)        // and r10, -16
-    em.dref(R_R11, alloc_off)
+    em.dref(emit.R_R11, alloc_off)
     // A block given back of exactly this size is handed out again.
     // The slot is (size ÷ 16) mod AL_SLOTS, and whatever sizes share a
     // slot, only the one that matches exactly is taken -- handing back
@@ -158,12 +165,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(76, 137, 209)             // mov rcx, r10
     em.b4(72, 193, 233, 4)          // shr rcx, 4
     em.b3(72, 105, 201)
-    em.w32(AL_MIX)                  // imul rcx, rcx, AL_MIX
-    em.b4(72, 193, 233, AL_SHIFT)   // shr rcx, AL_SHIFT
+    em.w32(emit.AL_MIX)                  // imul rcx, rcx, AL_MIX
+    em.b4(72, 193, 233, emit.AL_SHIFT)   // shr rcx, AL_SHIFT
     em.b2(129, 225)
-    em.w32(AL_SLOTS - 1)            // and ecx, AL_SLOTS-1
+    em.w32(emit.AL_SLOTS - 1)            // and ecx, AL_SLOTS-1
     em.b4(73, 141, 76, 203)
-    em.b1(AL_FREE)                  // lea rcx, [r11+rcx*8+AL_FREE]
+    em.b1(emit.AL_FREE)                  // lea rcx, [r11+rcx*8+AL_FREE]
     em.b3(72, 139, 1)               // mov rax, [rcx]
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(132, 1)               // jz L1: the slot is empty
@@ -182,20 +189,20 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.w32(4095)                    // lea rsi, [r10+4095]
     em.b3(72, 129, 230)
     em.w32(⁻4096)                   // and rsi, -4096
-    em.movimm(R_CX, 1048576)
+    em.movimm(emit.R_CX, 1048576)
     em.b3(72, 57, 206)              // cmp rsi, rcx
     em.b4(72, 15, 66, 241)          // cmovb rsi, rcx
     em.b2(49, 255)                  // xor edi, edi
-    em.movimm(R_DX, 3)
-    em.movimm(R_R10, 34)
-    em.movimm(R_R8, ⁻1)
+    em.movimm(emit.R_DX, 3)
+    em.movimm(emit.R_R10, 34)
+    em.movimm(emit.R_R8, ⁻1)
     em.b3(69, 49, 201)              // xor r9d, r9d
-    em.movimm(R_AX, 9)
+    em.movimm(emit.R_AX, 9)
     em.b2(15, 5)                    // mmap
     em.b3(72, 133, 192)             // test rax, rax
-    em.jglobal(0, 136, RT_OOM)      // js: the kernel said no
+    em.jglobal(0, 136, emit.RT_OOM)      // js: the kernel said no
     em.b2(65, 90)                   // pop r10
-    em.dref(R_R11, alloc_off)
+    em.dref(emit.R_R11, alloc_off)
     em.b3(73, 137, 3)               // mov [r11], rax
     em.b4(72, 141, 20, 48)          // lea rdx, [rax+rsi]
     em.b4(73, 137, 83, 8)           // mov [r11+8], rdx
@@ -209,22 +216,22 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // RT_FREE: rdi = block, rsi = its size.  The block goes on the
     // list for its size and keeps that list in its own first two
     // words, so nothing smaller than those two words is taken back.
-    em.rt_begin(RT_FREE)
+    em.rt_begin(emit.RT_FREE)
     em.begin_fn(1)
     em.b4(76, 141, 86, 15)          // lea r10, [rsi+15]
     em.b4(73, 131, 226, 240)        // and r10, -16
     em.b4(73, 131, 250, 16)         // cmp r10, 16
     em.jlocal(130, 0)               // jb L0: too small to hold a link
-    em.dref(R_R11, alloc_off)
+    em.dref(emit.R_R11, alloc_off)
     em.b3(76, 137, 209)             // mov rcx, r10
     em.b4(72, 193, 233, 4)          // shr rcx, 4
     em.b3(72, 105, 201)
-    em.w32(AL_MIX)                  // imul rcx, rcx, AL_MIX
-    em.b4(72, 193, 233, AL_SHIFT)   // shr rcx, AL_SHIFT
+    em.w32(emit.AL_MIX)                  // imul rcx, rcx, AL_MIX
+    em.b4(72, 193, 233, emit.AL_SHIFT)   // shr rcx, AL_SHIFT
     em.b2(129, 225)
-    em.w32(AL_SLOTS - 1)            // and ecx, AL_SLOTS-1
+    em.w32(emit.AL_SLOTS - 1)            // and ecx, AL_SLOTS-1
     em.b4(73, 141, 76, 203)
-    em.b1(AL_FREE)                  // lea rcx, [r11+rcx*8+AL_FREE]
+    em.b1(emit.AL_FREE)                  // lea rcx, [r11+rcx*8+AL_FREE]
     em.b3(72, 139, 17)              // mov rdx, [rcx]
     em.b3(72, 137, 23)              // mov [rdi], rdx
     em.b4(76, 137, 87, 8)           // mov [rdi+8], r10
@@ -234,12 +241,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_ARRNEW: rdi = capacity in elements → rax = descriptor
-    em.rt_begin(RT_ARRNEW)
+    em.rt_begin(emit.RT_ARRNEW)
     em.b1(87)                       // push rdi
     em.b3(72, 141, 60)
     em.b4(253, 24, 0, 0)
     em.b1(0)                        // lea rdi, [rdi*8+24]
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx
     em.b2(49, 210)                  // xor edx, edx
     em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
@@ -249,7 +256,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(195)
 
     // RT_ARRPUSH: rdi = descriptor, rsi = value
-    em.rt_begin(RT_ARRPUSH)
+    em.rt_begin(emit.RT_ARRPUSH)
     em.begin_fn(4)
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
     em.b4(72, 59, 79, 16)           // cmp rcx, [rdi+16]
@@ -258,14 +265,14 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(86)                       // push rsi
     em.b4(72, 139, 119, 16)         // mov rsi, [rdi+16]
     em.b3(72, 1, 246)               // add rsi, rsi
-    em.movimm(R_CX, 8)
+    em.movimm(emit.R_CX, 8)
     em.b3(72, 57, 206)              // cmp rsi, rcx
     em.b4(72, 15, 66, 241)          // cmovb rsi, rcx
     em.b1(86)                       // push rsi (the new capacity)
     em.b3(72, 141, 60)
     em.b4(245, 0, 0, 0)
     em.b1(0)                        // lea rdi, [rsi*8]
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b2(65, 89)                   // pop r9 (new capacity)
     em.b1(94)                       // pop rsi (value)
     em.b1(95)                       // pop rdi (descriptor)
@@ -300,7 +307,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b2(65, 81)                   // push r9
     em.b3(72, 137, 215)             // mov rdi, rdx
     em.b3(76, 137, 214)             // mov rsi, r10
-    em.jglobal(232, ⁻1, RT_FREE)
+    em.jglobal(232, ⁻1, emit.RT_FREE)
     em.b2(65, 89)                   // pop r9
     em.b1(94)                       // pop rsi
     em.b1(95)                       // pop rdi
@@ -318,7 +325,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_CONCAT: rdi, rsi = descriptors → rax = the joined string
-    em.rt_begin(RT_CONCAT)
+    em.rt_begin(emit.RT_CONCAT)
     em.begin_fn(4)
     em.b1(87)                       // push rdi
     em.b1(86)                       // push rsi
@@ -326,7 +333,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(72, 3, 86, 8)             // add rdx, [rsi+8]
     em.b1(82)                       // push rdx
     em.b4(72, 141, 122, 16)         // lea rdi, [rdx+16]
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(90)                       // pop rdx
     em.b4(72, 141, 72, 16)          // lea rcx, [rax+16]
     em.b3(72, 137, 8)               // mov [rax], rcx
@@ -360,7 +367,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_STREQ: rdi, rsi = descriptors → rax = 0 or 1
-    em.rt_begin(RT_STREQ)
+    em.rt_begin(emit.RT_STREQ)
     em.begin_fn(3)
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
     em.b4(72, 59, 78, 8)            // cmp rcx, [rsi+8]
@@ -377,7 +384,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(73, 255, 194)             // inc r10
     em.jlocal(⁻1, 1)
     em.set_label(2)
-    em.movimm(R_AX, 1)
+    em.movimm(emit.R_AX, 1)
     em.b1(195)
     em.set_label(0)
     em.b2(49, 192)                  // xor eax, eax
@@ -386,7 +393,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_STRCHARS: rdi = descriptor → rax = characters, counted by
     // lead bytes with a materialized test -- no branch in the body
-    em.rt_begin(RT_STRCHARS)
+    em.rt_begin(emit.RT_STRCHARS)
     em.begin_fn(2)
     em.b3(72, 139, 23)              // mov rdx, [rdi]
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
@@ -409,17 +416,17 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_PRINTSTR: rdi = descriptor
-    em.rt_begin(RT_PRINTSTR)
+    em.rt_begin(emit.RT_PRINTSTR)
     em.b3(72, 139, 119)
     em.b1(0)                        // mov rsi, [rdi]  (disp8 0)
     em.b4(72, 139, 87, 8)           // mov rdx, [rdi+8]
-    em.movimm(R_DI, 1)
-    em.movimm(R_AX, 1)
+    em.movimm(emit.R_DI, 1)
+    em.movimm(emit.R_AX, 1)
     em.b2(15, 5)
     em.b1(195)
 
     // RT_PRINTU: rdi = unsigned value → decimal on fd 1
-    em.rt_begin(RT_PRINTU)
+    em.rt_begin(emit.RT_PRINTU)
     em.begin_fn(1)
     em.b4(72, 131, 236, 40)         // sub rsp, 40
     em.b3(76, 141, 76)
@@ -439,8 +446,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b2(36, 39)                   // lea rdx, [rsp+39]
     em.b3(76, 41, 202)              // sub rdx, r9
     em.b3(76, 137, 206)             // mov rsi, r9
-    em.movimm(R_DI, 1)
-    em.movimm(R_AX, 1)
+    em.movimm(emit.R_DI, 1)
+    em.movimm(emit.R_AX, 1)
     em.b2(15, 5)
     em.b4(72, 131, 196, 40)         // add rsp, 40
     em.b1(195)
@@ -454,8 +461,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_HNEW: rdi = capacity (a power of two, at least a group's
     // sixteen), rsi = 1 for str keys → rax = descriptor
-    em.rt_begin(RT_HNEW)
-    em.movimm(R_AX, 16)
+    em.rt_begin(emit.RT_HNEW)
+    em.movimm(emit.R_AX, 16)
     em.b3(72, 57, 199)              // cmp rdi, rax
     em.b4(72, 15, 66, 248)          // cmovb rdi, rax: never below a group
     em.b1(86)                       // push rsi
@@ -463,7 +470,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(72, 193, 231, 4)          // shl rdi, 4
     em.b4(72, 3, 60, 36)            // add rdi, [rsp]: 17 bytes a slot
     em.b4(72, 131, 199, 40)         // add rdi, 40: the descriptor
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx (capacity)
     em.b1(90)                       // pop rdx (keystr)
     em.b4(72, 141, 112, 40)         // lea rsi, [rax+40]: ctrl
@@ -491,7 +498,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // no smaller, so a group never straddles the end and needs no
     // mirrored bytes after it.  The load is kept under seven eighths,
     // so some group always has room and the walk always ends.
-    em.rt_begin(RT_HFIND)
+    em.rt_begin(emit.RT_HFIND)
     em.begin_fn(10)
     em.b3(72, 137, 251)             // mov rbx, rdi
     em.b3(73, 137, 244)             // mov r12, rsi
@@ -504,7 +511,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(72, 137, 193)             // mov rcx, rax
     em.b4(72, 193, 233, 33)         // shr rcx, 33
     em.b3(72, 49, 200)              // xor rax, rcx
-    em.movimm(R_CX, ⁻49064778989728563)  // the murmur3 finalizer constant
+    em.movimm(emit.R_CX, ⁻49064778989728563)  // the murmur3 finalizer constant
     em.b4(72, 15, 175, 193)         // imul rax, rcx
     em.b3(72, 137, 193)             // mov rcx, rax
     em.b4(72, 193, 233, 33)         // shr rcx, 33
@@ -515,8 +522,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(36)                       // mov rdx, [r12]
     em.b4(73, 139, 76, 36)
     em.b1(8)                        // mov rcx, [r12+8]
-    em.movimm(R_AX, ⁻3750763034362895579)  // the FNV offset basis
-    em.movimm(R_R11, 1099511628211)      // the FNV prime
+    em.movimm(emit.R_AX, ⁻3750763034362895579)  // the FNV offset basis
+    em.movimm(emit.R_R11, 1099511628211)      // the FNV prime
     em.b3(77, 49, 210)              // xor r10, r10
     em.set_label(1)                 // Lfnv
     em.b3(76, 57, 209)              // cmp rcx, r10
@@ -538,7 +545,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(73, 137, 199)             // mov r15, rax
     em.set_label(3)                 // Lgroup
     em.b3(76, 137, 234)             // mov rdx, r13
-    em.movimm(R_CX, 72340172838076673)   // the tag in all sixteen lanes
+    em.movimm(emit.R_CX, 72340172838076673)   // the tag in all sixteen lanes
     em.b4(72, 15, 175, 209)         // imul rdx, rcx
     em.b4(102, 72, 15, 110)
     em.b1(202)                      // movq xmm1, rdx
@@ -569,7 +576,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b2(65, 82)                   // push r10
     em.b3(72, 137, 207)             // mov rdi, rcx
     em.b3(76, 137, 230)             // mov rsi, r12
-    em.jglobal(232, ⁻1, RT_STREQ)
+    em.jglobal(232, ⁻1, emit.RT_STREQ)
     em.b2(65, 90)                   // pop r10
     em.b2(65, 89)                   // pop r9
     em.b3(72, 133, 192)             // test rax, rax
@@ -580,7 +587,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 4)
     em.set_label(6)                 // Lfound
     em.b3(76, 137, 208)             // mov rax, r10
-    em.movimm(R_DX, 1)
+    em.movimm(emit.R_DX, 1)
     em.b1(195)
     em.set_label(8)                 // Lroom: has this group an empty slot?
     em.b3(72, 139, 11)              // mov rcx, [rbx]
@@ -603,17 +610,17 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_HGET: rdi = descriptor, rsi = key → rax = an optional: the
     // boxed value when the key is held, the null ∅ when not
-    em.rt_begin(RT_HGET)
+    em.rt_begin(emit.RT_HGET)
     em.begin_fn(1)
-    em.jglobal(232, ⁻1, RT_HFIND)
+    em.jglobal(232, ⁻1, emit.RT_HFIND)
     em.b3(72, 133, 210)             // test rdx, rdx
     em.jlocal(132, 0)               // jz Lnone
     em.b4(72, 139, 75, 8)           // mov rcx, [rbx+8]
     em.b4(72, 193, 224, 4)          // shl rax, 4
     em.b4(76, 139, 100, 1)
     em.b1(8)                        // mov r12, [rcx+rax+8]: the value
-    em.movimm(R_DI, 8)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 8)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(76, 137, 32)              // mov [rax], r12
     em.b1(195)
     em.set_label(0)                 // Lnone
@@ -622,12 +629,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_HPUT: rdi = descriptor, rsi = key, rdx = value
-    em.rt_begin(RT_HPUT)
+    em.rt_begin(emit.RT_HPUT)
     em.begin_fn(2)
     em.b1(87)                       // push rdi -- [rsp+16]
     em.b1(86)                       // push rsi -- [rsp+8]
     em.b1(82)                       // push rdx -- [rsp]
-    em.jglobal(232, ⁻1, RT_HFIND)
+    em.jglobal(232, ⁻1, emit.RT_HFIND)
     em.b3(72, 133, 210)             // test rdx, rdx
     em.jlocal(133, 0)               // jnz Lheld: only the value changes
     em.b4(72, 139, 75, 16)          // mov rcx, [rbx+16]
@@ -642,12 +649,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(134, 1)               // jbe Lins: load stays under 7/8
     em.b4(72, 139, 124, 36)
     em.b1(16)                       // mov rdi, [rsp+16]
-    em.jglobal(232, ⁻1, RT_HGROW)
+    em.jglobal(232, ⁻1, emit.RT_HGROW)
     em.b4(72, 139, 124, 36)
     em.b1(16)                       // mov rdi, [rsp+16]
     em.b4(72, 139, 116, 36)
     em.b1(8)                        // mov rsi, [rsp+8]
-    em.jglobal(232, ⁻1, RT_HFIND)   // the moved table's empty slot
+    em.jglobal(232, ⁻1, emit.RT_HFIND)   // the moved table's empty slot
     em.set_label(1)                 // Lins
     em.b4(72, 139, 75, 16)          // mov rcx, [rbx+16]
     em.b3(72, 255, 193)             // inc rcx
@@ -675,15 +682,15 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_HELEM: rdi = descriptor, rsi = key → rax = 0 or 1
-    em.rt_begin(RT_HELEM)
-    em.jglobal(232, ⁻1, RT_HFIND)
+    em.rt_begin(emit.RT_HELEM)
+    em.jglobal(232, ⁻1, emit.RT_HFIND)
     em.b3(72, 137, 208)             // mov rax, rdx
     em.b1(195)
 
     // RT_HGROW: rdi = descriptor; the table doubles and every held
     // pair moves.  Frame: 0 desc, 8 old ctrl, 16 old kv, 24 old cap,
     // 32 the doubled cap then the walk index, 40 the value in flight.
-    em.rt_begin(RT_HGROW)
+    em.rt_begin(emit.RT_HGROW)
     em.begin_fn(3)
     em.b4(72, 131, 236, 48)         // sub rsp, 48
     em.b4(72, 137, 60, 36)          // mov [rsp], rdi
@@ -703,7 +710,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(72, 137, 207)             // mov rdi, rcx
     em.b4(72, 193, 231, 4)          // shl rdi, 4
     em.b3(72, 1, 207)               // add rdi, rcx: 17 bytes a slot
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b4(72, 139, 60, 36)          // mov rdi, [rsp]
     em.b4(72, 139, 76, 36)
     em.b1(32)                       // mov rcx, [rsp+32]
@@ -734,7 +741,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(72, 137, 68, 36)
     em.b1(40)                       // mov [rsp+40], rax: the value
     em.b4(72, 139, 60, 36)          // mov rdi, [rsp]
-    em.jglobal(232, ⁻1, RT_HFIND)   // an empty slot; r12 keeps the key
+    em.jglobal(232, ⁻1, emit.RT_HFIND)   // an empty slot; r12 keeps the key
     em.b3(72, 139, 11)              // mov rcx, [rbx]
     em.b4(68, 136, 44, 1)           // mov [rcx+rax], r13b: the slot's tag
     em.b4(72, 139, 83, 8)           // mov rdx, [rbx+8]
@@ -757,24 +764,24 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_BADCHAR: .chr() was handed what no character is
-    em.rt_begin(RT_BADCHAR)
+    em.rt_begin(emit.RT_BADCHAR)
     let bcm : i64 = lw.intern("not a character: past the code points or a surrogate\n")
-    em.sref(R_SI, bcm)
-    em.movimm(R_DX, str_len(lw.strs[bcm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, bcm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[bcm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_STRIDX: rdi = descriptor, rsi = character position → rax =
     // the code point; a position past the characters is out of range.
     // The skip walks lead bytes, the length of each computed with
     // three materialized compares -- no branch to predict.
-    em.rt_begin(RT_STRIDX)
+    em.rt_begin(emit.RT_STRIDX)
     em.begin_fn(6)
     em.b3(72, 139, 23)              // mov rdx, [rdi]
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
     em.b3(77, 49, 210)              // xor r10, r10
     em.set_label(0)                 // Lskip
     em.b3(76, 57, 209)              // cmp rcx, r10
-    em.jglobal(0, 134, RT_BOUNDS)   // jbe: the position is past the end
+    em.jglobal(0, 134, emit.RT_BOUNDS)   // jbe: the position is past the end
     em.b3(72, 133, 246)             // test rsi, rsi
     em.jlocal(132, 1)               // jz Ldecode
     em.b4(66, 15, 182, 4)
@@ -842,12 +849,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // one is three conditional moves rather than a ladder of compares,
     // so the only branch left in the body is the one that says a
     // character is finished.
-    em.rt_begin(RT_CHARS)
+    em.rt_begin(emit.RT_CHARS)
     em.begin_fn(2)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(77, 49, 246)              // xor r14, r14: the byte read
     em.b3(77, 49, 255)              // xor r15, r15: the character written
@@ -855,8 +862,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(77, 49, 201)              // xor r9, r9: the code point
     // the two tables are read once a byte, so their addresses are
     // taken once and not at every step
-    em.rxref(R_SI, 0)               // the byte classes
-    em.rxref(R_DI, 256)             // the transition words
+    em.rxref(emit.R_SI, 0)               // the byte classes
+    em.rxref(emit.R_DI, 256)             // the transition words
     em.set_label(0)                 // Lloop
     em.b3(77, 57, 245)              // cmp r13, r14
     em.jlocal(134, 1)               // jbe Ldone
@@ -907,11 +914,11 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_CHARSTR: rdi = code point → rax = a fresh one-character
     // string, its UTF-8 encoding 1 to 4 bytes
-    em.rt_begin(RT_CHARSTR)
+    em.rt_begin(emit.RT_CHARSTR)
     em.begin_fn(4)
     em.b3(73, 137, 252)             // mov r12, rdi
-    em.movimm(R_DI, 20)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 20)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b4(72, 141, 72, 16)          // lea rcx, [rax+16]
     em.b3(72, 137, 8)               // mov [rax], rcx
     em.b3(73, 129, 252)
@@ -945,7 +952,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(65, 129, 202)
     em.w32(128)                     // or r10d, 0x80
     em.b4(68, 136, 81, 3)           // mov [rcx+3], r10b
-    em.movimm(R_DX, 4)
+    em.movimm(emit.R_DX, 4)
     em.jlocal(⁻1, 3)                // jmp Ldone
     em.set_label(2)                 // three bytes
     em.b3(77, 137, 226)             // mov r10, r12
@@ -964,7 +971,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(65, 129, 202)
     em.w32(128)                     // or r10d, 0x80
     em.b4(68, 136, 81, 2)           // mov [rcx+2], r10b
-    em.movimm(R_DX, 3)
+    em.movimm(emit.R_DX, 3)
     em.jlocal(⁻1, 3)
     em.set_label(1)                 // two bytes
     em.b3(77, 137, 226)             // mov r10, r12
@@ -977,11 +984,11 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(65, 129, 202)
     em.w32(128)                     // or r10d, 0x80
     em.b4(68, 136, 81, 1)           // mov [rcx+1], r10b
-    em.movimm(R_DX, 2)
+    em.movimm(emit.R_DX, 2)
     em.jlocal(⁻1, 3)
     em.set_label(0)                 // one byte
     em.b3(68, 136, 33)              // mov [rcx], r12b
-    em.movimm(R_DX, 1)
+    em.movimm(emit.R_DX, 1)
     em.set_label(3)                 // Ldone
     em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
     em.b1(195)
@@ -989,9 +996,9 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_ARGS: → rax = a str[] of the program's arguments, argv[0]
     // left out; each entry points straight at the kernel's bytes
-    em.rt_begin(RT_ARGS)
+    em.rt_begin(emit.RT_ARGS)
     em.begin_fn(5)
-    em.dref(R_R11, args_off)
+    em.dref(emit.R_R11, args_off)
     em.b3(77, 139, 35)              // mov r12, [r11]: argc
     em.b4(77, 139, 107, 8)          // mov r13, [r11+8]: argv
     em.b3(73, 255, 204)             // dec r12
@@ -1000,7 +1007,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(69, 49, 228)              // xor r12d, r12d
     em.set_label(0)
     em.b3(76, 137, 231)             // mov rdi, r12
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(77, 49, 246)              // xor r14, r14
     em.set_label(1)                 // Lloop
@@ -1017,8 +1024,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 3)
     em.set_label(4)                 // Lgot
     em.b1(81)                       // push rcx
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx
     em.b3(76, 137, 56)              // mov [rax], r15
     em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
@@ -1034,13 +1041,13 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_FOPEN: rdi = the path → rax = an optional file descriptor;
     // the path's bytes gain the NUL openat wants
-    em.rt_begin(RT_FOPEN)
+    em.rt_begin(emit.RT_FOPEN)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b4(73, 139, 124, 36)
     em.b1(8)                        // mov rdi, [r12+8]
     em.b3(72, 255, 199)             // inc rdi
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(73, 137, 197)             // mov r13, rax
     em.b3(73, 139, 52)
     em.b1(36)                       // mov rsi, [r12]
@@ -1058,17 +1065,17 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.set_label(1)
     em.b4(65, 198, 68, 21)
     em.b2(0, 0)                     // mov byte [r13+rdx], 0
-    em.movimm(R_DI, ⁻100) // AT_FDCWD
+    em.movimm(emit.R_DI, ⁻100) // AT_FDCWD
     em.b3(76, 137, 238)             // mov rsi, r13
     em.b2(49, 210)                  // xor edx, edx: O_RDONLY
     em.b3(69, 49, 210)              // xor r10d, r10d
-    em.movimm(R_AX, 257)
+    em.movimm(emit.R_AX, 257)
     em.b2(15, 5)                    // openat
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(136, 2)               // js Lnone
     em.b3(73, 137, 196)             // mov r12, rax
-    em.movimm(R_DI, 8)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 8)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(76, 137, 32)              // mov [rax], r12
     em.b1(195)
     em.set_label(2)                 // Lnone
@@ -1078,14 +1085,14 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_FCREATE: rdi = the path, rsi = the mode → rax = a fresh
     // file's descriptor; refusal is a stop, not an answer
-    em.rt_begin(RT_FCREATE)
+    em.rt_begin(emit.RT_FCREATE)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(73, 137, 246)             // mov r14, rsi
     em.b4(73, 139, 124, 36)
     em.b1(8)                        // mov rdi, [r12+8]
     em.b3(72, 255, 199)             // inc rdi
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(73, 137, 197)             // mov r13, rax
     em.b3(73, 139, 52)
     em.b1(36)                       // mov rsi, [r12]
@@ -1103,31 +1110,31 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.set_label(1)
     em.b4(65, 198, 68, 21)
     em.b2(0, 0)                     // mov byte [r13+rdx], 0
-    em.movimm(R_DI, ⁻100)
+    em.movimm(emit.R_DI, ⁻100)
     em.b3(76, 137, 238)             // mov rsi, r13
-    em.movimm(R_DX, 577)            // O_WRONLY|O_CREAT|O_TRUNC
+    em.movimm(emit.R_DX, 577)            // O_WRONLY|O_CREAT|O_TRUNC
     em.b3(77, 137, 242)             // mov r10, r14: the mode
-    em.movimm(R_AX, 257)
+    em.movimm(emit.R_AX, 257)
     em.b2(15, 5)
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(137, 2)               // jns Lok
     let ncm : i64 = lw.intern("ngplc: the output file cannot be created\n")
-    em.sref(R_SI, ncm)
-    em.movimm(R_DX, str_len(lw.strs[ncm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, ncm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[ncm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
     em.set_label(2)
     em.b1(195)
     em.resolve_locals()
 
     // RT_FREAD: rdi = a file's descriptor → rax = its bytes as a
     // u8[]; the size from fstat, one read loop, one widening loop
-    em.rt_begin(RT_FREAD)
+    em.rt_begin(emit.RT_FREAD)
     em.begin_fn(5)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(72, 129, 236)
     em.w32(144)                     // sub rsp, 144
     em.b3(72, 137, 230)             // mov rsi, rsp
-    em.movimm(R_AX, 5)
+    em.movimm(emit.R_AX, 5)
     em.b2(15, 5)                    // fstat
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(136, 4)               // js Lbad
@@ -1136,7 +1143,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(72, 129, 196)
     em.w32(144)                     // add rsp, 144
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(73, 137, 198)             // mov r14, rax: the raw bytes
     em.b3(77, 49, 255)              // xor r15, r15
     em.set_label(0)                 // Lread
@@ -1154,7 +1161,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 0)
     em.set_label(1)                 // Lwiden
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(72, 139, 19)              // mov rdx, [rbx]
     em.b3(72, 49, 201)              // xor rcx, rcx
@@ -1172,20 +1179,20 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(195)
     em.set_label(4)                 // Lbad
     let nrm : i64 = lw.intern("ngplc: the input cannot be read\n")
-    em.sref(R_SI, nrm)
-    em.movimm(R_DX, str_len(lw.strs[nrm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, nrm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[nrm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
     em.resolve_locals()
 
     // RT_FWRITE: rdi = a file's descriptor, rsi = a u8[]; the slots
     // narrow to bytes and one write loop puts them down
-    em.rt_begin(RT_FWRITE)
+    em.rt_begin(emit.RT_FWRITE)
     em.begin_fn(5)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b4(76, 139, 110, 8)          // mov r13, [rsi+8]: how many
     em.b3(76, 139, 54)              // mov r14, [rsi]: the slots
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(72, 137, 195)             // mov rbx, rax: the raw bytes
     em.b3(72, 49, 201)              // xor rcx, rcx
     em.set_label(0)                 // Lnarrow
@@ -1204,7 +1211,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(74, 141, 52, 59)          // lea rsi, [rbx+r15]
     em.b3(76, 137, 234)             // mov rdx, r13
     em.b3(76, 41, 250)              // sub rdx, r15
-    em.movimm(R_AX, 1)
+    em.movimm(emit.R_AX, 1)
     em.b2(15, 5)
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(142, 4)               // jle Lbad
@@ -1214,9 +1221,9 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(195)
     em.set_label(4)                 // Lbad
     let nwm : i64 = lw.intern("ngplc: the output cannot be written\n")
-    em.sref(R_SI, nwm)
-    em.movimm(R_DX, str_len(lw.strs[nwm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, nwm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[nwm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
     em.resolve_locals()
 
     // RT_TORAW: rdi = a u8[]; rax = a fresh run of raw bytes holding
@@ -1224,12 +1231,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // element whatever it holds, so anything that hands bytes to the
     // kernel has to narrow them first; this is that narrowing, kept in
     // one place because writev needs it once per piece.
-    em.rt_begin(RT_TORAW)
+    em.rt_begin(emit.RT_TORAW)
     em.begin_fn(2)
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
     em.b3(76, 139, 55)              // mov r14, [rdi]: the slots
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(72, 137, 195)             // mov rbx, rax: the raw bytes
     em.b3(72, 49, 201)              // xor rcx, rcx
     em.set_label(0)
@@ -1250,14 +1257,14 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // the kernel satisfies only in part resumes from wherever it
     // stopped, which for a vector means walking off the entries it
     // finished and shortening the one it did not.
-    em.rt_begin(RT_WRITEV)
+    em.rt_begin(emit.RT_WRITEV)
     em.begin_fn(6)
     em.b3(73, 137, 252)             // mov r12, rdi: the descriptor
     em.b4(76, 139, 110, 8)          // mov r13, [rsi+8]: how many runs
     em.b3(76, 139, 54)              // mov r14, [rsi]: the runs
     em.b3(76, 137, 239)             // mov rdi, r13
     em.b4(72, 193, 231, 4)          // shl rdi, 4: sixteen bytes an entry
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(72, 137, 195)             // mov rbx, rax: the vector
     em.b3(73, 137, 218)             // mov r10, rbx: where the next entry goes
     em.b3(72, 49, 201)              // xor rcx, rcx
@@ -1278,7 +1285,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(76, 137, 231)             // mov rdi, r12
     em.b3(72, 137, 222)             // mov rsi, rbx
     em.b3(76, 137, 234)             // mov rdx, r13
-    em.movimm(R_AX, 20)             // writev
+    em.movimm(emit.R_AX, 20)             // writev
     em.b2(15, 5)
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(136, 4)               // js Lbad
@@ -1301,27 +1308,27 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 1)
     em.set_label(4)                 // Lbad
     let wvm : i64 = lw.intern("ngplc: the output cannot be written\n")
-    em.sref(R_SI, wvm)
-    em.movimm(R_DX, str_len(lw.strs[wvm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, wvm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[wvm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
     em.set_label(5)                 // Ldone
     em.b1(195)
     em.resolve_locals()
 
     // RT_BADFIT: a value flowed into a type it does not fit
-    em.rt_begin(RT_BADFIT)
+    em.rt_begin(emit.RT_BADFIT)
     let bfm : i64 = lw.intern("the value does not fit the type it meets\n")
-    em.sref(R_SI, bfm)
-    em.movimm(R_DX, str_len(lw.strs[bfm × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.sref(emit.R_SI, bfm)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[bfm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
 
     // RT_WRITE2: (buf, len) onto the error stream
-    em.rt_begin(RT_WRITE2)
+    em.rt_begin(emit.RT_WRITE2)
     emit_write(&em, 2)
 
     // RT_AFIND: rdi = descriptor, rsi = wanted, rdx = 1 for string
     // elements → rax = the position boxed, or the null ∅
-    em.rt_begin(RT_AFIND)
+    em.rt_begin(emit.RT_AFIND)
     em.begin_fn(5)
     em.b3(76, 139, 39)              // mov r12, [rdi]: the elements
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
@@ -1340,13 +1347,13 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.set_label(2)                 // Lstr
     em.b3(72, 137, 199)             // mov rdi, rax
     em.b3(76, 137, 254)             // mov rsi, r15
-    em.jglobal(232, ⁻1, RT_STREQ)
+    em.jglobal(232, ⁻1, emit.RT_STREQ)
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(132, 4)               // jz Lnext
     em.set_label(3)                 // Lhit: box the position
     em.b3(77, 137, 244)             // mov r12, r14
-    em.movimm(R_DI, 8)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 8)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(76, 137, 32)              // mov [rax], r12
     em.b1(195)
     em.set_label(4)                 // Lnext
@@ -1361,7 +1368,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // array of elements lo…hi, ending before hi; hi at or below lo is
     // empty, and hi may stand at the end because that is where the
     // slice stops rather than the last element it takes
-    em.rt_begin(RT_ASLICE)
+    em.rt_begin(emit.RT_ASLICE)
     em.begin_fn(3)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
@@ -1372,13 +1379,13 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(142, 0)               // jle Lempty
     em.b3(77, 133, 246)             // test r14, r14
-    em.jglobal(0, 136, RT_BOUNDS)   // js: below the array
+    em.jglobal(0, 136, emit.RT_BOUNDS)   // js: below the array
     em.b3(77, 57, 239)              // cmp r15, r13
     // hi is where the slice stops, so it may stand at the end
-    em.jglobal(0, 135, RT_BOUNDS)   // ja: past the array's end
+    em.jglobal(0, 135, emit.RT_BOUNDS)   // ja: past the array's end
     em.b3(72, 137, 195)             // mov rbx, rax: keep the count
     em.b3(72, 137, 199)             // mov rdi, rax
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 139, 16)              // mov rdx, [rax]: the fresh slots
     em.b3(72, 49, 201)              // xor rcx, rcx
     em.set_label(1)                 // Lcopy
@@ -1394,19 +1401,19 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b1(195)
     em.set_label(0)                 // Lempty
     em.b2(49, 255)                  // xor edi, edi
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b1(195)
     em.resolve_locals()
 
     // RT_AFILL: rdi = the count, rsi = the value → rax = a fresh
     // array of that many copies
-    em.rt_begin(RT_AFILL)
+    em.rt_begin(emit.RT_AFILL)
     em.begin_fn(2)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(73, 137, 245)             // mov r13, rsi
     em.b3(77, 133, 228)             // test r12, r12
-    em.jglobal(0, 136, RT_BOUNDS)   // js: a count below nothing
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(0, 136, emit.RT_BOUNDS)   // js: a count below nothing
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(72, 139, 19)              // mov rdx, [rbx]
     em.b3(72, 49, 201)              // xor rcx, rcx
@@ -1424,19 +1431,19 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_ACYC: rdi = the count, rsi = the filler array → rax = a
     // fresh array of the filler's elements, cycled to the count
-    em.rt_begin(RT_ACYC)
+    em.rt_begin(emit.RT_ACYC)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(76, 139, 46)              // mov r13, [rsi]: the elements
     em.b4(76, 139, 118, 8)          // mov r14, [rsi+8]: how many
     em.b3(77, 133, 228)             // test r12, r12
-    em.jglobal(0, 136, RT_BOUNDS)   // js: a count below nothing
+    em.jglobal(0, 136, emit.RT_BOUNDS)   // js: a count below nothing
     em.b3(77, 133, 246)             // test r14, r14
     em.jlocal(133, 2)               // jnz: there is something to cycle
     em.b3(77, 133, 228)             // test r12, r12
-    em.jglobal(0, 133, RT_BOUNDS)   // jnz: copies of nothing
+    em.jglobal(0, 133, emit.RT_BOUNDS)   // jnz: copies of nothing
     em.set_label(2)
-    em.jglobal(232, ⁻1, RT_ARRNEW)  // rdi still holds the count
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)  // rdi still holds the count
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(72, 139, 19)              // mov rdx, [rbx]
     em.b3(72, 49, 201)              // xor rcx, rcx
@@ -1461,7 +1468,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_ACAT: rdi, rsi = arrays → rax = one fresh array holding the
     // first's elements and then the second's
-    em.rt_begin(RT_ACAT)
+    em.rt_begin(emit.RT_ACAT)
     em.begin_fn(4)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
@@ -1469,7 +1476,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(76, 139, 126, 8)          // mov r15, [rsi+8]
     em.b4(75, 141, 124, 61)
     em.b1(0)                        // lea rdi, [r13+r15]
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 139, 16)              // mov rdx, [rax]
     em.b3(72, 49, 201)              // xor rcx, rcx
     em.set_label(0)                 // the first array's elements
@@ -1499,12 +1506,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
 
     // RT_SBYTES: rdi = a string → rax = its bytes as a u8[], each
     // widened into its own slot
-    em.rt_begin(RT_SBYTES)
+    em.rt_begin(emit.RT_SBYTES)
     em.begin_fn(2)
     em.b3(76, 139, 39)              // mov r12, [rdi]: the bytes
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
     em.b3(76, 137, 239)             // mov rdi, r13
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 139, 16)              // mov rdx, [rax]
     em.b3(72, 49, 201)              // xor rcx, rcx
     em.set_label(0)
@@ -1524,31 +1531,31 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // each a two-slot {name, d_type} block, "." and ".." left out.
     // The kernel's getdents64 records are parsed in place; the order
     // is the directory's own, the same one every reader sees.
-    em.rt_begin(RT_DENTS)
+    em.rt_begin(emit.RT_DENTS)
     em.begin_fn(9)
     em.b4(72, 131, 236, 32)         // sub rsp, 32
-    em.movimm(R_DI, 8)
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.movimm(emit.R_DI, 8)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
-    em.movimm(R_DI, ⁻100) // AT_FDCWD
+    em.movimm(emit.R_DI, ⁻100) // AT_FDCWD
     em.b2(106, 46)                  // push 46: ".\0" spelled in place
     em.b3(72, 137, 230)             // mov rsi, rsp
-    em.movimm(R_DX, 65536)          // O_RDONLY|O_DIRECTORY
+    em.movimm(emit.R_DX, 65536)          // O_RDONLY|O_DIRECTORY
     em.b3(69, 49, 210)              // xor r10d, r10d
-    em.movimm(R_AX, 257)
+    em.movimm(emit.R_AX, 257)
     em.b2(15, 5)                    // openat
     em.b1(89)                       // pop rcx: the path's eight bytes
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(136, 8)               // js Lret: no directory, no entries
     em.b3(73, 137, 196)             // mov r12, rax
-    em.movimm(R_DI, 4096)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 4096)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(73, 137, 197)             // mov r13, rax
     em.set_label(0)                 // Louter: one buffer of records
     em.b3(76, 137, 231)             // mov rdi, r12
     em.b3(76, 137, 238)             // mov rsi, r13
-    em.movimm(R_DX, 4096)
-    em.movimm(R_AX, 217)
+    em.movimm(emit.R_DX, 4096)
+    em.movimm(emit.R_AX, 217)
     em.b2(15, 5)                    // getdents64
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(142, 7)               // jle Lclose
@@ -1586,7 +1593,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(72, 137, 76, 36)
     em.b1(8)                        // mov [rsp+8], rcx
     em.b4(72, 141, 121, 16)         // lea rdi, [rcx+16]: desc and bytes
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b4(72, 139, 52, 36)          // mov rsi, [rsp]
     em.b4(72, 141, 118, 19)         // lea rsi, [rsi+19]
     em.b4(72, 139, 76, 36)
@@ -1606,8 +1613,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.set_label(6)                 // Lentry: {name, type}
     em.b4(72, 137, 68, 36)
     em.b1(24)                       // mov [rsp+24], rax
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b4(72, 139, 76, 36)
     em.b1(24)                       // mov rcx, [rsp+24]
     em.b3(72, 137, 8)               // mov [rax], rcx
@@ -1616,11 +1623,11 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
     em.b3(72, 137, 223)             // mov rdi, rbx
     em.b3(72, 137, 198)             // mov rsi, rax
-    em.jglobal(232, ⁻1, RT_ARRPUSH)
+    em.jglobal(232, ⁻1, emit.RT_ARRPUSH)
     em.jlocal(⁻1, 1)
     em.set_label(7)                 // Lclose
     em.b3(76, 137, 231)             // mov rdi, r12
-    em.movimm(R_AX, 3)
+    em.movimm(emit.R_AX, 3)
     em.b2(15, 5)
     em.set_label(8)                 // Lret
     em.b4(72, 131, 196, 32)         // add rsp, 32
@@ -1631,9 +1638,9 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // RT_ENVN: → rax = a str[] of the environment's names, the part of
     // each entry before its '=' -- or the whole of one that has none,
     // as the interpreter's names() reads them
-    em.rt_begin(RT_ENVN)
+    em.rt_begin(emit.RT_ENVN)
     em.begin_fn(6)
-    em.dref(R_R11, args_off)
+    em.dref(emit.R_R11, args_off)
     em.b4(77, 139, 107, 16)         // mov r13, [r11+16]: envp
     em.b3(77, 49, 228)              // xor r12, r12
     em.set_label(0)                 // Lcount
@@ -1645,7 +1652,7 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 0)
     em.set_label(1)                 // Lgot: r12 holds the count
     em.b3(76, 137, 231)             // mov rdi, r12
-    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.jglobal(232, ⁻1, emit.RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
     em.b3(77, 49, 246)              // xor r14, r14
     em.set_label(2)                 // Lloop
@@ -1664,8 +1671,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 4)
     em.set_label(5)                 // Lend: rcx is the name's length
     em.b1(81)                       // push rcx
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx
     em.b3(76, 137, 56)              // mov [rax], r15
     em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
@@ -1683,11 +1690,11 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // optional string: the box holding the value, or the null for a
     // name the environment does not carry.  The first entry that
     // matches answers, as getenv has it.
-    em.rt_begin(RT_ENVG)
+    em.rt_begin(emit.RT_ENVG)
     em.begin_fn(7)
     em.b3(72, 137, 243)             // mov rbx, rsi: the name outlives the calls
     em.b3(73, 137, 212)             // mov r12, rdx: and so does its length
-    em.dref(R_R11, args_off)
+    em.dref(emit.R_R11, args_off)
     em.b4(77, 139, 107, 16)         // mov r13, [r11+16]: envp
     em.b3(77, 49, 246)              // xor r14, r14
     em.set_label(0)                 // Lentry
@@ -1719,14 +1726,14 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 5)
     em.set_label(6)                 // Lvgot
     em.b1(81)                       // push rcx
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx
     em.b3(76, 137, 56)              // mov [rax], r15
     em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
     em.b3(73, 137, 199)             // mov r15, rax: the descriptor
-    em.movimm(R_DI, 8)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 8)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b3(76, 137, 56)              // mov [rax], r15: and the box holds it
     em.b1(195)
     em.set_label(3)                 // Lnext
@@ -1740,9 +1747,9 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // RT_AUXV: rdi = the key → rax = what the auxiliary vector carries
     // under it, or zero when it carries nothing.  The vector is pairs
     // of words, a key and its value, ending at a key of zero.
-    em.rt_begin(RT_AUXV)
+    em.rt_begin(emit.RT_AUXV)
     em.begin_fn(3)
-    em.dref(R_R11, args_off)
+    em.dref(emit.R_R11, args_off)
     em.b4(73, 139, 75, 24)          // mov rcx, [r11+24]: the vector
     em.set_label(0)                 // Lscan
     em.b3(72, 139, 17)              // mov rdx, [rcx]: the key
@@ -1763,10 +1770,10 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // RT_EXECFN: → rax = the path execve was given, as a string.  The
     // vector holds where the bytes are; they lie above the environment
     // on the entry stack, which outlives the move to the program's own.
-    em.rt_begin(RT_EXECFN)
+    em.rt_begin(emit.RT_EXECFN)
     em.begin_fn(3)
-    em.movimm(R_DI, 31)
-    em.jglobal(232, ⁻1, RT_AUXV)
+    em.movimm(emit.R_DI, 31)
+    em.jglobal(232, ⁻1, emit.RT_AUXV)
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(132, 2)               // je Lnone
     em.b3(73, 137, 199)             // mov r15, rax: the bytes
@@ -1779,15 +1786,15 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(⁻1, 0)
     em.set_label(1)                 // Lgot
     em.b1(81)                       // push rcx
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b1(89)                       // pop rcx
     em.b3(76, 137, 56)              // mov [rax], r15
     em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
     em.b1(195)
     em.set_label(2)                 // Lnone: no name, and so no bytes
-    em.movimm(R_DI, 16)
-    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.movimm(emit.R_DI, 16)
+    em.jglobal(232, ⁻1, emit.RT_ALLOC)
     em.b2(49, 210)                  // xor edx, edx
     em.b3(72, 137, 16)              // mov [rax], rdx
     em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
@@ -1800,19 +1807,19 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // PT_GNU_RELRO names a stretch to protect.  The ends are rounded
     // inward to whole pages, as a dynamic loader rounds them, so a
     // header that names part of a page protects none of it.
-    em.rt_begin(RT_RELRO)
+    em.rt_begin(emit.RT_RELRO)
     em.begin_fn(3)
-    em.movimm(R_DI, 3)              // AT_PHDR
-    em.jglobal(232, ⁻1, RT_AUXV)
+    em.movimm(emit.R_DI, 3)              // AT_PHDR
+    em.jglobal(232, ⁻1, emit.RT_AUXV)
     em.b3(73, 137, 197)             // mov r13, rax: the headers
-    em.movimm(R_DI, 5)              // AT_PHNUM
-    em.jglobal(232, ⁻1, RT_AUXV)
+    em.movimm(emit.R_DI, 5)              // AT_PHNUM
+    em.jglobal(232, ⁻1, emit.RT_AUXV)
     em.b3(73, 137, 196)             // mov r12, rax: how many
-    em.movimm(R_DI, 4)              // AT_PHENT
-    em.jglobal(232, ⁻1, RT_AUXV)
+    em.movimm(emit.R_DI, 4)              // AT_PHENT
+    em.jglobal(232, ⁻1, emit.RT_AUXV)
     em.b3(73, 137, 198)             // mov r14, rax: how long each is
-    em.movimm(R_DI, 6)              // AT_PAGESZ
-    em.jglobal(232, ⁻1, RT_AUXV)
+    em.movimm(emit.R_DI, 6)              // AT_PAGESZ
+    em.jglobal(232, ⁻1, emit.RT_AUXV)
     em.b3(73, 137, 199)             // mov r15, rax: the page
     em.b3(77, 133, 237)             // test r13, r13
     em.jlocal(132, 2)               // je Lret: no headers, nothing to seal
@@ -1837,8 +1844,8 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.jlocal(142, 1)               // jle Lnext: no whole page inside
     em.b3(72, 137, 247)             // mov rdi, rsi
     em.b3(72, 137, 214)             // mov rsi, rdx
-    em.movimm(R_DX, 1)              // PROT_READ
-    em.movimm(R_AX, 10)
+    em.movimm(emit.R_DX, 1)              // PROT_READ
+    em.movimm(emit.R_AX, 10)
     em.b2(15, 5)                    // mprotect
     em.set_label(1)                 // Lnext
     em.b3(77, 1, 245)               // add r13, r14
@@ -1853,13 +1860,13 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // same shift-DFA as RT_CHARS, run until it says a character is
     // whole -- which is what lets a walk over a string read it where it
     // lies instead of laying its characters out first.
-    em.rt_begin(RT_STRNEXT)
+    em.rt_begin(emit.RT_STRNEXT)
     em.begin_fn(1)
     em.b3(76, 139, 7)               // mov r8, [rdi]: the bytes
     em.b3(77, 49, 210)              // xor r10, r10: the state
     em.b3(77, 49, 201)              // xor r9, r9: the code point
-    em.rxref(R_R11, 0)              // the byte classes
-    em.rxref(R_DI, 256)             // the transition words
+    em.rxref(emit.R_R11, 0)              // the byte classes
+    em.rxref(emit.R_DI, 256)             // the transition words
     em.set_label(0)                 // Lstep
     em.b4(65, 15, 182, 4)
     em.b1(48)                       // movzx eax, byte [r8+rsi]
@@ -1902,44 +1909,44 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // of their own -- so there is nothing here a hand-written version
     // would know that the IR does not, and rt_hash.ngpl and
     // rt_sha256.ngpl write them once for all six.
-    em.rt_begin(RT_HSTART)
-    emit_fn(&em, rt_hstart_ir(), 1, lw.strs, 0, [])
-    em.rt_begin(RT_HUPDATE)
-    emit_fn(&em, rt_hupdate_ir(&lw), 2, lw.strs, 0, [])
-    em.rt_begin(RT_HFINAL)
-    emit_fn(&em, rt_hfinal_ir(&lw), 2, lw.strs, 0, [])
-    em.rt_begin(RT_SHA256INIT)
-    emit_fn(&em, rt_sha256init_ir(), 1, lw.strs, 0, [])
-    em.rt_begin(RT_SHA256BLK)
-    emit_fn(&em, rt_sha256blk_ir(), 1, lw.strs, 0, [])
-    em.rt_begin(RT_SHA256FIN)
-    emit_fn(&em, rt_sha256fin_ir(), 2, lw.strs, 0, [])
+    em.rt_begin(emit.RT_HSTART)
+    arch_x86_64.emit_fn(&em, rt_hash.rt_hstart_ir(), 1, lw.strs, 0, [])
+    em.rt_begin(emit.RT_HUPDATE)
+    arch_x86_64.emit_fn(&em, rt_hash.rt_hupdate_ir(&lw), 2, lw.strs, 0, [])
+    em.rt_begin(emit.RT_HFINAL)
+    arch_x86_64.emit_fn(&em, rt_hash.rt_hfinal_ir(&lw), 2, lw.strs, 0, [])
+    em.rt_begin(emit.RT_SHA256INIT)
+    arch_x86_64.emit_fn(&em, rt_sha256.rt_sha256init_ir(), 1, lw.strs, 0, [])
+    em.rt_begin(emit.RT_SHA256BLK)
+    arch_x86_64.emit_fn(&em, rt_sha256.rt_sha256blk_ir(), 1, lw.strs, 0, [])
+    em.rt_begin(emit.RT_SHA256FIN)
+    arch_x86_64.emit_fn(&em, rt_sha256.rt_sha256fin_ir(), 2, lw.strs, 0, [])
 
     // int's arithmetic is arithmetic and nothing else, so it is
     // written once in rt_bigint.ngpl and emitted here as it is
     // everywhere else.
-    em.rt_begin(RT_BIGFROM)
-    emit_fn(&em, rt_bigfrom_ir(), 1, lw.strs, 0, [])
-    em.rt_begin(RT_BIGCMP)
-    emit_fn(&em, rt_bigcmp_ir(), 2, lw.strs, 0, [])
-    em.rt_begin(RT_BIGADD)
-    emit_fn(&em, rt_bigadd_ir(), 3, lw.strs, 0, [])
-    em.rt_begin(RT_BIGMUL)
-    emit_fn(&em, rt_bigmul_ir(), 2, lw.strs, 0, [])
-    em.rt_begin(RT_BIGPRINT)
-    emit_fn(&em, rt_bigprint_ir(), 1, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BIGFROM)
+    arch_x86_64.emit_fn(&em, rt_bigint.rt_bigfrom_ir(), 1, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BIGCMP)
+    arch_x86_64.emit_fn(&em, rt_bigint.rt_bigcmp_ir(), 2, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BIGADD)
+    arch_x86_64.emit_fn(&em, rt_bigint.rt_bigadd_ir(), 3, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BIGMUL)
+    arch_x86_64.emit_fn(&em, rt_bigint.rt_bigmul_ir(), 2, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BIGPRINT)
+    arch_x86_64.emit_fn(&em, rt_bigint.rt_bigprint_ir(), 1, lw.strs, 0, [])
 
     // The backtrace is a walk over frames and a search of a table, and
     // neither is anything a hand-written version would do differently,
     // so rt_backtrace.ngpl writes it once for all six as well.
-    em.rt_begin(RT_BT)
-    emit_fn(&em, rt_bt_ir(tg, &lw), 0, lw.strs, 0, [])
+    em.rt_begin(emit.RT_BT)
+    arch_x86_64.emit_fn(&em, rt_backtrace.rt_bt_ir(tg, &lw), 0, lw.strs, 0, [])
 
     // Cutting a string is a walk over its characters and a descriptor,
     // and neither is anything a hand-written version would do
     // differently, so this is written once as IR as well.
-    em.rt_begin(RT_SSLICE)
-    emit_fn(&em, rt_build(RT_SSLICE, tg, &lw), 3, lw.strs, 0, [])
+    em.rt_begin(emit.RT_SSLICE)
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_SSLICE, tg, &lw), 3, lw.strs, 0, [])
 
     // ------------------------------------------------------------------
     // The stack running out
@@ -1954,36 +1961,36 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // bug, and the best thing to do is get out of the way -- put the
     // default action back and return, and the faulting instruction
     // runs again and dies of it, core dump and all.
-    em.rt_begin(RT_SEGV)
+    em.rt_begin(emit.RT_SEGV)
     em.b4(72, 139, 70, 16)          // mov rax, [rsi+16]: si_addr
-    em.dref(R_R11, args_off)
-    em.b4(73, 139, 75, KB_GLO)      // mov rcx, [r11+KB_GLO]
+    em.dref(emit.R_R11, args_off)
+    em.b4(73, 139, 75, emit.KB_GLO)      // mov rcx, [r11+KB_GLO]
     em.b3(72, 57, 200)              // cmp rax, rcx
     em.jlocal(130, 0)               // jb: below the guard
-    em.b4(73, 139, 75, KB_GHI)      // mov rcx, [r11+KB_GHI]
+    em.b4(73, 139, 75, emit.KB_GHI)      // mov rcx, [r11+KB_GHI]
     em.b3(72, 57, 200)              // cmp rax, rcx
     em.jlocal(131, 0)               // jae: above it, so in the stack proper
-    let ovm2 : i64 = lw.intern(stack_overflow_msg())
-    em.sref(R_SI, ovm2)
-    em.movimm(R_DX, str_len(lw.strs[ovm2 × 1¤ptrdiff]))
-    em.movimm(R_DI, 2)
-    em.movimm(R_AX, 1)
+    let ovm2 : i64 = lw.intern(emit.stack_overflow_msg())
+    em.sref(emit.R_SI, ovm2)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[ovm2 × 1¤ptrdiff]))
+    em.movimm(emit.R_DI, 2)
+    em.movimm(emit.R_AX, 1)
     em.b2(15, 5)                    // write(2, msg, len)
-    em.movimm(R_DI, EXIT_STACK_OVERFLOW)
-    em.movimm(R_AX, 60)
+    em.movimm(emit.R_DI, emit.EXIT_STACK_OVERFLOW)
+    em.movimm(emit.R_AX, 60)
     em.b2(15, 5)                    // exit, with this stop's own number
     em.set_label(0)
     // not the guard: the default action, put back, and let it happen
-    em.dref(R_R11, relro_off)
+    em.dref(emit.R_R11, relro_off)
     em.b3(72, 49, 192)              // xor rax, rax
-    em.b4(73, 137, 67, SIG_ACT)     // sa_handler ← SIG_DFL
-    em.b4(73, 137, 67, SIG_ACT + 8) // sa_flags ← 0
-    em.movimm(R_DI, SIGSEGV_NO)
+    em.b4(73, 137, 67, emit.SIG_ACT)     // sa_handler ← SIG_DFL
+    em.b4(73, 137, 67, emit.SIG_ACT + 8) // sa_flags ← 0
+    em.movimm(emit.R_DI, emit.SIGSEGV_NO)
     em.b3(73, 141, 115)
-    em.b1(SIG_ACT)                  // lea rsi, [r11+SIG_ACT]
+    em.b1(emit.SIG_ACT)                  // lea rsi, [r11+SIG_ACT]
     em.b3(72, 49, 210)              // xor rdx, rdx
-    em.movimm(R_R10, 8)
-    em.movimm(R_AX, 13)             // rt_sigaction
+    em.movimm(emit.R_R10, 8)
+    em.movimm(emit.R_AX, 13)             // rt_sigaction
     em.b2(15, 5)
     em.b1(195)                      // ret: through the restorer, and again
     em.resolve_locals()
@@ -1991,6 +1998,6 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     // The trampoline the kernel returns through.  x86-64 will not
     // install a handler without one, and returning from the handler
     // above is how an ordinary fault gets to happen twice.
-    em.rt_begin(RT_SIGRET)
-    em.movimm(R_AX, 15)             // rt_sigreturn
+    em.rt_begin(emit.RT_SIGRET)
+    em.movimm(emit.R_AX, 15)             // rt_sigreturn
     em.b2(15, 5)

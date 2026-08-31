@@ -1,3 +1,7 @@
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let rt_portable := @import("./rt_portable.ngpl")
+
 // ===========================================================================
 // int: the arbitrary-precision integer, at run time
 // ===========================================================================
@@ -21,8 +25,6 @@
 // calling convention of their own -- so they are written once here and
 // every target emits them, as the hash and sha256 routines are.
 
-@import("./ir.ngpl")
-@import("./emit.ngpl")
 
 
 let BIG_SHIFT : i64 = 31
@@ -32,20 +34,20 @@ let BIG_HDR : i64 = 16               // sign and length, before the limbs
 
 // A block for n limbs.  The limbs are not cleared: every routine here
 // writes each one it counts.
-fn big_new(b : &mut RtB, n : i64) → i64:
+fn big_new(b : &mut rt_portable.RtB, n : i64) → i64:
     let sz : i64 = b.add(b.shl(n, b.cst(3)), b.cst(BIG_HDR))
-    b.call1(RT_ALLOC, sz)
+    b.call1(emit.RT_ALLOC, sz)
 
-fn big_limb(b : &mut RtB, base : i64, i : i64) → i64:
+fn big_limb(b : &mut rt_portable.RtB, base : i64, i : i64) → i64:
     b.ldn(b.add(base, b.shl(i, b.cst(3))), BIG_HDR, 8)
 
-fn big_set(b : &mut RtB, base : i64, i : i64, v : i64):
+fn big_set(b : &mut rt_portable.RtB, base : i64, i : i64, v : i64):
     b.stn(b.add(base, b.shl(i, b.cst(3))), BIG_HDR, v, 8)
 
 // Drop the leading zero limbs a computation left behind, and settle the
 // sign: a magnitude of nothing is zero, whatever the sign was going to
 // be.  `want` is the sign to take where anything is left.
-fn big_settle(b : &mut RtB, h : i64, n : i64, want : i64):
+fn big_settle(b : &mut rt_portable.RtB, h : i64, n : i64, want : i64):
     let ltop : i64 = b.l()
     let lend : i64 = b.l()
     b.lab(ltop)
@@ -63,8 +65,9 @@ fn big_settle(b : &mut RtB, h : i64, n : i64, want : i64):
 // not fit an i64, so it is taken as a bit pattern and masked apart --
 // which is what the masks do for every other value as well, so there
 // is no special case to get wrong.
-fn rt_bigfrom_ir() → IrFn:
-    let b : mut RtB = rtb(1)
+@export
+fn rt_bigfrom_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(1)
     let neg : i64 = b.clts(0, b.cst(0))
     let m : i64 = b.sel(neg, b.sub(b.cst(0), 0), 0)
     let h : i64 = big_new(&b, b.cst(3))
@@ -75,13 +78,14 @@ fn rt_bigfrom_ir() → IrFn:
     b.mov(n, b.cst(3))
     big_settle(&b, h, n, b.sel(neg, b.cst(⁻1), b.cst(1)))
     b.ret(h)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (a, b) → ⁻1, 0 or 1.  Sign first, then how many limbs, then the
 // limbs from the top: the first difference decides, and for two
 // negatives it decides the other way about.
-fn rt_bigcmp_ir() → IrFn:
-    let b : mut RtB = rtb(2)
+@export
+fn rt_bigcmp_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(2)
     let out : i64 = b.t()
     let ldone : i64 = b.l()
     let sa : i64 = b.ldn(0, 0, 8)
@@ -125,7 +129,7 @@ fn rt_bigcmp_ir() → IrFn:
     b.mov(out, b.sel(b.clts(sa, b.cst(0)), b.sub(b.cst(0), mag), mag))
     b.lab(ldone)
     b.ret(out)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (a, b, negb) → a + b, with b's sign flipped first where negb says
 // so.  One routine for both, since a subtraction is an addition of the
@@ -135,8 +139,9 @@ fn rt_bigcmp_ir() → IrFn:
 // the larger and keep the larger's sign.  Which is larger is what
 // RT_BIGCMP already answers, asked of the magnitudes by lending both
 // the same sign.
-fn rt_bigadd_ir() → IrFn:
-    let b : mut RtB = rtb(3)
+@export
+fn rt_bigadd_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(3)
     let sa : i64 = b.ldn(0, 0, 8)
     let sb0 : i64 = b.ldn(1, 0, 8)
     let sb : i64 = b.sel(2, b.sub(b.cst(0), sb0), sb0)
@@ -204,7 +209,7 @@ fn rt_bigadd_ir() → IrFn:
 
     // ---- different signs: the smaller magnitude comes off the larger
     b.lab(ldiff)
-    let c : i64 = b.call2(RT_BIGCMP, 0, 1)
+    let c : i64 = b.call2(emit.RT_BIGCMP, 0, 1)
     let cm : i64 = b.sel(b.clts(sa, b.cst(0)), b.sub(b.cst(0), c), c)
     let hz : i64 = big_new(&b, b.cst(1))
     b.stn(hz, 0, b.cst(0), 8)
@@ -242,14 +247,15 @@ fn rt_bigadd_ir() → IrFn:
     b.mov(out, h2)
     b.lab(ldone)
     b.ret(out)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (a, b) → a × b.  Schoolbook: every limb of one against every limb of
 // the other, the carry riding along.  A limb is under 2^31, so a
 // product is under 2^62 and the running sum of one against a whole
 // row, carry and all, stays inside an i64.
-fn rt_bigmul_ir() → IrFn:
-    let b : mut RtB = rtb(2)
+@export
+fn rt_bigmul_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(2)
     let sa : i64 = b.ldn(0, 0, 8)
     let sb : i64 = b.ldn(1, 0, 8)
     let out : i64 = b.t()
@@ -308,7 +314,7 @@ fn rt_bigmul_ir() → IrFn:
     b.mov(out, h)
     b.lab(ldone)
     b.ret(out)
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)
 
 // (a) → written to stdout.  Nine decimal digits at a time: 10^9 is
 // under 2^30, so dividing the whole number by it is one pass down the
@@ -319,16 +325,17 @@ fn rt_bigmul_ir() → IrFn:
 // The limbs are copied first: a divide is destructive and an int is
 // not, since the value being printed is very often about to be used
 // again.
-fn rt_bigprint_ir() → IrFn:
-    let b : mut RtB = rtb(1)
+@export
+fn rt_bigprint_ir() → ir.IrFn:
+    let b : mut rt_portable.RtB = rt_portable.rtb(1)
     let ldone : i64 = b.l()
     let sign : i64 = b.ldn(0, 0, 8)
     // zero has no digits to divide out, so it is written as itself
     let lnz : i64 = b.l()
     b.jnz(sign, lnz)
-    let zb : i64 = b.call1(RT_ALLOC, b.cst(8))
+    let zb : i64 = b.call1(emit.RT_ALLOC, b.cst(8))
     b.stn(zb, 0, b.cst(48), 1)
-    _ ← b.call2(RT_WRITE1, zb, b.cst(1))
+    _ ← b.call2(emit.RT_WRITE1, zb, b.cst(1))
     b.jmp(ldone)
     b.lab(lnz)
     let n0 : i64 = b.ldn(0, 8, 8)
@@ -347,7 +354,7 @@ fn rt_bigprint_ir() → IrFn:
     // a limb is 31 bits, so ten limbs is under 10^94: ten digits a limb
     // is room and to spare, and one more byte for the sign
     let cap : i64 = b.add(b.mul(n0, b.cst(10)), b.cst(2))
-    let buf : i64 = b.call1(RT_ALLOC, cap)
+    let buf : i64 = b.call1(emit.RT_ALLOC, cap)
     let ix : i64 = b.t()
     b.mov(ix, cap)
     let n : i64 = b.t()
@@ -412,7 +419,7 @@ fn rt_bigprint_ir() → IrFn:
     b.mov(ix, b.sub(ix, b.cst(1)))
     b.stn(b.add(buf, ix), 0, b.cst(45), 1)
     b.lab(lpos)
-    _ ← b.call2(RT_WRITE1, b.add(buf, ix), b.sub(cap, ix))
+    _ ← b.call2(emit.RT_WRITE1, b.add(buf, ix), b.sub(cap, ix))
     b.lab(ldone)
     b.retn()
-    rtb_fn(b)
+    rt_portable.rtb_fn(b)

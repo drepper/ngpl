@@ -1,3 +1,5 @@
+let tokens := @import("./tokens.ngpl")
+
 // ===========================================================================
 // Types: one integer encodes what a value is
 // ===========================================================================
@@ -15,66 +17,94 @@
 //
 // A parameter's type may add 262144×r: r = 1 for a & borrow, 2 for &mut.
 
-@import("./tokens.ngpl")
 
 
+@export
 let TY_UNIT : i64 = 0
+@export
 let TY_BOOL : i64 = 2
+@export
 let TY_STR : i64 = 3
+@export
 let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
+@export
 let TY_U32 : i64 = 20       // what .ord() answers
+@export
 let TY_FILE : i64 = 5       // an open file, its descriptor inside
+@export
 let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
+@export
 let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
+@export
 let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
 // int: the arbitrary-precision integer.  Not one of the sized types --
 // it has no width to be wider or narrower than -- so ty_is_int does
 // not answer for it and every place that meets one says so by name.
 // 11 was std.filetype, which is an enumeration now and had no further
 // use for the number.
+@export
 let TY_INT : i64 = 11
 
+@export
 fn ty_is_bigint(t : i64) → bool:
     t = TY_INT
 
 // std.filetype is an enumeration like any other, and the first one
 // every file holds.  It is reached through std, never by its bare
 // name, so the two lookups that read a written name skip past it.
+@export
 let EI_FILETYPE : i64 = 0
+@export
 let NBUILTIN_ENUMS : i64 = 1
 
+@export
 fn builtin_enum_names() → str[]:
     ["filetype"]
 
+@export
 fn builtin_enum_widths() → i64[]:
     [TY_U32]
 
 // the S_IF* constants from <sys/stat.h>, as the interpreter holds
 // them; the kernel's d_type is this value shifted right twelve
+@export
 fn builtin_enum_members() → str[]:
     ["unknown", "fifo", "chr", "dir", "blk", "reg", "lnk", "sock"]
 
+@export
 fn builtin_enum_values() → i64[]:
     [0, 4096, 8192, 16384, 24576, 32768, 40960, 49152]
+@export
 let TY_IOVEC : i64 = 12     // one run of bytes waiting to be written: a base and a length
+@export
 let TY_HASH : i64 = 13      // std.hash.<alg>.start(): a digest being fed, a piece at a time
+@export
 let TY_BUILD : i64 = 14     // &mut std.Build: what a @build recipe declares a build on
+@export
 let TY_OPTIONS : i64 = 15   // &std.Options: what the command line said, as a recipe reads it
+@export
 let TY_UNT : i64 = 8
+@export
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
+@export
 let TY_I64 : i64 = 23        // 16 + 1 + 2×3, the widest signed
+@export
 let TY_U8 : i64 = 16         // 16 + 0 + 2×0, the narrowest unsigned
 let TY_U16 : i64 = 18        // 16 + 0 + 2×1
 
+@export
 let UNIT_NONE : i64 = 0
+@export
 let UNIT_PTRDIFF : i64 = 1
+@export
 let UNIT_BYTE : i64 = 2
 
 // The measures a file starts with, in the order their indexes run.  A
 // name is what the program writes; the spelling beside it is what a
 // printed value carries, and is the interpreter's for that measure.
 // A unit the program defines is added after these.
+@export
 fn unit_names() → str[]:
     ["", "ptrdiff", "byte", "meter", "second", "kilogram", "count",
      "distance", "kilometer", "centimeter", "millimeter", "millisecond",
@@ -85,15 +115,18 @@ fn unit_names() → str[]:
 // What each measure may stand in for, by index; 0 is "nothing".  The
 // measures the language ships with stand in for nothing: a length is
 // not an index into anything.
+@export
 fn unit_decays() → i64[]:
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 // nothing written beside the measures the language ships with
+@export
 fn unit_none_names() → str[]:
     ["", "", "", "", "", "", "", "", "", "", "", "", "", "",
      "", "", "", "", "", "", "", "", "", "", "", "", ""]
 
+@export
 fn unit_marks() → str[]:
     ["", "ptrdiff", "B", "m", "s", "kg", "count",
      "distance", "km", "cm", "mm", "ms",
@@ -118,23 +151,28 @@ fn mk_ity(sgn : i64, bits : i64, u : i64) → i64:
 // touches; the encoding invariants are enforced at mk_ity and the
 // other constructors instead of per read -- the recorded exception
 // the contract policy allows for measured hot paths.
+@export
 fn ty_is_int(t : i64) → bool:
     t >= 16 and t < 1024
 
+@export
 fn ty_is_struct(t : i64) → bool:
     t >= 1024 and t < 1792
 
 // enums: 1792 + the file's index for the enum.  They sit beside the
 // structs and below 2048 so an optional of one is its base and 2048,
 // as an optional of anything else below there is.
+@export
 fn ty_is_enum(t : i64) → bool:
     t >= 1792 and t < 2048
 
+@export
 @pre(eidx >= 0 and eidx < 256)
 @post(r: ty_is_enum(r))
 fn mk_ety(eidx : i64) → i64:
     1792 + eidx
 
+@export
 @pre(ty_is_enum(t))
 fn ty_eidx(t : i64) → i64:
     t - 1792
@@ -143,51 +181,65 @@ fn ty_eidx(t : i64) → i64:
 // the scalars and the structs.  A tuple's code is far above it, so an
 // optional tuple gets a band of its own past the type variables, and
 // the three words below are the only ones that need to know.
+@export
 fn ty_is_opt(t : i64) → bool:
     t >= 2048 and t < 4096 or (t >= 198176 and t < 202272)
 
+@export
 fn mk_oty(base : i64) → i64:
     if ty_is_tup(base): 198176 + ty_tidx(base) else: 2048 + base
 
+@export
 fn ty_opt_base(t : i64) → i64:
     if t >= 198176: mk_tty(t - 198176) else: t - 2048
 
+@export
 @pre(sidx >= 0 and sidx < 768)
 @post(r: ty_is_struct(r))
 fn mk_sty(sidx : i64) → i64:
     1024 + sidx
 
+@export
 fn ty_sidx(t : i64) → i64:
     t - 1024
 
+@export
 fn ty_sgn(t : i64) → i64:
     (t - 16) & 1
 
+@export
 fn ty_bits(t : i64) → i64:
     8 « (((t - 16) » 1) & 3)
 
+@export
 fn ty_unit(t : i64) → i64:
     (t - 16) » 3
 
+@export
 fn ty_drop_unit(t : i64) → i64:
     if ty_is_int(t): t - 8 × ty_unit(t) else: t
 
+@export
 fn ty_with_unit(t : i64, u : i64) → i64:
     ty_drop_unit(t) + 8 × u
 
 // arrays hold plain integers or structs, so the band closes below the
 // hashes' 8192; keeping the two disjoint is what lets every ty_is_*
 // answer alone, in any order
+@export
 fn ty_is_arr(t : i64) → bool:
     t >= 4096 and t < 8192 or t >= 32768 and t < 65536
 
+@export
 fn ty_elem(t : i64) → i64:
     if t >= 7168 and t < 8192: t - 7168 else: t - 4096
 
+@export
 @pre(elem >= 0 and elem < 4096)
 fn mk_aty(elem : i64) → i64:
     4096 + elem
 
+@export
 fn ty_is_hash(t : i64) → bool:
     t >= 8192 and t < 26624
 
@@ -204,40 +256,49 @@ fn hkey_code(ki : i64) → i64:
     if ki = 8: return TY_STR
     mk_ity((ki ÷ 4) ?? 0, 8 « (ki & 3), 0)
 
+@export
 @pre(v >= 0 and v < 2048)
 @post(r: ty_is_hash(r))
 fn mk_hty(k : i64, v : i64) → i64:
     8192 + hkey_index(k) × 2048 + v
 
+@export
 fn ty_hkey(t : i64) → i64:
     hkey_code(((t - 8192) ÷ 2048) ?? 0)
 
+@export
 fn ty_hval(t : i64) → i64:
     (t - 8192) % 2048 ?? 0
 
 // tuples: 26624 + tidx into the Ast's interned shape table; the band
 // sits between the hashes' end and the ref packing's 65536
+@export
 fn ty_is_tup(t : i64) → bool:
     t >= 26624 and t < 30720
 
 // iterators: 30720 + an interned element type; born of iterate(),
 // stepped by next(), written down by no type syntax at all
+@export
 fn ty_is_iter(t : i64) → bool:
     t >= 30720 and t < 32768
 
+@export
 @pre(ty_is_iter(t))
 fn ty_iidx(t : i64) → i64:
     t - 30720
 
 // sized arrays: 32768 + fidx into the Ast's shape table (element and
 // size); the band fills what is left below the ref packing
+@export
 fn ty_is_farr(t : i64) → bool:
     t >= 32768 and t < 65536
 
+@export
 @pre(ty_is_farr(t))
 fn ty_fidx(t : i64) → i64:
     t - 32768
 
+@export
 @pre(fidx >= 0 and fidx < 32768)
 @post(r: ty_is_farr(r))
 fn mk_fty(fidx : i64) → i64:
@@ -246,13 +307,16 @@ fn mk_fty(fidx : i64) → i64:
 // matrices: 65536 + midx into the Ast's matrix table (element and
 // the two extents, ⁻1 where the type leaves one open); the band sits
 // between the sized arrays' end and the ref packing's 262144
+@export
 fn ty_is_mat(t : i64) → bool:
     t >= 65536 and t < 131072
 
+@export
 @pre(ty_is_mat(t))
 fn ty_midx(t : i64) → i64:
     t - 65536
 
+@export
 @pre(midx >= 0 and midx < 65536)
 @post(r: ty_is_mat(r))
 fn mk_mty(midx : i64) → i64:
@@ -260,13 +324,16 @@ fn mk_mty(midx : i64) → i64:
 
 // ranges: 131072 + the element's own code, no table needed; a range
 // is three numbers and a direction, not a container
+@export
 fn ty_is_rg(t : i64) → bool:
     t >= 131072 and t < 132096
 
+@export
 @pre(ty_is_rg(t))
 fn ty_rgelem(t : i64) → i64:
     t - 131072
 
+@export
 @pre(elem >= 16 and elem < 1024)
 @post(r: ty_is_rg(r))
 fn mk_rgty(elem : i64) → i64:
@@ -274,18 +341,22 @@ fn mk_rgty(elem : i64) → i64:
 
 // lambdas: 132096 + lidx into the Ast's signature table; captures are
 // the value's, not the type's
+@export
 fn ty_is_lam(t : i64) → bool:
     t >= 132096 and t < 194048
 
 // type variables: 194048 + the file-wide index of the spelling; they
 // live in signatures and are gone by the time a body is checked
+@export
 fn ty_is_var(t : i64) → bool:
     t >= 194048 and t < 194080
 
+@export
 @pre(ty_is_lam(t))
 fn ty_lidx(t : i64) → i64:
     t - 132096
 
+@export
 @pre(lidx >= 0 and lidx < 61952)
 @post(r: ty_is_lam(r))
 fn mk_lty(lidx : i64) → i64:
@@ -294,31 +365,38 @@ fn mk_lty(lidx : i64) → i64:
 // a matrix's rows: arrays whose length is the matrix's to keep, so
 // they read as any array does and refuse to be resized; the band
 // borrows the top of the dynamic arrays' own
+@export
 fn ty_is_row(t : i64) → bool:
     t >= 7168 and t < 8192
 
+@export
 @pre(elem >= 0 and elem < 1024)
 @post(r: ty_is_row(r))
 fn mk_rty(elem : i64) → i64:
     7168 + elem
 
+@export
 @pre(ty_is_tup(t))
 fn ty_tidx(t : i64) → i64:
     t - 26624
 
+@export
 @pre(tidx >= 0 and tidx < 4096)
 @post(r: ty_is_tup(r))
 fn mk_tty(tidx : i64) → i64:
     26624 + tidx
 
+@export
 fn ty_ref_kind(t : i64) → i64:
     t » 18
 
+@export
 fn ty_strip_ref(t : i64) → i64:
     t & 262143
 
 // a function travels as a value when its answer is a plain scalar,
 // or an optional of one -- absence rides the box either way
+@export
 fn fnval_ret_ok(r : i64) → bool:
     let b : i64 = if ty_is_opt(r): ty_opt_base(r) else: r
     (ty_is_int(b) and ty_unit(b) = 0) or b = TY_BOOL or b = TY_CHAR or b = TY_STR
@@ -328,6 +406,7 @@ fn fnval_ret_ok(r : i64) → bool:
 // follows the letter has to be digits, and not all of them zero: two
 // questions about the same places, and the second was a flag carried
 // through a loop before there was a way to ask it.
+@export
 fn names_int_type(name : str) → bool:
     #name >= 2 and ("i" ⊑ name or "u" ⊑ name) and (λi : i64 ¤ptrdiff |name| → bool: name[i] >= '0' and name[i] <= '9') ∀ 1…#name - 1 and (λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ '0') ∃ 1…#name - 1
 
@@ -340,6 +419,7 @@ fn names_int_type(name : str) → bool:
 fn type_name(t0 : i64) → str:
     type_name_m(t0, unit_marks())
 
+@export
 @post(r: #r > 0)
 fn type_name_m(t0 : i64, marks : str[]) → str:
     let r : i64 = ty_ref_kind(t0)
@@ -362,22 +442,21 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if ty_is_var(t): return prefix ⧺ "a type variable"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
-    if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
+    if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ tokens.i64_str(ty_sidx(t))
     if ty_is_enum(t):
         // a builtin enum has a name every file knows; a file's own is
         // named by its place, since this function has no file to ask
         let bn := builtin_enum_names()
-        return prefix ⧺ (if ty_eidx(t) < @dropunit(#bn): bn[ty_eidx(t) × 1¤ptrdiff] else: "enum #" ⧺ i64_str(ty_eidx(t)))
+        return prefix ⧺ (if ty_eidx(t) < @dropunit(#bn): bn[ty_eidx(t) × 1¤ptrdiff] else: "enum #" ⧺ tokens.i64_str(ty_eidx(t)))
     if ty_is_tup(t): return prefix ⧺ "a tuple"
     if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks) ⧺ "?"
     if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks) ⧺ "[]"
     if ty_is_hash(t): return prefix ⧺ "std.dict(" ⧺ type_name_m(ty_hkey(t), marks) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks) ⧺ ")"
-    if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
-    if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
-    if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))
-    let base : str = (if ty_sgn(t) = 1: "i" else: "u") ⧺ i64_str(ty_bits(t))
+    if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ tokens.i64_str(ty_tidx(t))
+    if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ tokens.i64_str(ty_fidx(t))
+    if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ tokens.i64_str(ty_iidx(t))
+    let base : str = (if ty_sgn(t) = 1: "i" else: "u") ⧺ tokens.i64_str(ty_bits(t))
     let u : i64 = ty_unit(t)
     if u = 0:
         return base
-    base ⧺ " ¤" ⧺ (if u < @dropunit(#marks): marks[u × 1¤ptrdiff] else: "unit#" ⧺ i64_str(u))
-
+    base ⧺ " ¤" ⧺ (if u < @dropunit(#marks): marks[u × 1¤ptrdiff] else: "unit#" ⧺ tokens.i64_str(u))

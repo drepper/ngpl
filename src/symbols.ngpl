@@ -10,14 +10,15 @@
 // is what a symbol table has to be able to say.
 // ---------------------------------------------------------------------------
 
+let ast := @import("./ast.ngpl")
+let lex := @import("./lex.ngpl")
+let tokens := @import("./tokens.ngpl")
+let types := @import("./types.ngpl")
+
 // FNV-1a over a string's bytes, which is what the hash of a definition
 // is derived from.  The multiply is meant to run off the end of the
 // word -- that is what mixes the bits -- so it wraps.
 
-@import("./tokens.ngpl")
-@import("./types.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
 
 fn fnv1a(t : str) → i64:
     let h : mut i64 = ⁻3750763034362895579
@@ -40,7 +41,7 @@ fn hex16(v : i64) → str:
 // spelled contributes that struct's name alone -- a definition that
 // refers to itself is still one definition, and the spelling has to
 // end.
-fn sdef_norm(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str:
+fn sdef_norm(a : ast.Ast, toks : lex.Toks, src : byte[], si : i64, seen : i64[]) → str:
     let d := a.structs[si × 1¤ptrdiff]
     let n : i64 ¤ptrdiff = a.extra[d.fields_off] × 1¤ptrdiff
     let out : mut str = d.name ⧺ "{"
@@ -51,10 +52,10 @@ fn sdef_norm(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str
     foreach i := 0…n:
         let ftok : i64 = a.extra[d.fields_off + 1 + i × 2]
         let fty : i64 = a.extra[d.fields_off + 2 + i × 2]
-        out ← out ⧺ (if i = 0: "" else: ",") ⧺ run_str(src, toks.off[ftok × 1¤ptrdiff], toks.len[ftok × 1¤ptrdiff]) ⧺ ":" ⧺ sym_type(a, toks, src, fty, deeper)
+        out ← out ⧺ (if i = 0: "" else: ",") ⧺ tokens.run_str(src, toks.off[ftok × 1¤ptrdiff], toks.len[ftok × 1¤ptrdiff]) ⧺ ":" ⧺ sym_type(a, toks, src, fty, deeper)
     out ⧺ "}"
 
-fn struct_sym(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str:
+fn struct_sym(a : ast.Ast, toks : lex.Toks, src : byte[], si : i64, seen : i64[]) → str:
     let d := a.structs[si × 1¤ptrdiff]
     foreach v := seen:
         if v = si:
@@ -63,56 +64,57 @@ fn struct_sym(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → st
     d.name ⧺ "#" ⧺ hex16(fnv1a(sdef_norm(a, toks, src, si, seen)))
 
 // a type as the symbol table spells it
-fn sym_type(a : Ast, toks : Toks, src : byte[], t0 : i64, seen : i64[]) → str:
-    let r : i64 = ty_ref_kind(t0)
-    let t : i64 = ty_strip_ref(t0)
+fn sym_type(a : ast.Ast, toks : lex.Toks, src : byte[], t0 : i64, seen : i64[]) → str:
+    let r : i64 = types.ty_ref_kind(t0)
+    let t : i64 = types.ty_strip_ref(t0)
     let pre : str = if r = 0: "" else: (if r = 1: "&" else: "&mut ")
-    if t = TY_UNIT: return pre ⧺ "∅"
-    if t = TY_BOOL: return pre ⧺ "bool"
-    if t = TY_STR: return pre ⧺ "str"
-    if t = TY_CHAR: return pre ⧺ "char"
-    if t = TY_FILE: return pre ⧺ "std.fs.File"
-    if t = TY_DIR: return pre ⧺ "std.fs.Dir"
-    if t = TY_ENTRY: return pre ⧺ "std.fs.Entry"
-    if t = TY_ALLOC: return pre ⧺ "std.arena.Allocator"
-    if ty_is_enum(t): return pre ⧺ a.enames[ty_eidx(t) × 1¤ptrdiff]
-    if ty_is_struct(t): return pre ⧺ struct_sym(a, toks, src, ty_sidx(t), seen)
-    if ty_is_opt(t): return pre ⧺ sym_type(a, toks, src, ty_opt_base(t), seen) ⧺ "?"
-    if ty_is_rg(t): return pre ⧺ "range(" ⧺ sym_type(a, toks, src, ty_rgelem(t), seen) ⧺ ")"
-    if ty_is_hash(t): return pre ⧺ "std.dict(" ⧺ sym_type(a, toks, src, ty_hkey(t), seen) ⧺ ", " ⧺ sym_type(a, toks, src, ty_hval(t), seen) ⧺ ")"
-    if ty_is_mat(t):
-        let mr : i64 = a.mrr[ty_midx(t) × 1¤ptrdiff]
-        let mc : i64 = a.mcc[ty_midx(t) × 1¤ptrdiff]
-        let md : i64 = a.mdd[ty_midx(t) × 1¤ptrdiff]
-        let tail : str = if md = ⁻2: "" else: (if md = ⁻1: "," else: "," ⧺ i64_str(md))
-        return pre ⧺ sym_type(a, toks, src, a.mel[ty_midx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ (if mr = ⁻1: "" else: i64_str(mr)) ⧺ "," ⧺ (if mc = ⁻1: "" else: i64_str(mc)) ⧺ tail ⧺ "]"
-    if ty_is_farr(t):
-        return pre ⧺ sym_type(a, toks, src, a.fae[ty_fidx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ i64_str(a.fas[ty_fidx(t) × 1¤ptrdiff]) ⧺ "]"
-    if ty_is_row(t) or ty_is_arr(t):
-        return pre ⧺ sym_type(a, toks, src, ty_elem(t), seen) ⧺ "[]"
-    if ty_is_tup(t):
-        let n : i64 = a.ttl[ty_tidx(t) × 1¤ptrdiff]
-        let st : i64 = a.tts[ty_tidx(t) × 1¤ptrdiff]
+    if t = types.TY_UNIT: return pre ⧺ "∅"
+    if t = types.TY_BOOL: return pre ⧺ "bool"
+    if t = types.TY_STR: return pre ⧺ "str"
+    if t = types.TY_CHAR: return pre ⧺ "char"
+    if t = types.TY_FILE: return pre ⧺ "std.fs.File"
+    if t = types.TY_DIR: return pre ⧺ "std.fs.Dir"
+    if t = types.TY_ENTRY: return pre ⧺ "std.fs.Entry"
+    if t = types.TY_ALLOC: return pre ⧺ "std.arena.Allocator"
+    if types.ty_is_enum(t): return pre ⧺ a.enames[types.ty_eidx(t) × 1¤ptrdiff]
+    if types.ty_is_struct(t): return pre ⧺ struct_sym(a, toks, src, types.ty_sidx(t), seen)
+    if types.ty_is_opt(t): return pre ⧺ sym_type(a, toks, src, types.ty_opt_base(t), seen) ⧺ "?"
+    if types.ty_is_rg(t): return pre ⧺ "range(" ⧺ sym_type(a, toks, src, types.ty_rgelem(t), seen) ⧺ ")"
+    if types.ty_is_hash(t): return pre ⧺ "std.dict(" ⧺ sym_type(a, toks, src, types.ty_hkey(t), seen) ⧺ ", " ⧺ sym_type(a, toks, src, types.ty_hval(t), seen) ⧺ ")"
+    if types.ty_is_mat(t):
+        let mr : i64 = a.mrr[types.ty_midx(t) × 1¤ptrdiff]
+        let mc : i64 = a.mcc[types.ty_midx(t) × 1¤ptrdiff]
+        let md : i64 = a.mdd[types.ty_midx(t) × 1¤ptrdiff]
+        let tail : str = if md = ⁻2: "" else: (if md = ⁻1: "," else: "," ⧺ tokens.i64_str(md))
+        return pre ⧺ sym_type(a, toks, src, a.mel[types.ty_midx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ (if mr = ⁻1: "" else: tokens.i64_str(mr)) ⧺ "," ⧺ (if mc = ⁻1: "" else: tokens.i64_str(mc)) ⧺ tail ⧺ "]"
+    if types.ty_is_farr(t):
+        return pre ⧺ sym_type(a, toks, src, a.fae[types.ty_fidx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ tokens.i64_str(a.fas[types.ty_fidx(t) × 1¤ptrdiff]) ⧺ "]"
+    if types.ty_is_row(t) or types.ty_is_arr(t):
+        return pre ⧺ sym_type(a, toks, src, types.ty_elem(t), seen) ⧺ "[]"
+    if types.ty_is_tup(t):
+        let n : i64 = a.ttl[types.ty_tidx(t) × 1¤ptrdiff]
+        let st : i64 = a.tts[types.ty_tidx(t) × 1¤ptrdiff]
         let out : mut str = "("
         foreach i := 0…n:
             out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.tte[(st + i) × 1¤ptrdiff], seen)
         return pre ⧺ out ⧺ ")"
-    if ty_is_lam(t):
-        let n : i64 = a.ltl[ty_lidx(t) × 1¤ptrdiff]
-        let st : i64 = a.lts[ty_lidx(t) × 1¤ptrdiff]
+    if types.ty_is_lam(t):
+        let n : i64 = a.ltl[types.ty_lidx(t) × 1¤ptrdiff]
+        let st : i64 = a.lts[types.ty_lidx(t) × 1¤ptrdiff]
         let out : mut str = "λ("
         foreach i := 0…n:
             out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.lte[(st + i) × 1¤ptrdiff], seen)
         return pre ⧺ out ⧺ ") → " ⧺ sym_type(a, toks, src, a.lte[(st + n) × 1¤ptrdiff], seen)
-    if ty_is_int(t):
-        let base : str = (if ty_sgn(t) = 1: "i" else: "u") ⧺ i64_str(ty_bits(t))
-        if ty_unit(t) = UNIT_PTRDIFF: return pre ⧺ base ⧺ "¤ptrdiff"
-        if ty_unit(t) = UNIT_BYTE: return pre ⧺ base ⧺ "¤byte"
+    if types.ty_is_int(t):
+        let base : str = (if types.ty_sgn(t) = 1: "i" else: "u") ⧺ tokens.i64_str(types.ty_bits(t))
+        if types.ty_unit(t) = types.UNIT_PTRDIFF: return pre ⧺ base ⧺ "¤ptrdiff"
+        if types.ty_unit(t) = types.UNIT_BYTE: return pre ⧺ base ⧺ "¤byte"
         return pre ⧺ base
     pre ⧺ "?"
 
 // the whole signature: the name, the parameters' types, the answer
-fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
+@export
+fn fn_symbol(a : ast.Ast, toks : lex.Toks, src : byte[], f : i64) → str:
     let d := a.fns[f × 1¤ptrdiff]
     let np : i64 ¤ptrdiff = a.extra[d.params_off] × 1¤ptrdiff
     let none : i64[] = []
@@ -121,4 +123,3 @@ fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
     foreach i := 0…np:
         out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.extra[d.params_off + 2 + i × 2], none)
     out ⧺ ") → " ⧺ sym_type(a, toks, src, d.ret, none)
-

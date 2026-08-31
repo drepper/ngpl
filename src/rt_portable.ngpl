@@ -1,3 +1,15 @@
+let arch_a64 := @import("./arch_a64.ngpl")
+let dispatch := @import("./dispatch.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let ir := @import("./ir.ngpl")
+let lower := @import("./lower.ngpl")
+let rt_backtrace := @import("./rt_backtrace.ngpl")
+let rt_bigint := @import("./rt_bigint.ngpl")
+let rt_hash := @import("./rt_hash.ngpl")
+let rt_sha256 := @import("./rt_sha256.ngpl")
+let rt_signal := @import("./rt_signal.ngpl")
+
 // ===========================================================================
 // The portable runtime: written once as IR, for the five that share it
 // ===========================================================================
@@ -11,19 +23,9 @@
 // The pioneer keeps its hand-tuned routines, and the conformance suite
 // holds the two spellings to one behaviour.
 
-@import("./ir.ngpl")
-@import("./lower.ngpl")
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_a64.ngpl")
-@import("./dispatch.ngpl")
-@import("./rt_hash.ngpl")
-@import("./rt_sha256.ngpl")
-@import("./rt_bigint.ngpl")
-@import("./rt_signal.ngpl")
-@import("./rt_backtrace.ngpl")
 
 
+@export
 struct RtB:
     op : i64[]
     ia : i64[]
@@ -35,6 +37,7 @@ struct RtB:
     ntmp : i64
     nlab : i64
 
+@export
 fn rtb(np : i64) → RtB:
     (RtB{op: [], ia: [], ib: [], ic: [], idd: [], iww: [], extra: [],
          ntmp: np, nlab: 0})
@@ -58,101 +61,101 @@ impl RtB:
 
     fn cst(&mut self, v : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CONST, v, 0, 0, d, 0)
+        self.o(ir.IR_CONST, v, 0, 0, d, 0)
         d
 
     fn mov(&mut self, dst : i64, src : i64):
-        self.o(IR_MOV, src, 0, 0, dst, 0)
+        self.o(ir.IR_MOV, src, 0, 0, dst, 0)
 
     fn add(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_ADDW, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_ADDW, a, b, 0, d, 64 + 256)
         d
 
     fn sub(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SUBW, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_SUBW, a, b, 0, d, 64 + 256)
         d
 
     fn mul(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_MULW, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_MULW, a, b, 0, d, 64 + 256)
         d
 
     fn band(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_BAND, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_BAND, a, b, 0, d, 64 + 256)
         d
 
     fn bor(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_BORR, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_BORR, a, b, 0, d, 64 + 256)
         d
 
     fn shl(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SHLL, a, b, 0, d, 64)
+        self.o(ir.IR_SHLL, a, b, 0, d, 64)
         d
 
     fn shr(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SHRR, a, b, 0, d, 64)
+        self.o(ir.IR_SHRR, a, b, 0, d, 64)
         d
 
     // unsigned division and remainder; the divisor is never zero here,
     // so the default lane is fed the dividend and cannot be taken
     fn udiv(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_DIVV, a, b, a, d, 64)
+        self.o(ir.IR_DIVV, a, b, a, d, 64)
         d
 
     fn umod(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_MODD, a, b, a, d, 64)
+        self.o(ir.IR_MODD, a, b, a, d, 64)
         d
 
     // comparisons, unsigned unless said otherwise
     fn ceq(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CEQ, a, b, 0, d, 64)
+        self.o(ir.IR_CEQ, a, b, 0, d, 64)
         d
 
     fn cne(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CNE, a, b, 0, d, 64)
+        self.o(ir.IR_CNE, a, b, 0, d, 64)
         d
 
     fn cltu(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CLT, a, b, 0, d, 64)
+        self.o(ir.IR_CLT, a, b, 0, d, 64)
         d
 
     fn cgeu(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CGE, a, b, 0, d, 64)
+        self.o(ir.IR_CGE, a, b, 0, d, 64)
         d
 
     fn clts(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_CLT, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_CLT, a, b, 0, d, 64 + 256)
         d
 
     fn sel(&mut self, c : i64, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SEL, c, a, b, d, 0)
+        self.o(ir.IR_SEL, c, a, b, d, 0)
         d
 
     fn jz(&mut self, v : i64, lab : i64):
-        self.o(IR_JZ, v, lab, 0, 0, 0)
+        self.o(ir.IR_JZ, v, lab, 0, 0, 0)
 
     fn jnz(&mut self, v : i64, lab : i64):
-        self.o(IR_JNZ, v, lab, 0, 0, 0)
+        self.o(ir.IR_JNZ, v, lab, 0, 0, 0)
 
     fn jmp(&mut self, lab : i64):
-        self.o(IR_JMP, lab, 0, 0, 0, 0)
+        self.o(ir.IR_JMP, lab, 0, 0, 0, 0)
 
     fn lab(&mut self, l : i64):
-        self.o(IR_LABEL, l, 0, 0, 0, 0)
+        self.o(ir.IR_LABEL, l, 0, 0, 0, 0)
 
     // The same four at thirty-two bits.  A width narrower than the
     // machine's costs nothing extra here -- the driver's t_canon
@@ -161,76 +164,76 @@ impl RtB:
     // in the IR what the arithmetic actually is.
     fn add32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_ADDW, a, b, 0, d, 32)
+        self.o(ir.IR_ADDW, a, b, 0, d, 32)
         d
 
     fn shl32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SHLL, a, b, 0, d, 32)
+        self.o(ir.IR_SHLL, a, b, 0, d, 32)
         d
 
     // no narrowing follows a right shift, so what goes in must already
     // be a thirty-two bit value; everything here is
     fn shr32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_SHRR, a, b, 0, d, 32)
+        self.o(ir.IR_SHRR, a, b, 0, d, 32)
         d
 
     fn bnot32(&mut self, a : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_BNOTT, a, 0, 0, d, 32)
+        self.o(ir.IR_BNOTT, a, 0, 0, d, 32)
         d
 
     // raw memory, the runtime's own privilege
     fn bxor(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_BXORR, a, b, 0, d, 64 + 256)
+        self.o(ir.IR_BXORR, a, b, 0, d, 64 + 256)
         d
 
     fn bnot(&mut self, a : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_BNOTT, a, 0, 0, d, 64 + 256)
+        self.o(ir.IR_BNOTT, a, 0, 0, d, 64 + 256)
         d
 
     fn ldn(&mut self, base : i64, off : i64, w : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_LDN, base, off, 0, d, w)
+        self.o(ir.IR_LDN, base, off, 0, d, w)
         d
 
     fn stn(&mut self, base : i64, off : i64, v : i64, w : i64):
-        self.o(IR_STN, base, off, v, 0, w)
+        self.o(ir.IR_STN, base, off, v, 0, w)
 
     // the address of a runtime routine, for the one thing that wants
     // one rather than a jump to it: handing a handler to the kernel
     fn faddr(&mut self, target : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_FADDR, target, 0, 0, d, 0)
+        self.o(ir.IR_FADDR, target, 0, 0, d, 0)
         d
 
     fn kaddr(&mut self, which : i64, off : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_KADDR, which, off, 0, d, 0)
+        self.o(ir.IR_KADDR, which, off, 0, d, 0)
         d
 
     // the routine's own frame, for the few bytes a routine needs
     // somewhere to put and nowhere to keep
     fn frame(&mut self, off : i64) → i64:
         let d : i64 = self.t()
-        self.o(IR_FRAME, off, 0, 0, d, 0)
+        self.o(ir.IR_FRAME, off, 0, 0, d, 0)
         d
 
     // where this frame stands, which is where a walk over the frames
     // starts
     fn fptr(&mut self) → i64:
         let d : i64 = self.t()
-        self.o(IR_FPTR, 0, 0, 0, d, 0)
+        self.o(ir.IR_FPTR, 0, 0, 0, d, 0)
         d
 
     // the table the backtrace reads, which the compiler leaves in the
     // read-only data
     fn btaddr(&mut self) → i64:
         let d : i64 = self.t()
-        self.o(IR_BTADDR, 0, 0, 0, d, 0)
+        self.o(ir.IR_BTADDR, 0, 0, 0, d, 0)
         d
 
     // calls into the rest of the runtime
@@ -238,7 +241,7 @@ impl RtB:
         let d : i64 = self.t()
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(0)
-        self.o(IR_CALL, target, off, 0, d, 0)
+        self.o(ir.IR_CALL, target, off, 0, d, 0)
         d
 
     fn call1(&mut self, target : i64, a0 : i64) → i64:
@@ -246,7 +249,7 @@ impl RtB:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(1)
         self.extra.push(a0)
-        self.o(IR_CALL, target, off, 0, d, 0)
+        self.o(ir.IR_CALL, target, off, 0, d, 0)
         d
 
     fn call2(&mut self, target : i64, a0 : i64, a1 : i64) → i64:
@@ -255,7 +258,7 @@ impl RtB:
         self.extra.push(2)
         self.extra.push(a0)
         self.extra.push(a1)
-        self.o(IR_CALL, target, off, 0, d, 0)
+        self.o(ir.IR_CALL, target, off, 0, d, 0)
         d
 
     fn call3(&mut self, target : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
@@ -265,7 +268,7 @@ impl RtB:
         self.extra.push(a0)
         self.extra.push(a1)
         self.extra.push(a2)
-        self.o(IR_CALL, target, off, 0, d, 0)
+        self.o(ir.IR_CALL, target, off, 0, d, 0)
         d
 
     // the kernel; up to six arguments from slots
@@ -274,7 +277,7 @@ impl RtB:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(1)
         self.extra.push(a0)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn sys2(&mut self, id : i64, a0 : i64, a1 : i64) → i64:
@@ -283,7 +286,7 @@ impl RtB:
         self.extra.push(2)
         self.extra.push(a0)
         self.extra.push(a1)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn sys3(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
@@ -293,7 +296,7 @@ impl RtB:
         self.extra.push(a0)
         self.extra.push(a1)
         self.extra.push(a2)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn sys4(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64) → i64:
@@ -304,7 +307,7 @@ impl RtB:
         self.extra.push(a1)
         self.extra.push(a2)
         self.extra.push(a3)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn sys5(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64, a4 : i64) → i64:
@@ -316,7 +319,7 @@ impl RtB:
         self.extra.push(a2)
         self.extra.push(a3)
         self.extra.push(a4)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn sys6(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64, a4 : i64, a5 : i64) → i64:
@@ -329,57 +332,60 @@ impl RtB:
         self.extra.push(a3)
         self.extra.push(a4)
         self.extra.push(a5)
-        self.o(IR_SYSC, id, off, 0, d, 0)
+        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
         d
 
     fn ret(&mut self, v : i64):
-        self.o(IR_RET, v, 0, 0, 0, 0)
+        self.o(ir.IR_RET, v, 0, 0, 0, 0)
 
     fn retn(&mut self):
-        self.o(IR_RET, ⁻1, 0, 0, 0, 0)
+        self.o(ir.IR_RET, ⁻1, 0, 0, 0, 0)
 
     fn abort_msg(&mut self, strid : i64):
-        self.o(IR_ABORT, strid, 0, 0, 0, 0)
+        self.o(ir.IR_ABORT, strid, 0, 0, 0, 0)
 
     // the same message, on the error stream, without the leaving
     fn eprint_msg(&mut self, strid : i64):
-        self.o(IR_EPRINTS, strid, 0, 0, 0, 0)
+        self.o(ir.IR_EPRINTS, strid, 0, 0, 0, 0)
 
-fn rtb_fn(b : RtB) → IrFn:
-    (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+@export
+fn rtb_fn(b : RtB) → ir.IrFn:
+    (ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
           extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab, fbytes: 0¤byte})
 
 // the same, for a routine that asked for bytes of its own frame.  The
 // count arrives without a measure and is given one here, since what
 // the bootstrap subset writes a unit on is a literal and not a name.
-fn rtb_deep_fn(b : RtB, nbytes : i64) → IrFn:
-    (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+@export
+fn rtb_deep_fn(b : RtB, nbytes : i64) → ir.IrFn:
+    (ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
           extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab,
           fbytes: nbytes × 1¤byte})
 
 // each runtime routine, one builder; the id picks it
-fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+@export
+fn rt_build(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     // the routines every target takes from here, the pioneer with the
     // rest: rt_hash.ngpl and rt_sha256.ngpl write them, and nobody
     // writes them twice
-    if id = RT_HSTART: return rt_hstart_ir()
-    if id = RT_HUPDATE: return rt_hupdate_ir(&lw)
-    if id = RT_HFINAL: return rt_hfinal_ir(&lw)
-    if id = RT_SHA256INIT: return rt_sha256init_ir()
-    if id = RT_SHA256BLK: return rt_sha256blk_ir()
-    if id = RT_SHA256FIN: return rt_sha256fin_ir()
-    if id = RT_BIGFROM: return rt_bigfrom_ir()
-    if id = RT_BIGCMP: return rt_bigcmp_ir()
-    if id = RT_BIGADD: return rt_bigadd_ir()
-    if id = RT_BIGMUL: return rt_bigmul_ir()
-    if id = RT_BIGPRINT: return rt_bigprint_ir()
-    if id = RT_SIGINIT: return rt_siginit_ir(tg)
-    if id = RT_SEGV: return rt_segv_ir(tg, &lw)
-    if id = RT_BT: return rt_bt_ir(tg, &lw)
-    if id = RT_WRITE1 or id = RT_WRITE2:
+    if id = emit.RT_HSTART: return rt_hash.rt_hstart_ir()
+    if id = emit.RT_HUPDATE: return rt_hash.rt_hupdate_ir(&lw)
+    if id = emit.RT_HFINAL: return rt_hash.rt_hfinal_ir(&lw)
+    if id = emit.RT_SHA256INIT: return rt_sha256.rt_sha256init_ir()
+    if id = emit.RT_SHA256BLK: return rt_sha256.rt_sha256blk_ir()
+    if id = emit.RT_SHA256FIN: return rt_sha256.rt_sha256fin_ir()
+    if id = emit.RT_BIGFROM: return rt_bigint.rt_bigfrom_ir()
+    if id = emit.RT_BIGCMP: return rt_bigint.rt_bigcmp_ir()
+    if id = emit.RT_BIGADD: return rt_bigint.rt_bigadd_ir()
+    if id = emit.RT_BIGMUL: return rt_bigint.rt_bigmul_ir()
+    if id = emit.RT_BIGPRINT: return rt_bigint.rt_bigprint_ir()
+    if id = emit.RT_SIGINIT: return rt_signal.rt_siginit_ir(tg)
+    if id = emit.RT_SEGV: return rt_signal.rt_segv_ir(tg, &lw)
+    if id = emit.RT_BT: return rt_backtrace.rt_bt_ir(tg, &lw)
+    if id = emit.RT_WRITE1 or id = emit.RT_WRITE2:
         // (buf, len): the loop puts every byte down or dies trying
         let b : mut RtB = rtb(2)
-        let fd : i64 = b.cst(if id = RT_WRITE1: 1 else: 2)
+        let fd : i64 = b.cst(if id = emit.RT_WRITE1: 1 else: 2)
         let done : i64 = b.t()
         let z : i64 = b.cst(0)
         b.mov(done, z)
@@ -389,7 +395,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let left : i64 = b.sub(1, done)
         b.jz(left, lend)
         let at : i64 = b.add(0, done)
-        let r : i64 = b.sys3(SC_WRITE, fd, at, left)
+        let r : i64 = b.sys3(arch_a64.SC_WRITE, fd, at, left)
         let bad : i64 = b.clts(r, b.cst(1))
         b.jnz(bad, lend)
         let nd : i64 = b.add(done, r)
@@ -398,33 +404,33 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.retn()
         return rtb_fn(b)
-    if id = RT_ABORT:
+    if id = emit.RT_ABORT:
         // (buf, len): say it, say how the program got here, then leave
         // through exit with a status rather than through a signal
         let b : mut RtB = rtb(2)
-        _ ← b.call2(RT_WRITE2, 0, 1)
-        _ ← b.call0(RT_BT)
-        _ ← b.sys1(SC_EXIT, b.cst(EXIT_STOP))
+        _ ← b.call2(emit.RT_WRITE2, 0, 1)
+        _ ← b.call0(emit.RT_BT)
+        _ ← b.sys1(arch_a64.SC_EXIT, b.cst(emit.EXIT_STOP))
         let spin : i64 = b.l()
         b.lab(spin)
         b.jmp(spin)
         return rtb_fn(b)
-    if id = RT_OV or id = RT_SHIFT or id = RT_BOUNDS or id = RT_OOM or id = RT_BADCHAR or id = RT_BADFIT:
+    if id = emit.RT_OV or id = emit.RT_SHIFT or id = emit.RT_BOUNDS or id = emit.RT_OOM or id = emit.RT_BADCHAR or id = emit.RT_BADFIT:
         let b : mut RtB = rtb(0)
         let msg : mut str = "integer overflow\n"
-        if id = RT_SHIFT:
+        if id = emit.RT_SHIFT:
             msg ← "shift count is past the type\n"
-        elif id = RT_BOUNDS:
+        elif id = emit.RT_BOUNDS:
             msg ← "index out of range\n"
-        elif id = RT_OOM:
+        elif id = emit.RT_OOM:
             msg ← "out of memory\n"
-        elif id = RT_BADCHAR:
+        elif id = emit.RT_BADCHAR:
             msg ← "not a character: past the code points or a surrogate\n"
-        elif id = RT_BADFIT:
+        elif id = emit.RT_BADFIT:
             msg ← "the value does not fit the type it meets\n"
         b.abort_msg(lw.intern(msg))
         return rtb_fn(b)
-    if id = RT_ALLOC:
+    if id = emit.RT_ALLOC:
         // (size) → address; a block given back of exactly this size,
         // and otherwise a sixteen-aligned bump over mmap regions
         let b : mut RtB = rtb(1)
@@ -433,11 +439,11 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let sz : i64 = b.band(b.add(0, fifteen), mask)
         let k : i64 = b.kaddr(1, 0)
         // the slot this size maps to, and the block at its head
-        let hd : i64 = b.add(k, b.add(b.cst(AL_FREE),
+        let hd : i64 = b.add(k, b.add(b.cst(emit.AL_FREE),
                                       b.shl(b.band(b.shr(b.mul(b.shr(sz, b.cst(4)),
-                                                               b.cst(AL_MIX)),
-                                                         b.cst(AL_SHIFT)),
-                                                   b.cst(AL_SLOTS - 1)),
+                                                               b.cst(emit.AL_MIX)),
+                                                         b.cst(emit.AL_SHIFT)),
+                                                   b.cst(emit.AL_SLOTS - 1)),
                                             b.cst(3))))
         let first : i64 = b.ldn(hd, 0, 8)
         let lbump : i64 = b.l()
@@ -445,8 +451,8 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         // exactly this size, or it is not this block: a slot holds
         // whatever sizes map to it, and handing back a block that is
         // too small is the one mistake that must not happen here
-        b.jz(b.ceq(b.ldn(first, FB_SIZE, 8), sz), lbump)
-        b.stn(hd, 0, b.ldn(first, FB_NEXT, 8), 8)
+        b.jz(b.ceq(b.ldn(first, emit.FB_SIZE, 8), sz), lbump)
+        b.stn(hd, 0, b.ldn(first, emit.FB_NEXT, 8), 8)
         b.ret(first)
         b.lab(lbump)
         let nxt : i64 = b.ldn(k, 0, 8)
@@ -469,11 +475,11 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let prot : i64 = b.cst(3)
         let fl : i64 = b.cst(34)
         let m1 : i64 = b.cst(⁻1)
-        let r : i64 = b.sys6(SC_MMAP, z2, len2, prot, fl, m1, z2)
+        let r : i64 = b.sys6(arch_a64.SC_MMAP, z2, len2, prot, fl, m1, z2)
         let neg : i64 = b.clts(r, z2)
         let lok : i64 = b.l()
         b.jz(neg, lok)
-        _ ← b.call0(RT_OOM)
+        _ ← b.call0(emit.RT_OOM)
         b.lab(lok)
         let e : i64 = b.add(r, len2)
         b.stn(k, 8, e, 8)
@@ -481,7 +487,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.stn(k, 0, n2, 8)
         b.ret(r)
         return rtb_fn(b)
-    if id = RT_FREE:
+    if id = emit.RT_FREE:
         // (ptr, size): the block goes on the list for its size, and
         // holds the list in its own first two words.  Nothing smaller
         // than those two words is taken back, since there would be
@@ -493,25 +499,25 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let lout : i64 = b.l()
         b.jz(b.cltu(b.cst(15), sz), lout)
         let k : i64 = b.kaddr(1, 0)
-        let hd : i64 = b.add(k, b.add(b.cst(AL_FREE),
+        let hd : i64 = b.add(k, b.add(b.cst(emit.AL_FREE),
                                       b.shl(b.band(b.shr(b.mul(b.shr(sz, b.cst(4)),
-                                                               b.cst(AL_MIX)),
-                                                         b.cst(AL_SHIFT)),
-                                                   b.cst(AL_SLOTS - 1)),
+                                                               b.cst(emit.AL_MIX)),
+                                                         b.cst(emit.AL_SHIFT)),
+                                                   b.cst(emit.AL_SLOTS - 1)),
                                             b.cst(3))))
-        b.stn(0, FB_NEXT, b.ldn(hd, 0, 8), 8)
-        b.stn(0, FB_SIZE, sz, 8)
+        b.stn(0, emit.FB_NEXT, b.ldn(hd, 0, 8), 8)
+        b.stn(0, emit.FB_SIZE, sz, 8)
         b.stn(hd, 0, 0, 8)
         b.lab(lout)
         b.ret(0)
         return rtb_fn(b)
-    if id = RT_ARRNEW:
+    if id = emit.RT_ARRNEW:
         // (cap) → descriptor {slots, len, cap}, the slots in line
         let b : mut RtB = rtb(1)
         let three : i64 = b.cst(3)
         let hdr : i64 = b.cst(24)
         let sz : i64 = b.add(b.shl(0, three), hdr)
-        let h : i64 = b.call1(RT_ALLOC, sz)
+        let h : i64 = b.call1(emit.RT_ALLOC, sz)
         let slots : i64 = b.add(h, hdr)
         b.stn(h, 0, slots, 8)
         let z : i64 = b.cst(0)
@@ -519,7 +525,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.stn(h, 16, 0, 8)
         b.ret(h)
         return rtb_fn(b)
-    if id = RT_ARRPUSH:
+    if id = emit.RT_ARRPUSH:
         // (h, v): the array grows by doubling when it must
         let b : mut RtB = rtb(2)
         let len : i64 = b.ldn(0, 8, 8)
@@ -533,7 +539,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let small : i64 = b.cltu(ncap0, four)
         let ncap : i64 = b.sel(small, four, ncap0)
         let three : i64 = b.cst(3)
-        let nb : i64 = b.call1(RT_ALLOC, b.shl(ncap, three))
+        let nb : i64 = b.call1(emit.RT_ALLOC, b.shl(ncap, three))
         let old : i64 = b.ldn(0, 0, 8)
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
@@ -559,7 +565,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let inline0 : i64 = b.add(0, b.cst(24))
         let lkeep : i64 = b.l()
         b.jz(b.cne(old, inline0), lkeep)
-        _ ← b.call2(RT_FREE, old, b.shl(cap, three))
+        _ ← b.call2(emit.RT_FREE, old, b.shl(cap, three))
         b.lab(lkeep)
         b.stn(0, 0, nb, 8)
         b.stn(0, 16, ncap, 8)
@@ -571,7 +577,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.stn(0, 8, b.add(len, one2), 8)
         b.retn()
         return rtb_fn(b)
-    if id = RT_CONCAT:
+    if id = emit.RT_CONCAT:
         // (a, b) → the joined string, bytes then a fresh descriptor
         let b : mut RtB = rtb(2)
         let la : i64 = b.ldn(0, 8, 8)
@@ -580,17 +586,17 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let one : i64 = b.cst(1)
         let small : i64 = b.cltu(n, one)
         let n1 : i64 = b.sel(small, one, n)
-        let p : i64 = b.call1(RT_ALLOC, n1)
+        let p : i64 = b.call1(emit.RT_ALLOC, n1)
         let pa : i64 = b.ldn(0, 0, 8)
         rt_copy_bytes(&b, pa, p, la)
         let pb : i64 = b.ldn(1, 0, 8)
         rt_copy_bytes(&b, pb, b.add(p, la), lb)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, p, 8)
         b.stn(dsc, 8, n, 8)
         b.ret(dsc)
         return rtb_fn(b)
-    if id = RT_STREQ:
+    if id = emit.RT_STREQ:
         let b : mut RtB = rtb(2)
         let la : i64 = b.ldn(0, 8, 8)
         let lb : i64 = b.ldn(1, 8, 8)
@@ -619,7 +625,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lno)
         b.ret(b.cst(0))
         return rtb_fn(b)
-    if id = RT_STRCHARS:
+    if id = emit.RT_STRCHARS:
         // (s) → how many characters: the bytes that begin one
         let b : mut RtB = rtb(1)
         let p : i64 = b.ldn(0, 0, 8)
@@ -645,20 +651,20 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.ret(cnt)
         return rtb_fn(b)
-    if id = RT_PRINTSTR:
+    if id = emit.RT_PRINTSTR:
         let b : mut RtB = rtb(1)
         let p : i64 = b.ldn(0, 0, 8)
         let n : i64 = b.ldn(0, 8, 8)
-        _ ← b.call2(RT_WRITE1, p, n)
+        _ ← b.call2(emit.RT_WRITE1, p, n)
         b.retn()
         return rtb_fn(b)
-    if id = RT_PRINTI or id = RT_PRINTU:
+    if id = emit.RT_PRINTI or id = emit.RT_PRINTU:
         // (v): decimal onto fd 1, built least digit first
         let b : mut RtB = rtb(1)
-        let buf : i64 = b.call1(RT_ALLOC, b.cst(24))
+        let buf : i64 = b.call1(emit.RT_ALLOC, b.cst(24))
         let z : i64 = b.cst(0)
         let neg : mut i64 = z
-        if id = RT_PRINTI:
+        if id = emit.RT_PRINTI:
             neg ← b.clts(0, z)
             let nv : i64 = b.sub(z, 0)
             b.mov(0, b.sel(neg, nv, 0))
@@ -673,14 +679,14 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.mov(ix, b.sub(ix, one))
         b.stn(b.add(buf, ix), 0, b.add(dgt, b.cst(48)), 1)
         b.jnz(0, ltop)
-        if id = RT_PRINTI:
+        if id = emit.RT_PRINTI:
             let lpos : i64 = b.l()
             b.jz(neg, lpos)
             b.mov(ix, b.sub(ix, one))
             b.stn(b.add(buf, ix), 0, b.cst(45), 1)
             b.lab(lpos)
         let n24 : i64 = b.cst(24)
-        _ ← b.call2(RT_WRITE1, b.add(buf, ix), b.sub(n24, ix))
+        _ ← b.call2(emit.RT_WRITE1, b.add(buf, ix), b.sub(n24, ix))
         b.retn()
         return rtb_fn(b)
     rt_build2(id, tg, &lw)
@@ -704,14 +710,14 @@ fn rt_copy_bytes(b : &mut RtB, src : i64, dst : i64, n : i64):
 
 // the rest of the runtime: hashes, characters, the kernel block,
 // files, and the array helpers
-fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
-    if id = RT_HNEW:
+fn rt_build2(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
+    if id = emit.RT_HNEW:
         // (cap, iskeystr) → {iskeystr, pairs, count, cap, index, icap}
         let b : mut RtB = rtb(2)
-        let h : i64 = b.call1(RT_ALLOC, b.cst(48))
+        let h : i64 = b.call1(emit.RT_ALLOC, b.cst(48))
         b.stn(h, 0, 1, 8)
         let four : i64 = b.cst(4)
-        let pairs : i64 = b.call1(RT_ALLOC, b.shl(0, four))
+        let pairs : i64 = b.call1(emit.RT_ALLOC, b.shl(0, four))
         b.stn(h, 8, pairs, 8)
         let z : i64 = b.cst(0)
         b.stn(h, 16, z, 8)
@@ -719,13 +725,13 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let one : i64 = b.cst(1)
         let icap : i64 = b.shl(0, one)
         let three : i64 = b.cst(3)
-        let idx : i64 = b.call1(RT_ALLOC, b.shl(icap, three))
+        let idx : i64 = b.call1(emit.RT_ALLOC, b.shl(icap, three))
         rt_zero_words(&b, idx, icap)
         b.stn(h, 32, idx, 8)
         b.stn(h, 40, icap, 8)
         b.ret(h)
         return rtb_fn(b)
-    if id = RT_HFIND:
+    if id = emit.RT_HFIND:
         // (h, key) → (slot « 1) | found: where the key sits in the
         // index, or where it would go
         let b : mut RtB = rtb(2)
@@ -764,7 +770,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let lcmp2 : i64 = b.l()
         let lcmpd : i64 = b.l()
         b.jz(iskey, lcmp2)
-        b.mov(same, b.call2(RT_STREQ, ke, 1))
+        b.mov(same, b.call2(emit.RT_STREQ, ke, 1))
         b.jmp(lcmpd)
         b.lab(lcmp2)
         b.mov(same, b.ceq(ke, 1))
@@ -777,30 +783,30 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lmiss)
         b.ret(b.shl(pos, one))
         return rtb_fn(b)
-    if id = RT_HGET:
+    if id = emit.RT_HGET:
         let b : mut RtB = rtb(2)
-        let f : i64 = b.call2(RT_HFIND, 0, 1)
+        let f : i64 = b.call2(emit.RT_HFIND, 0, 1)
         let one : i64 = b.cst(1)
         let found : i64 = b.band(f, one)
         let lno : i64 = b.l()
         b.jz(found, lno)
         let v : i64 = rt_hentry_val(&b, f)
-        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        let box : i64 = b.call1(emit.RT_ALLOC, b.cst(8))
         b.stn(box, 0, v, 8)
         b.ret(box)
         b.lab(lno)
         b.ret(b.cst(0))
         return rtb_fn(b)
-    if id = RT_HELEM:
+    if id = emit.RT_HELEM:
         let b : mut RtB = rtb(2)
-        let f : i64 = b.call2(RT_HFIND, 0, 1)
+        let f : i64 = b.call2(emit.RT_HFIND, 0, 1)
         let one : i64 = b.cst(1)
         b.ret(b.band(f, one))
         return rtb_fn(b)
-    if id = RT_HPUT:
+    if id = emit.RT_HPUT:
         let b : mut RtB = rtb(3)
         let f : i64 = b.t()
-        b.mov(f, b.call2(RT_HFIND, 0, 1))
+        b.mov(f, b.call2(emit.RT_HFIND, 0, 1))
         let one : i64 = b.cst(1)
         let found : i64 = b.band(f, one)
         let lnew : i64 = b.l()
@@ -824,8 +830,8 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let tight : i64 = b.cltu(rhs, lhs)
         let lroom : i64 = b.l()
         b.jz(tight, lroom)
-        _ ← b.call1(RT_HGROW, 0)
-        b.mov(f, b.call2(RT_HFIND, 0, 1))
+        _ ← b.call1(emit.RT_HGROW, 0)
+        b.mov(f, b.call2(emit.RT_HFIND, 0, 1))
         b.lab(lroom)
         // the pairs block doubles as it fills
         let cnt2 : i64 = b.ldn(0, 16, 8)
@@ -839,7 +845,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let smallp : i64 = b.cltu(ncap0, eight)
         let ncap : i64 = b.sel(smallp, eight, ncap0)
         let four2 : i64 = b.cst(4)
-        let np : i64 = b.call1(RT_ALLOC, b.shl(ncap, four2))
+        let np : i64 = b.call1(emit.RT_ALLOC, b.shl(ncap, four2))
         let op : i64 = b.ldn(0, 8, 8)
         rt_zero_words(&b, np, b.cst(0))
         rt_copy_words(&b, op, np, b.shl(cnt2, b.cst(1)))
@@ -857,14 +863,14 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.stn(0, 16, b.add(cnt2, b.cst(1)), 8)
         b.retn()
         return rtb_fn(b)
-    if id = RT_HGROW:
+    if id = emit.RT_HGROW:
         // (h): a wider index, every entry re-homed by its key
         let b : mut RtB = rtb(1)
         let one : i64 = b.cst(1)
         let three : i64 = b.cst(3)
         let icap : i64 = b.ldn(0, 40, 8)
         let ncap : i64 = b.shl(icap, one)
-        let idx : i64 = b.call1(RT_ALLOC, b.shl(ncap, three))
+        let idx : i64 = b.call1(emit.RT_ALLOC, b.shl(ncap, three))
         rt_zero_words(&b, idx, ncap)
         b.stn(0, 32, idx, 8)
         b.stn(0, 40, ncap, 8)
@@ -880,14 +886,14 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let more : i64 = b.cltu(e, cnt)
         b.jz(more, lend)
         let ke : i64 = b.ldn(b.add(pairs, b.shl(e, four)), 0, 8)
-        let f : i64 = b.call2(RT_HFIND, 0, ke)
+        let f : i64 = b.call2(emit.RT_HFIND, 0, ke)
         b.stn(b.add(idx, b.shl(b.shr(f, one), three)), 0, b.add(e, one), 8)
         b.mov(e, b.add(e, one))
         b.jmp(ltop)
         b.lab(lend)
         b.retn()
         return rtb_fn(b)
-    if id = RT_STRIDX or id = RT_STRNEXT:
+    if id = emit.RT_STRIDX or id = emit.RT_STRNEXT:
         // (s, i): the character at a position -- counted in characters
         // for STRIDX, begun at a byte for STRNEXT, which also answers
         // where the next begins, packed above the code point
@@ -897,7 +903,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let at : i64 = b.t()
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
-        if id = RT_STRIDX:
+        if id = emit.RT_STRIDX:
             b.mov(at, z)
             // skip as many characters as the position names
             let want : i64 = b.t()
@@ -909,7 +915,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
             let inb : i64 = b.cltu(at, n)
             let lok : i64 = b.l()
             b.jnz(inb, lok)
-            _ ← b.call0(RT_BOUNDS)
+            _ ← b.call0(emit.RT_BOUNDS)
             b.lab(lok)
             b.mov(at, b.add(at, rt_charlen(&b, p, at)))
             b.mov(want, b.sub(want, one))
@@ -918,7 +924,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
             let inb2 : i64 = b.cltu(at, n)
             let lok2 : i64 = b.l()
             b.jnz(inb2, lok2)
-            _ ← b.call0(RT_BOUNDS)
+            _ ← b.call0(emit.RT_BOUNDS)
             b.lab(lok2)
             b.ret(rt_decode(&b, p, at))
         else:
@@ -928,11 +934,11 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
             let s32 : i64 = b.cst(32)
             b.ret(b.bor(b.shl(nxt, s32), cp))
         return rtb_fn(b)
-    if id = RT_CHARS:
+    if id = emit.RT_CHARS:
         let b : mut RtB = rtb(1)
         let p : i64 = b.ldn(0, 0, 8)
         let n : i64 = b.ldn(0, 8, 8)
-        let out : i64 = b.call1(RT_ARRNEW, b.cst(4))
+        let out : i64 = b.call1(emit.RT_ARRNEW, b.cst(4))
         let at : i64 = b.t()
         let z : i64 = b.cst(0)
         b.mov(at, z)
@@ -941,13 +947,13 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let more : i64 = b.cltu(at, n)
         b.jz(more, lend)
-        _ ← b.call2(RT_ARRPUSH, out, rt_decode(&b, p, at))
+        _ ← b.call2(emit.RT_ARRPUSH, out, rt_decode(&b, p, at))
         b.mov(at, b.add(at, rt_charlen(&b, p, at)))
         b.jmp(ltop)
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_SSLICE:
+    if id = emit.RT_SSLICE:
         // (s, lo, hi) → the characters from lo up to hi.  A string is
         // counted in characters and held as bytes, so both ends are
         // walked for rather than computed; a string is immutable, so
@@ -968,7 +974,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.jz(want, l1e)
         let ok1 : i64 = b.l()
         b.jnz(b.cltu(at, n), ok1)
-        _ ← b.call0(RT_BOUNDS)
+        _ ← b.call0(emit.RT_BOUNDS)
         b.lab(ok1)
         b.mov(at, b.add(at, rt_charlen(&b, p, at)))
         b.mov(want, b.sub(want, one))
@@ -990,21 +996,21 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.jz(more, l2e)
         let ok2 : i64 = b.l()
         b.jnz(b.cltu(at, n), ok2)
-        _ ← b.call0(RT_BOUNDS)
+        _ ← b.call0(emit.RT_BOUNDS)
         b.lab(ok2)
         b.mov(at, b.add(at, rt_charlen(&b, p, at)))
         b.mov(more, b.sub(more, one))
         b.jmp(l2)
         b.lab(l2e)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, b.add(p, blo), 8)
         b.stn(dsc, 8, b.sub(at, blo), 8)
         b.ret(dsc)
         return rtb_fn(b)
-    if id = RT_CHARSTR:
+    if id = emit.RT_CHARSTR:
         // (cp) → a fresh one-character string
         let b : mut RtB = rtb(1)
-        let p : i64 = b.call1(RT_ALLOC, b.cst(4))
+        let p : i64 = b.call1(emit.RT_ALLOC, b.cst(4))
         let nlen : i64 = b.t()
         let l1 : i64 = b.l()
         let l2 : i64 = b.l()
@@ -1049,7 +1055,7 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.stn(p, 3, b.bor(a80, b.band(0, m3f3)), 1)
         b.mov(nlen, b.cst(4))
         b.lab(ldone)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, p, 8)
         b.stn(dsc, 8, nlen, 8)
         b.ret(dsc)
@@ -1128,7 +1134,7 @@ fn rt_hash_str(b : &mut RtB, slot : i64) → i64:
     b.jz(more, lend)
     let c : i64 = b.ldn(b.add(p, ix), 0, 1)
     let x : i64 = b.t()
-    b.o(IR_BXORR, h, c, 0, x, 64 + 256)
+    b.o(ir.IR_BXORR, h, c, 0, x, 64 + 256)
     b.mov(h, b.mul(x, prime))
     b.mov(ix, b.add(ix, one))
     b.jmp(ltop)
@@ -1182,16 +1188,16 @@ fn rt_hentry_val(b : &mut RtB, f : i64) → i64:
 
 // the last of the runtime: the kernel block, files, directories, and
 // the array helpers
-fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+fn rt_build3(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     let pw : i64 = tg.ptr
-    if id = RT_ARGS or id = RT_ENVN:
+    if id = emit.RT_ARGS or id = emit.RT_ENVN:
         let b : mut RtB = rtb(0)
         let k : i64 = b.kaddr(0, 0)
-        let out : i64 = b.call1(RT_ARRNEW, b.cst(4))
+        let out : i64 = b.call1(emit.RT_ARRNEW, b.cst(4))
         let vptr : i64 = b.t()
-        b.mov(vptr, b.ldn(k, if id = RT_ARGS: 8 else: 16, 8))
+        b.mov(vptr, b.ldn(k, if id = emit.RT_ARGS: 8 else: 16, 8))
         let left : i64 = b.t()
-        if id = RT_ARGS:
+        if id = emit.RT_ARGS:
             b.mov(left, b.ldn(k, 0, 8))
         let pwc : i64 = b.cst(pw)
         let one : i64 = b.cst(1)
@@ -1199,10 +1205,10 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let ltop : i64 = b.l()
         let lend : i64 = b.l()
         b.lab(ltop)
-        if id = RT_ARGS:
+        if id = emit.RT_ARGS:
             b.jz(left, lend)
         let e : i64 = b.ldn(vptr, 0, 0)
-        if id = RT_ENVN:
+        if id = emit.RT_ENVN:
             b.jz(e, lend)
         // the length: to the terminator for an argument, to the '='
         // for an environment entry -- or its end when it has none
@@ -1213,24 +1219,24 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lsc)
         let c : i64 = b.ldn(b.add(e, n), 0, 1)
         b.jz(c, lgot)
-        if id = RT_ENVN:
+        if id = emit.RT_ENVN:
             let iseq : i64 = b.ceq(c, b.cst(61))
             b.jnz(iseq, lgot)
         b.mov(n, b.add(n, one))
         b.jmp(lsc)
         b.lab(lgot)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, e, 8)
         b.stn(dsc, 8, n, 8)
-        _ ← b.call2(RT_ARRPUSH, out, dsc)
+        _ ← b.call2(emit.RT_ARRPUSH, out, dsc)
         b.mov(vptr, b.add(vptr, pwc))
-        if id = RT_ARGS:
+        if id = emit.RT_ARGS:
             b.mov(left, b.sub(left, one))
         b.jmp(ltop)
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_ENVG:
+    if id = emit.RT_ENVG:
         // (name desc) → the boxed value, or the null for a name the
         // environment does not carry
         let b : mut RtB = rtb(1)
@@ -1276,10 +1282,10 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.mov(vl, b.add(vl, one))
         b.jmp(lvl)
         b.lab(lvg)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, vat, 8)
         b.stn(dsc, 8, vl, 8)
-        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        let box : i64 = b.call1(emit.RT_ALLOC, b.cst(8))
         b.stn(box, 0, dsc, 8)
         b.ret(box)
         b.lab(lnext)
@@ -1288,7 +1294,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lnone)
         b.ret(b.cst(0))
         return rtb_fn(b)
-    if id = RT_AUXV:
+    if id = emit.RT_AUXV:
         let b : mut RtB = rtb(1)
         let k : i64 = b.kaddr(0, 0)
         let vp : i64 = b.t()
@@ -1309,9 +1315,9 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lz)
         b.ret(b.cst(0))
         return rtb_fn(b)
-    if id = RT_EXECFN:
+    if id = emit.RT_EXECFN:
         let b : mut RtB = rtb(0)
-        let p : i64 = b.call1(RT_AUXV, b.cst(31))
+        let p : i64 = b.call1(emit.RT_AUXV, b.cst(31))
         let n : i64 = b.t()
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
@@ -1324,17 +1330,17 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.mov(n, b.add(n, one))
         b.jmp(ltop)
         b.lab(lend)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, p, 8)
         b.stn(dsc, 8, n, 8)
         b.ret(dsc)
         return rtb_fn(b)
-    if id = RT_RELRO:
+    if id = emit.RT_RELRO:
         // follow the program's own headers, as any loader would
         let b : mut RtB = rtb(0)
-        let phdr : i64 = b.call1(RT_AUXV, b.cst(3))
-        let phent : i64 = b.call1(RT_AUXV, b.cst(4))
-        let phnum : i64 = b.call1(RT_AUXV, b.cst(5))
+        let phdr : i64 = b.call1(emit.RT_AUXV, b.cst(3))
+        let phent : i64 = b.call1(emit.RT_AUXV, b.cst(4))
+        let phnum : i64 = b.call1(emit.RT_AUXV, b.cst(5))
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
@@ -1358,37 +1364,37 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let e : i64 = b.band(b.add(vaddr, memsz), pmask)
         let has : i64 = b.cltu(head, e)
         b.jz(has, lnext)
-        _ ← b.sys3(SC_MPROT, head, b.sub(e, head), one)
+        _ ← b.sys3(arch_a64.SC_MPROT, head, b.sub(e, head), one)
         b.lab(lnext)
         b.mov(ix, b.add(ix, one))
         b.jmp(ltop)
         b.lab(lend)
         b.retn()
         return rtb_fn(b)
-    if id = RT_FOPEN or id = RT_FCREATE:
-        let b : mut RtB = rtb(if id = RT_FCREATE: 2 else: 1)
+    if id = emit.RT_FOPEN or id = emit.RT_FCREATE:
+        let b : mut RtB = rtb(if id = emit.RT_FCREATE: 2 else: 1)
         let n : i64 = b.ldn(0, 8, 8)
         let one : i64 = b.cst(1)
-        let p : i64 = b.call1(RT_ALLOC, b.add(n, one))
+        let p : i64 = b.call1(emit.RT_ALLOC, b.add(n, one))
         let src : i64 = b.ldn(0, 0, 8)
         rt_copy_bytes(&b, src, p, n)
         let z : i64 = b.cst(0)
         b.stn(b.add(p, n), 0, z, 1)
         let atc : i64 = b.cst(⁻100)
         let fd : mut i64 = 0
-        if id = RT_FOPEN:
-            fd ← b.sys4(SC_OPENAT, atc, p, z, z)
+        if id = emit.RT_FOPEN:
+            fd ← b.sys4(arch_a64.SC_OPENAT, atc, p, z, z)
             let bad : i64 = b.clts(fd, z)
             let lno : i64 = b.l()
             b.jnz(bad, lno)
-            let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+            let box : i64 = b.call1(emit.RT_ALLOC, b.cst(8))
             b.stn(box, 0, fd, 8)
             b.ret(box)
             b.lab(lno)
             b.ret(z)
         else:
             let flags : i64 = b.cst(577)
-            fd ← b.sys4(SC_OPENAT, atc, p, flags, 1)
+            fd ← b.sys4(arch_a64.SC_OPENAT, atc, p, flags, 1)
             let bad : i64 = b.clts(fd, z)
             let lok : i64 = b.l()
             b.jz(bad, lok)
@@ -1396,10 +1402,10 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
             b.lab(lok)
             b.ret(fd)
         return rtb_fn(b)
-    if id = RT_FREAD:
+    if id = emit.RT_FREAD:
         // (fd) → the file's bytes as a u8[], each in its own slot
         let b : mut RtB = rtb(1)
-        let st : i64 = b.call1(RT_ALLOC, b.cst(256))
+        let st : i64 = b.call1(emit.RT_ALLOC, b.cst(256))
         let z : i64 = b.cst(0)
         let r : mut i64 = z
         let soff : mut i64 = tg.stat_size
@@ -1409,19 +1415,19 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         // answer: whether it has fstat is a property of that kernel,
         // and riscv32 is the one that already says no.
         match tg.id:
-            Tgt.rv32:
+            elf.Tgt.rv32:
                 // RV32 has no fstat; statx reads the size instead.  An
                 // empty path with AT_EMPTY_PATH means "the descriptor".
-                let empty : i64 = b.call1(RT_ALLOC, b.cst(1))
+                let empty : i64 = b.call1(emit.RT_ALLOC, b.cst(1))
                 b.stn(empty, 0, z, 1)
-                r ← b.sys5(SC_STATX, 0, empty, b.cst(4096), b.cst(2048), st)
+                r ← b.sys5(arch_a64.SC_STATX, 0, empty, b.cst(4096), b.cst(2048), st)
                 soff ← tg.stx_size
-            Tgt.rv64: r ← b.sys2(SC_FSTAT, 0, st)
-            Tgt.a64: r ← b.sys2(SC_FSTAT, 0, st)
-            Tgt.a32: r ← b.sys2(SC_FSTAT, 0, st)
-            Tgt.i386: r ← b.sys2(SC_FSTAT, 0, st)
+            elf.Tgt.rv64: r ← b.sys2(arch_a64.SC_FSTAT, 0, st)
+            elf.Tgt.a64: r ← b.sys2(arch_a64.SC_FSTAT, 0, st)
+            elf.Tgt.a32: r ← b.sys2(arch_a64.SC_FSTAT, 0, st)
+            elf.Tgt.i386: r ← b.sys2(arch_a64.SC_FSTAT, 0, st)
             // x86-64 has its own RT_FREAD in rt_x86_64.ngpl
-            Tgt.x64: g_pioneer()
+            elf.Tgt.x64: dispatch.g_pioneer()
         let bad : i64 = b.clts(r, z)
         let lok : i64 = b.l()
         b.jz(bad, lok)
@@ -1431,7 +1437,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let one : i64 = b.cst(1)
         let small : i64 = b.cltu(size, one)
         let sz1 : i64 = b.sel(small, one, size)
-        let buf : i64 = b.call1(RT_ALLOC, sz1)
+        let buf : i64 = b.call1(emit.RT_ALLOC, sz1)
         let off : i64 = b.t()
         b.mov(off, z)
         let ltop : i64 = b.l()
@@ -1439,13 +1445,13 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let left : i64 = b.sub(size, off)
         b.jz(left, lend)
-        let got : i64 = b.sys3(SC_READ, 0, b.add(buf, off), left)
+        let got : i64 = b.sys3(arch_a64.SC_READ, 0, b.add(buf, off), left)
         let done : i64 = b.clts(got, one)
         b.jnz(done, lend)
         b.mov(off, b.add(off, got))
         b.jmp(ltop)
         b.lab(lend)
-        let out : i64 = b.call1(RT_ARRNEW, off)
+        let out : i64 = b.call1(emit.RT_ARRNEW, off)
         let ix : i64 = b.t()
         b.mov(ix, z)
         let lcp : i64 = b.l()
@@ -1453,18 +1459,18 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lcp)
         let more : i64 = b.cltu(ix, off)
         b.jz(more, lcpe)
-        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(buf, ix), 0, 1))
+        _ ← b.call2(emit.RT_ARRPUSH, out, b.ldn(b.add(buf, ix), 0, 1))
         b.mov(ix, b.add(ix, one))
         b.jmp(lcp)
         b.lab(lcpe)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_TORAW:
+    if id = emit.RT_TORAW:
         let b : mut RtB = rtb(1)
         let n : i64 = b.ldn(0, 8, 8)
         let one : i64 = b.cst(1)
         let small : i64 = b.cltu(n, one)
-        let p : i64 = b.call1(RT_ALLOC, b.sel(small, one, n))
+        let p : i64 = b.call1(emit.RT_ALLOC, b.sel(small, one, n))
         let slots : i64 = b.ldn(0, 0, 8)
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
@@ -1481,11 +1487,11 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.ret(p)
         return rtb_fn(b)
-    if id = RT_FWRITE:
+    if id = emit.RT_FWRITE:
         // (fd, u8arr): narrowed and written whole
         let b : mut RtB = rtb(2)
         let n : i64 = b.ldn(1, 8, 8)
-        let raw : i64 = b.call1(RT_TORAW, 1)
+        let raw : i64 = b.call1(emit.RT_TORAW, 1)
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
         let done : i64 = b.t()
@@ -1495,7 +1501,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let left : i64 = b.sub(n, done)
         b.jz(left, lend)
-        let r : i64 = b.sys3(SC_WRITE, 0, b.add(raw, done), left)
+        let r : i64 = b.sys3(arch_a64.SC_WRITE, 0, b.add(raw, done), left)
         let bad : i64 = b.clts(r, one)
         let lok : i64 = b.l()
         b.jz(bad, lok)
@@ -1506,7 +1512,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.retn()
         return rtb_fn(b)
-    if id = RT_WRITEV:
+    if id = emit.RT_WRITEV:
         // (fd, runs): the vector built in the kernel's own widths
         let b : mut RtB = rtb(2)
         let n : i64 = b.t()
@@ -1514,7 +1520,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let three : i64 = b.cst(3)
         let iv : i64 = b.t()
         let entw : i64 = b.cst(2 × pw)
-        b.mov(iv, b.call1(RT_ALLOC, b.mul(n, entw)))
+        b.mov(iv, b.call1(emit.RT_ALLOC, b.mul(n, entw)))
         let slots : i64 = b.ldn(1, 0, 8)
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
@@ -1537,7 +1543,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         b.jz(n, lend)
         let r : i64 = b.t()
-        b.mov(r, b.sys3(SC_WRITEV, 0, iv, n))
+        b.mov(r, b.sys3(arch_a64.SC_WRITEV, 0, iv, n))
         let bad : i64 = b.clts(r, z)
         let lok : i64 = b.l()
         b.jz(bad, lok)
@@ -1563,26 +1569,26 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.retn()
         return rtb_fn(b)
-    if id = RT_DENTS:
+    if id = emit.RT_DENTS:
         // → the working directory's entries, "." and ".." left out
         let b : mut RtB = rtb(0)
-        let out : i64 = b.call1(RT_ARRNEW, b.cst(8))
-        let dot : i64 = b.call1(RT_ALLOC, b.cst(2))
+        let out : i64 = b.call1(emit.RT_ARRNEW, b.cst(8))
+        let dot : i64 = b.call1(emit.RT_ALLOC, b.cst(2))
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
         b.stn(dot, 0, b.cst(46), 1)
         b.stn(dot, 1, z, 1)
         let atc : i64 = b.cst(⁻100)
         let odir : i64 = b.cst(tg.o_directory)
-        let fd : i64 = b.sys4(SC_OPENAT, atc, dot, odir, z)
+        let fd : i64 = b.sys4(arch_a64.SC_OPENAT, atc, dot, odir, z)
         let bad : i64 = b.clts(fd, z)
         let lend : i64 = b.l()
         b.jnz(bad, lend)
-        let buf : i64 = b.call1(RT_ALLOC, b.cst(4096))
+        let buf : i64 = b.call1(emit.RT_ALLOC, b.cst(4096))
         let lread : i64 = b.l()
         let lclose : i64 = b.l()
         b.lab(lread)
-        let r : i64 = b.sys3(SC_GETDENTS, fd, buf, b.cst(4096))
+        let r : i64 = b.sys3(arch_a64.SC_GETDENTS, fd, buf, b.cst(4096))
         let done : i64 = b.clts(r, one)
         b.jnz(done, lclose)
         let at : i64 = b.t()
@@ -1621,27 +1627,27 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.mov(nl, b.add(nl, one))
         b.jmp(lnl)
         b.lab(lng)
-        let cp : i64 = b.call1(RT_ALLOC, b.sel(b.cltu(nl, one), one, nl))
+        let cp : i64 = b.call1(emit.RT_ALLOC, b.sel(b.cltu(nl, one), one, nl))
         rt_copy_bytes(&b, name, cp, nl)
-        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let dsc : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(dsc, 0, cp, 8)
         b.stn(dsc, 8, nl, 8)
-        let ent : i64 = b.call1(RT_ALLOC, b.cst(16))
+        let ent : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
         b.stn(ent, 0, dsc, 8)
         let twelve : i64 = b.cst(12)
         b.stn(ent, 8, b.shl(dtype, twelve), 8)
-        _ ← b.call2(RT_ARRPUSH, out, ent)
+        _ ← b.call2(emit.RT_ARRPUSH, out, ent)
         b.lab(lskip)
         b.mov(at, b.add(at, rl))
         b.jmp(lrec)
         b.lab(lrece)
         b.jmp(lread)
         b.lab(lclose)
-        _ ← b.sys1(SC_CLOSE, fd)
+        _ ← b.sys1(arch_a64.SC_CLOSE, fd)
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_AFIND:
+    if id = emit.RT_AFIND:
         // (arr, wanted, isstr) → the boxed position or the null
         let b : mut RtB = rtb(3)
         let n : i64 = b.ldn(0, 8, 8)
@@ -1662,13 +1668,13 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let ls : i64 = b.l()
         let lsd : i64 = b.l()
         b.jz(2, ls)
-        b.mov(same, b.call2(RT_STREQ, e, 1))
+        b.mov(same, b.call2(emit.RT_STREQ, e, 1))
         b.jmp(lsd)
         b.lab(ls)
         b.mov(same, b.ceq(e, 1))
         b.lab(lsd)
         b.jz(same, lnext)
-        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        let box : i64 = b.call1(emit.RT_ALLOC, b.cst(8))
         b.stn(box, 0, ix, 8)
         b.ret(box)
         b.lab(lnext)
@@ -1677,7 +1683,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lno)
         b.ret(z)
         return rtb_fn(b)
-    if id = RT_ASLICE:
+    if id = emit.RT_ASLICE:
         // (arr, lo, hi) → a fresh array of lo…hi, ending before hi
         let b : mut RtB = rtb(3)
         let n : i64 = b.ldn(0, 8, 8)
@@ -1690,11 +1696,11 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let bad : i64 = b.bor(bad1, bad2)
         let lok : i64 = b.l()
         b.jz(bad, lok)
-        _ ← b.call0(RT_BOUNDS)
+        _ ← b.call0(emit.RT_BOUNDS)
         b.lab(lok)
         let one : i64 = b.cst(1)
         let m : i64 = b.sub(2, 1)
-        let out : i64 = b.call1(RT_ARRNEW, m)
+        let out : i64 = b.call1(emit.RT_ARRNEW, m)
         let slots : i64 = b.ldn(0, 0, 8)
         let ix : i64 = b.t()
         b.mov(ix, 1)
@@ -1704,17 +1710,17 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let past : i64 = b.cgeu(ix, 2)
         b.jnz(past, lend)
-        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
+        _ ← b.call2(emit.RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
         b.mov(ix, b.add(ix, one))
         b.jmp(ltop)
         b.lab(lend)
         b.ret(out)
         b.lab(lmt)
-        b.ret(b.call1(RT_ARRNEW, b.cst(4)))
+        b.ret(b.call1(emit.RT_ARRNEW, b.cst(4)))
         return rtb_fn(b)
-    if id = RT_AFILL:
+    if id = emit.RT_AFILL:
         let b : mut RtB = rtb(2)
-        let out : i64 = b.call1(RT_ARRNEW, 0)
+        let out : i64 = b.call1(emit.RT_ARRNEW, 0)
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
@@ -1724,16 +1730,16 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let more : i64 = b.cltu(ix, 0)
         b.jz(more, lend)
-        _ ← b.call2(RT_ARRPUSH, out, 1)
+        _ ← b.call2(emit.RT_ARRPUSH, out, 1)
         b.mov(ix, b.add(ix, one))
         b.jmp(ltop)
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_ACYC:
+    if id = emit.RT_ACYC:
         // (n, filler) → the filler's elements cycled to the count
         let b : mut RtB = rtb(2)
-        let out : i64 = b.call1(RT_ARRNEW, 0)
+        let out : i64 = b.call1(emit.RT_ARRNEW, 0)
         let sl : i64 = b.ldn(1, 8, 8)
         let slots : i64 = b.ldn(1, 0, 8)
         let ix : i64 = b.t()
@@ -1748,7 +1754,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let more : i64 = b.cltu(ix, 0)
         b.jz(more, lend)
-        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(j, three)), 0, 8))
+        _ ← b.call2(emit.RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(j, three)), 0, 8))
         b.mov(j, b.add(j, one))
         let over : i64 = b.cgeu(j, sl)
         let lnw : i64 = b.l()
@@ -1760,20 +1766,20 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_ACAT:
+    if id = emit.RT_ACAT:
         let b : mut RtB = rtb(2)
         let la : i64 = b.ldn(0, 8, 8)
         let lb : i64 = b.ldn(1, 8, 8)
-        let out : i64 = b.call1(RT_ARRNEW, b.add(la, lb))
+        let out : i64 = b.call1(emit.RT_ARRNEW, b.add(la, lb))
         rt_push_all(&b, out, 0)
         rt_push_all(&b, out, 1)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_SBYTES:
+    if id = emit.RT_SBYTES:
         let b : mut RtB = rtb(1)
         let p : i64 = b.ldn(0, 0, 8)
         let n : i64 = b.ldn(0, 8, 8)
-        let out : i64 = b.call1(RT_ARRNEW, n)
+        let out : i64 = b.call1(emit.RT_ARRNEW, n)
         let ix : i64 = b.t()
         let z : i64 = b.cst(0)
         let one : i64 = b.cst(1)
@@ -1783,13 +1789,13 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(ltop)
         let more : i64 = b.cltu(ix, n)
         b.jz(more, lend)
-        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(p, ix), 0, 1))
+        _ ← b.call2(emit.RT_ARRPUSH, out, b.ldn(b.add(p, ix), 0, 1))
         b.mov(ix, b.add(ix, one))
         b.jmp(ltop)
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
-    if id = RT_DIVU64 or id = RT_MODU64:
+    if id = emit.RT_DIVU64 or id = emit.RT_MODU64:
         // (n, d) → n ÷ d or n % d, unsigned, by shift and subtract --
         // the arithmetic a machine without a wide divider leans on.
         // Nothing here divides, so a target may compile this with the
@@ -1817,9 +1823,9 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lskip)
         b.jmp(ltop)
         b.lab(lend)
-        b.ret(if id = RT_DIVU64: q else: r)
+        b.ret(if id = emit.RT_DIVU64: q else: r)
         return rtb_fn(b)
-    if id = RT_DIVS64 or id = RT_MODS64:
+    if id = emit.RT_DIVS64 or id = emit.RT_MODS64:
         // signs peeled off, the unsigned helper asked, the signs put
         // back the way idiv puts them: the quotient truncates toward
         // zero and the remainder keeps the dividend's sign
@@ -1829,16 +1835,16 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let dneg : i64 = b.clts(1, z)
         let na : i64 = b.sel(nneg, b.sub(z, 0), 0)
         let da : i64 = b.sel(dneg, b.sub(z, 1), 1)
-        if id = RT_DIVS64:
-            let q : i64 = b.call2(RT_DIVU64, na, da)
+        if id = emit.RT_DIVS64:
+            let q : i64 = b.call2(emit.RT_DIVU64, na, da)
             let flip : i64 = b.t()
-            b.o(IR_BXORR, nneg, dneg, 0, flip, 64)
+            b.o(ir.IR_BXORR, nneg, dneg, 0, flip, 64)
             b.ret(b.sel(flip, b.sub(z, q), q))
         else:
-            let r : i64 = b.call2(RT_MODU64, na, da)
+            let r : i64 = b.call2(emit.RT_MODU64, na, da)
             b.ret(b.sel(nneg, b.sub(z, r), r))
         return rtb_fn(b)
-    if id = RT_MULOV64:
+    if id = emit.RT_MULOV64:
         // (x, y, sgn) → 1 where the 64-bit product overflows.  The
         // halves are 32-bit, so every product below is exact in 64.
         let b : mut RtB = rtb(3)
@@ -1891,8 +1897,7 @@ fn rt_push_all(b : &mut RtB, out : i64, src : i64):
     b.lab(ltop)
     let more : i64 = b.cltu(ix, n)
     b.jz(more, lend)
-    _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
+    _ ← b.call2(emit.RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
     b.mov(ix, b.add(ix, one))
     b.jmp(ltop)
     b.lab(lend)
-

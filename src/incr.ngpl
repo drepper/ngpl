@@ -16,16 +16,17 @@
 // previous build said about itself, and which functions this one must
 // generate again.
 
+let ast := @import("./ast.ngpl")
+let emit := @import("./emit.ngpl")
+let lex := @import("./lex.ngpl")
+let sbom := @import("./sbom.ngpl")
+let tokens := @import("./tokens.ngpl")
+
 // How much room a function is given beyond what it takes.  Twenty per
 // cent: enough that an edit to a body usually still fits where the body
 // stood, small enough that a program does not swell.  This is the only
 // place the number is written.
 
-@import("./tokens.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
-@import("./emit.ngpl")
-@import("./sbom.ngpl")
 
 let INCR_PAD_NUM : i64 = 20
 let INCR_PAD_DEN : i64 = 100
@@ -41,6 +42,7 @@ let INCR_PAD_DEN : i64 = 100
 // function's first instruction split across a word, which is not an
 // instruction.  Sixteen covers that and every alignment a target has
 // asked for so far.
+@export
 @post(r: r >= 16¤byte and (@dropunit(r) % 16 ?? 1) = 0)
 fn incr_padding(size : i64 ¤byte) → i64 ¤byte:
     let by : i64 ¤byte = (size × INCR_PAD_NUM ÷ INCR_PAD_DEN ?? 0¤byte)
@@ -50,6 +52,7 @@ fn incr_padding(size : i64 ¤byte) → i64 ¤byte:
 // What a previous build of this program said about itself.  `ok` says
 // whether the file could be read as one at all; everything else is only
 // worth reading when it is true.
+@export
 struct Prev:
     ok : bool
     raw : u8[]
@@ -80,6 +83,7 @@ struct Prev:
     row_name : str[]
     row_hash : str[]
 
+@export
 fn prev_none() → Prev:
     (Prev{ok: false, raw: [], machine: 0, is64: false, eflags: 0, text_off: 0¤byte, text_size: 0¤byte,
           tx_end: [],
@@ -157,6 +161,7 @@ fn pv_cstr(b : u8[], at : i64 ¤byte, limit : i64 ¤byte) → str:
 // What a previous build wrote, or a Prev that says it could not be
 // read.  Nothing here refuses: a file that cannot be walked is a file
 // this build compiles whole, which is always right.
+@export
 @impure
 fn read_prev(path : str) → Prev:
     let alloc := std.arena.allocator()
@@ -370,21 +375,21 @@ fn names_new(want : i64) → Names:
 
 // The name the bill knows a function by: the module it was written in,
 // then its own.
-fn incr_fn_name(a : Ast, f : i64) → str:
+fn incr_fn_name(a : ast.Ast, f : i64) → str:
     let d := a.fns[f × 1¤ptrdiff]
     if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
 
 // Which functions to generate again, one bool per function.  Answers
 // them all where the previous build cannot be lined up with this one;
 // the caller then compiles whole, which is what a fallback is.
-fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
-                   rows : SbomRow[]) → bool[]:
+fn incr_regenerate(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
+                   rows : sbom.SbomRow[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
     // what the previous build said each function was
     let was : mut Names = names_new(@dropunit(#prev.row_name))
     let washash : mut str[] = []
     foreach i := 0¤ptrdiff…#prev.row_name:
-        if prev.row_kind[i] = Sbomkind.function.ord():
+        if prev.row_kind[i] = sbom.Sbomkind.function.ord():
             was.add(prev.row_name[i])
             let at : i64 = was.find(prev.row_name[i])
             while @dropunit(#washash) <= at:
@@ -400,7 +405,7 @@ fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
     let nowhash : mut str[] = []
     let twice : mut bool[] = []
     foreach r := rows:
-        if r.kind = Sbomkind.function:
+        if r.kind = sbom.Sbomkind.function:
             now.add(r.name)
             let at : i64 = now.find(r.name)
             while @dropunit(#nowhash) <= at:
@@ -436,8 +441,8 @@ fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
         let d := a.fns[i]
         let t : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
         while t < d.tok_hi × 1¤ptrdiff:
-            if toks.kind[t] = TK_IDENT:
-                let nm : str = run_str(src, toks.off[t], toks.len[t])
+            if toks.kind[t] = tokens.TK_IDENT:
+                let nm : str = tokens.run_str(src, toks.off[t], toks.len[t])
                 let g : i64 = fnames.find(nm)
                 if g >= 0 and moved[g × 1¤ptrdiff]:
                     out[i] ← true
@@ -467,6 +472,7 @@ fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
 // reached has no address, so it is left out of the table rather than
 // given one -- these two keep the names and the offsets in step while
 // dropping the same entries from each.
+@export
 fn bt_keep_offs(of : i64[]) → i64[]:
     let out : mut i64[] = []
     foreach v := of:
@@ -474,6 +480,7 @@ fn bt_keep_offs(of : i64[]) → i64[]:
             out.push(v)
     out
 
+@export
 @pre(#nm = #of)
 fn bt_keep_names(nm : str[], of : i64[]) → str[]:
     let out : mut str[] = []
@@ -489,8 +496,9 @@ fn name_holds_dot(nm : str) → bool:
             return true
     false
 
+@export
 @post(r: #r = #a.fns)
-fn reached_fns(a : Ast, toks : Toks, src : byte[]) → bool[]:
+fn reached_fns(a : ast.Ast, toks : lex.Toks, src : byte[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
     let byname : mut Names = names_new(@dropunit(nf) + 1)
     foreach i := 0¤ptrdiff…nf:
@@ -514,8 +522,8 @@ fn reached_fns(a : Ast, toks : Toks, src : byte[]) → bool[]:
         while fi < nf and a.fns[fi].tok_hi × 1¤ptrdiff <= t:
             fi ← fi + 1¤ptrdiff
         let inside : bool = fi < nf and a.fns[fi].tok_lo × 1¤ptrdiff <= t
-        if not inside and toks.kind[t] = TK_IDENT:
-            let g : i64 = byname.find(run_str(src, toks.off[t], toks.len[t]))
+        if not inside and toks.kind[t] = tokens.TK_IDENT:
+            let g : i64 = byname.find(tokens.run_str(src, toks.off[t], toks.len[t]))
             if g >= 0:
                 out[g × 1¤ptrdiff] ← true
         t ← t + 1¤ptrdiff
@@ -529,8 +537,8 @@ fn reached_fns(a : Ast, toks : Toks, src : byte[]) → bool[]:
             let d := a.fns[i]
             let k : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
             while k < d.tok_hi × 1¤ptrdiff and k < ntok:
-                if toks.kind[k] = TK_IDENT:
-                    let g : i64 = byname.find(run_str(src, toks.off[k], toks.len[k]))
+                if toks.kind[k] = tokens.TK_IDENT:
+                    let g : i64 = byname.find(tokens.run_str(src, toks.off[k], toks.len[k]))
                     if g >= 0 and not out[g × 1¤ptrdiff]:
                         out[g × 1¤ptrdiff] ← true
                         changed ← true
@@ -544,9 +552,12 @@ fn reached_fns(a : Ast, toks : Toks, src : byte[]) → bool[]:
 // The byte padding is filled with: a trap where the architecture has a
 // one-byte one, so a jump into the gap between two functions stops
 // rather than wandering, and zero where it does not.
+@export
 let INCR_FILL_X86 : i64 = 204        // int3
+@export
 let INCR_FILL_ANY : i64 = 0
 
+@export
 struct Incr:
     // 0 = not incremental; 1 = a first build, which leaves each
     // function room; 2 = a build against a file, which must lay every
@@ -582,6 +593,7 @@ struct Incr:
     // and its .rodata, whose jump tables the copied code points into
     ro : u8[]
 
+@export
 fn incr_off() → Incr:
     (Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
           sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
@@ -589,6 +601,7 @@ fn incr_off() → Incr:
 
 // A first build under --incremental: no file to line up with, so
 // every function is written as usual and each is left room to grow.
+@export
 fn incr_first(fill : i64) → Incr:
     (Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
           sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
@@ -600,8 +613,9 @@ fn incr_first(fill : i64) → Incr:
 // the file cannot be read as one of this compiler's, and where it was
 // built for another machine -- code copied out of it would be that
 // machine's code.
-fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
-             rows : SbomRow[], fill : i64, machine : i64, is64 : bool,
+@export
+fn incr_prev(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
+             rows : sbom.SbomRow[], fill : i64, machine : i64, is64 : bool,
              eflags : i64) → Incr:
     if not prev.ok or prev.machine ≠ machine or prev.is64 ≠ is64 or prev.eflags ≠ eflags:
         return incr_first(fill)
@@ -641,6 +655,7 @@ fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
 
 // How many functions a rebuild has to write again, for the line the
 // driver prints about what it decided.
+@export
 fn incr_fresh_count(incr : Incr) → i64:
     let n : mut i64 = 0
     foreach v := incr.fresh:
@@ -678,6 +693,7 @@ impl Incr:
 // after them.  Under --incremental the pool is the whole of what the
 // source wrote, which depends on the parse alone and so is the same in
 // every build.  The cost is the odd literal nobody reads.
+@export
 fn incr_all_used(n : i64 ¤ptrdiff) → i64[]:
     let u : mut i64[] = []
     foreach _ := 0¤ptrdiff…n:
@@ -691,6 +707,7 @@ fn incr_all_used(n : i64 ¤ptrdiff) → i64[]:
 // tables this build generates are laid after it, and the fixups it
 // resolved are the only ones that name them.  The cost is the tables
 // of functions that were regenerated, which stay in the file unread.
+@export
 fn incr_jt_prefix(rodata : &mut u8[], incr : Incr, jt_base : i64) → i64:
     if incr.mode ≠ 2 or @dropunit(#incr.ro) <= jt_base:
         return 0
@@ -719,9 +736,11 @@ fn incr_prev_text_end(prev : Prev) → i64 ¤byte:
 // to reserve again to the byte: .rodata begins where the text's room
 // ends and .data where .rodata's does, so reserving anything else
 // would move an address the copied code names.
+@export
 fn incr_text_room(prev : Prev) → i64 ¤byte:
     prev.ro_off - prev.text_off
 
+@export
 fn incr_ro_room(prev : Prev) → i64 ¤byte:
     prev.d_off - prev.ro_off
 
@@ -732,19 +751,23 @@ fn incr_ro_room(prev : Prev) → i64 ¤byte:
 // regions where those instructions say they are.  Two copies of this
 // arithmetic is one copy too many -- it was two, and the second was
 // wrong the moment the first reserved anything.
+@export
 fn incr_room_text(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
     if incr.mode = 2: incr.text_room else: incr_room(incr.mode, size)
 
+@export
 fn incr_room_ro(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
     if incr.mode = 2: incr.ro_room else: incr_room(incr.mode, size)
 
 // Where .text itself ends, counted from the start of the text region,
 // which is where the overflow sections begin.
+@export
 fn incr_text_size(incr : Incr) → i64:
     if #incr.tx_ends = 0¤ptrdiff: 0 else: incr.tx_ends[0¤ptrdiff]
 
 // And where the whole region the previous build used ends, which is
 // where a function this build has to move goes.
+@export
 fn incr_text_end(incr : Incr) → i64:
     let n : i64 ¤ptrdiff = #incr.tx_ends
     if n = 0¤ptrdiff: 0 else: incr.tx_ends[n - 1¤ptrdiff]
@@ -754,13 +777,15 @@ fn incr_text_end(incr : Incr) → i64:
 // would otherwise have its needs found out too late -- the set is
 // closed and the routines are written before it -- so they are taken
 // from the emission that measured it and kept until the set is built.
-fn incr_harvest(em : &Emit, m : Emark, into : &mut i64[]):
+@export
+fn incr_harvest(em : &emit.Emit, m : emit.Emark, into : &mut i64[]):
     foreach k := m.cf…@dropunit(#em.cf_target):
         let t : i64 = em.cf_target[k × 1¤ptrdiff]
         if t < 0:
             into.push(t)
 
 // Whether this function is one the build moved past .text.
+@export
 fn incr_moved(placed : i64[], f : i64) → bool:
     foreach g := placed:
         if g = f:
@@ -772,6 +797,7 @@ fn incr_moved(placed : i64[], f : i64) → bool:
 // what was moved, in the order it was moved into place.  The
 // backtrace table reads a function's size as the distance to the next
 // one, so it has to be handed them in the order they are written.
+@export
 fn incr_reorder(v : i64[], placed : i64[]) → i64[]:
     if #placed = 0¤ptrdiff:
         return v
@@ -783,6 +809,7 @@ fn incr_reorder(v : i64[], placed : i64[]) → i64[]:
         out.push(v[f × 1¤ptrdiff])
     out
 
+@export
 fn incr_reorder_names(v : str[], placed : i64[]) → str[]:
     if #placed = 0¤ptrdiff:
         return v
@@ -796,6 +823,7 @@ fn incr_reorder_names(v : str[], placed : i64[]) → str[]:
 
 // The reason a build stopped lining up is the first one: everything
 // after it is a consequence of it.
+@export
 fn incr_first_reason(had : str, got : str) → str:
     if had ≠ "": had else: got
 
@@ -803,7 +831,8 @@ fn incr_first_reason(had : str, got : str) → str:
 // symbol.  A symbol the old file does not know, or one whose address
 // the code has already run past, means the layout is not the same
 // layout and there is nothing to line up with.
-fn incr_before(em : &mut Emit, incr : Incr, nm : str) → str:
+@export
+fn incr_before(em : &mut emit.Emit, incr : Incr, nm : str) → str:
     if incr.mode ≠ 2:
         return ""
     let want : i64 = incr.at_of(nm)
@@ -819,7 +848,8 @@ fn incr_before(em : &mut Emit, incr : Incr, nm : str) → str:
 // slot is invented -- the function's own size plus its share of
 // padding -- and on a later one it is the slot the old file gave it,
 // which the function has just overrun if it did not fit.
-fn incr_after(em : &mut Emit, incr : Incr, nm : str, began : i64) → str:
+@export
+fn incr_after(em : &mut emit.Emit, incr : Incr, nm : str, began : i64) → str:
     if incr.mode = 1:
         let grown : i64 ¤byte = (em.here() - began) × 1¤byte
         let pad : i64 = @dropunit(incr_padding(grown))
@@ -842,7 +872,8 @@ fn incr_after(em : &mut Emit, incr : Incr, nm : str, began : i64) → str:
 // reproducing.  Everything those bytes name -- a callee's address, a
 // string's, a global's -- is at the address it was at, which is the
 // condition the caller checks before and after.
-fn incr_copy(em : &mut Emit, incr : Incr, nm : str) → str:
+@export
+fn incr_copy(em : &mut emit.Emit, incr : Incr, nm : str) → str:
     let at : i64 = incr.at_of(nm)
     let end : i64 = incr.end_of(nm)
     if at < 0 or end < at:

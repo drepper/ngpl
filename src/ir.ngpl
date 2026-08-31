@@ -1,3 +1,4 @@
+
 // ===========================================================================
 // The IR: linear three-address code over virtual registers
 // ===========================================================================
@@ -8,129 +9,236 @@
 // path; @wrap variants mask instead.  Comparisons materialize their
 // answer with setcc; selection is a conditional move.
 
+@export
 let IR_CONST : i64 = 1     // d ← imm a
+@export
 let IR_MOV : i64 = 2       // d ← vreg a
 // d ← vreg a in its canonical form, sign- or zero-extended from the
 // width w says.  A value is kept only as wide as its type, so this is
 // what a widening emits: the wider read wants the bits above, and only
 // this puts them there.
+@export
 let IR_EXT : i64 = 3
+@export
 let IR_ADD : i64 = 10
+@export
 let IR_SUB : i64 = 11
+@export
 let IR_MUL : i64 = 12
+@export
 let IR_ADDW : i64 = 13
+@export
 let IR_SUBW : i64 = 14
+@export
 let IR_MULW : i64 = 15
+@export
 let IR_NEG : i64 = 16
+@export
 let IR_NEGW : i64 = 17
+@export
 let IR_BAND : i64 = 18
+@export
 let IR_BORR : i64 = 19
+@export
 let IR_BXORR : i64 = 20
+@export
 let IR_BNOTT : i64 = 21
+@export
 let IR_SHLL : i64 = 22
+@export
 let IR_SHRR : i64 = 23
+@export
 let IR_DIVV : i64 = 24     // d ← a ÷ b, c the default when b = 0
+@export
 let IR_MODD : i64 = 25
+@export
 let IR_MAXX : i64 = 26     // d ← the larger of a and b, by cmov
+@export
 let IR_MINN : i64 = 27
+@export
 let IR_SEL : i64 = 28      // d ← b when a is true, else c, by cmov
+@export
 let IR_CEQ : i64 = 30
+@export
 let IR_CNE : i64 = 31
+@export
 let IR_CLT : i64 = 32
+@export
 let IR_CLE : i64 = 33
+@export
 let IR_CGT : i64 = 34
+@export
 let IR_CGE : i64 = 35
+@export
 let IR_JMP : i64 = 40      // a = label
+@export
 let IR_JZ : i64 = 41       // a = vreg, b = label
+@export
 let IR_JNZ : i64 = 42
+@export
 let IR_LABEL : i64 = 43    // a = label
+@export
 let IR_CALL : i64 = 44     // d ← call fn a, args at extra b: [argc, vreg…]
+@export
 let IR_RET : i64 = 45      // a = vreg, ⁻1 for none
+@export
 let IR_PRINTS : i64 = 46   // a = string index (its bytes)
+@export
 let IR_PRINTI : i64 = 47   // a = vreg, signed decimal
+@export
 let IR_PRINTU : i64 = 48   // a = vreg, unsigned decimal
+@export
 let IR_EXIT : i64 = 49     // a = vreg
+@export
 let IR_ABORT : i64 = 50    // a = string index of the message
+@export
 let IR_GLOAD : i64 = 51    // d ← global a
+@export
 let IR_GSTORE : i64 = 52   // global a ← vreg b
+@export
 let IR_ANEW : i64 = 53     // d ← a fresh array, capacity imm a
+@export
 let IR_APUSH : i64 = 54    // array a grows by vreg b
+@export
 let IR_AIDX : i64 = 55     // d ← a[b], bounds-checked
+@export
 let IR_ASTO : i64 = 56     // a[b] ← c, bounds-checked
+@export
 let IR_APOP : i64 = 57     // d ← a's last, or b when empty
+@export
 let IR_AGET : i64 = 58     // d ← a[b], or c when out of range
+@export
 let IR_ALEN : i64 = 59     // d ← how many a holds
+@export
 let IR_SC : i64 = 60       // d ← the descriptor of string literal a
+@export
 let IR_SCCAT : i64 = 61    // d ← a ⧺ b
+@export
 let IR_SEQV : i64 = 62     // d ← a = b, for strings
+@export
 let IR_SLENV : i64 = 63    // d ← how many characters a holds
+@export
 let IR_PRINTSV : i64 = 64  // a = vreg holding a string
+@export
 let IR_JTAB : i64 = 65     // a = vreg, b = extra [min, span, Ldef, L…]
+@export
 let IR_VTAB : i64 = 69     // d ← value table: a = vreg, b = extra [min, span, default, v…]
+@export
 let IR_HNEW : i64 = 70     // d ← a fresh hash: a = capacity, b = 1 for str keys
+@export
 let IR_HPUT : i64 = 71     // hash a takes key b → value c
+@export
 let IR_HGET : i64 = 72     // d ← hash a asked for key b, an optional
+@export
 let IR_HELEM : i64 = 73    // d ← whether hash a holds key b
+@export
 let IR_HLEN : i64 = 74     // d ← how many hash a holds
+@export
 let IR_CHR : i64 = 75      // d ← a as a character, judged first
+@export
 let IR_SIDX : i64 = 76     // d ← string a's character at position b
+@export
 let IR_CHARS : i64 = 77    // d ← string a's characters, an array
+@export
 let IR_CHARSTR : i64 = 78  // d ← character a as a fresh string
+@export
 let IR_ARGS : i64 = 80     // d ← the program's arguments, a str[]
+@export
 let IR_FOPEN : i64 = 81    // d ← the file at path a, an optional
+@export
 let IR_FCREATE : i64 = 82  // d ← a fresh file at path a with mode b
+@export
 let IR_FREAD : i64 = 83    // d ← file a's bytes, a u8[]
+@export
 let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
+@export
 let IR_FCLOSE : i64 = 85   // file a closes
+@export
 let IR_NARROW : i64 = 86   // d ← a, stopped unless it fits width w
+@export
 let IR_EPRINTS : i64 = 87  // string a on the error stream
+@export
 let IR_AFIND : i64 = 88    // d ← where b sits in array a (c: str elems)
+@export
 let IR_ASLICE : i64 = 89   // d ← array a's elements b…c, a fresh array
+@export
 let IR_SATADD : i64 = 90   // d ← a + b, held at width w's edge
+@export
 let IR_SATSUB : i64 = 91   // d ← a - b, held at the edge
+@export
 let IR_SATMUL : i64 = 92   // d ← a × b, held at the edge
+@export
 let IR_AFILL : i64 = 93    // d ← a copies of scalar b, a fresh array
+@export
 let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
+@export
 let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
+@export
 let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
+@export
 let IR_AREF : i64 = 97     // d ← the address of array a's element b
+@export
 let IR_DENTS : i64 = 98    // d ← the working directory's entries
+@export
 let IR_ENVN : i64 = 101    // d ← the environment's names, a str[]
+@export
 let IR_ENVG : i64 = 102    // d ← the value of the variable named a, a str?
+@export
 let IR_SDEC : i64 = 105    // d ← the character at a's byte b, c ← the byte after it
+@export
 let IR_AUXV : i64 = 103    // d ← the auxiliary vector's entry for key a
+@export
 let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
+@export
 let IR_FADDR : i64 = 99    // d ← the code address of function a
+@export
 let IR_TORAW : i64 = 106   // d ← a raw byte run holding what the u8[] a says
+@export
 let IR_WRITEV : i64 = 107  // file a takes the runs held in array b
 // 108 through 111 are the retargetable path's own, declared in
 // arch_a64.ngpl where that path begins
+@export
 let IR_HSTART : i64 = 112  // d ← a handle for the algorithm a, ready to be fed
+@export
 let IR_HUPDATE : i64 = 113 // handle a takes the bytes of the array b
+@export
 let IR_HFINAL : i64 = 114  // d ← handle a's digest, and the end of the handle
 // A function's frame carries two regions: a slot for every vreg, and
 // below them the objects that live in the frame outright -- a sized
 // array is its elements and nothing else, and the elements are here.
 // The offset counts from the bottom of the region, so it does not move
 // when a later object is added.
+@export
 let IR_FRAME : i64 = 115   // d ← the address of this frame's bytes at offset a
 // The block at vreg a, of b bytes, goes back to the allocator.  Emitted
 // only where the compiler has worked out that nothing holds it.
+@export
 let IR_GIVEBACK : i64 = 116
+@export
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 // these three were written where aarch64 was first taught them; they
 // are the IR's, and live with the rest of it
+@export
 let IR_LDN : i64 = 109     // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
+@export
 let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
+@export
 let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
+@export
 let IR_FPTR : i64 = 117    // d ← this frame's own pointer, the head of the chain
+@export
 let IR_BTADDR : i64 = 118  // d ← where the backtrace table sits in rodata
+@export
 let IR_SSLICE : i64 = 119  // d ← string a's characters from b up to c
 
+@export
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
+@export
 let IR_FLD : i64 = 67      // d ← field b of struct a
+@export
 let IR_FSTO : i64 = 68     // field b of struct a ← c
 
+@export
 struct IrFn:
     op : i64[]
     ia : i64[]
@@ -185,6 +293,7 @@ fn ir_reads() → i64[]:
 // and the whole of extra besides -- which was sound and useless: vreg
 // numbers collide with the small constants that are everywhere, so
 // nearly every temporary looked live and nearly no store could go.
+@export
 @post(r: @dropunit(#r) = nv)
 fn se_counts(ir : IrFn, nv : i64) → i64[]:
     let cnt : mut i64[] = []
@@ -295,6 +404,7 @@ fn ir_copies() → i64[]:
 // divided by eight.  Where an operation is free at a width it asks
 // nothing of the bits above, and the value it reads may keep whatever
 // stands there.
+@export
 @pre(freecmp >= 0 and freecmp <= 15 and freediv >= 0 and freediv <= 15)
 @post(r: @dropunit(#r) = nv)
 fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
@@ -376,5 +486,6 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     want
 
 // How often a vreg is named among one operation's own fields.
+@export
 fn se_here(ir : IrFn, i : i64 ¤ptrdiff, v : i64) → i64:
     (if ir.ia[i] = v: 1 else: 0) + (if ir.ib[i] = v: 1 else: 0) + (if ir.ic[i] = v: 1 else: 0)

@@ -1,3 +1,5 @@
+let tokens := @import("./tokens.ngpl")
+
 // ===========================================================================
 // Reading a program: what a file is written against
 // ===========================================================================
@@ -37,7 +39,6 @@
 // what it needs should go on saying it, and leaving them in means no
 // line number moves.
 
-@import("./tokens.ngpl")
 
 
 let IMP_TAB : i64 = 9
@@ -170,6 +171,7 @@ struct Program:
 
 // the directory a path names something in, "" when it names something
 // in the working directory
+@export
 fn dir_of(path : str) → str:
     let cut : mut i64 ¤ptrdiff = ⁻1¤ptrdiff
     foreach i := 0…#path:
@@ -206,6 +208,7 @@ fn imp_stem(path : str) → str:
 // The name each module is qualified by: the one a program is rooted in
 // takes none, so a program that binds nothing is exactly what it was.
 // A stem two modules share is told apart by which one it is.
+@export
 fn mod_names(roots : str[]) → str[]:
     let out : mut str[] = []
     foreach i := 0¤ptrdiff…#roots:
@@ -217,7 +220,7 @@ fn mod_names(roots : str[]) → str[]:
             foreach j := 0¤ptrdiff…i:
                 if out[j] = stem:
                     dup ← true
-            out.push(if dup: stem ⧺ i64_str(@dropunit(i)) else: stem)
+            out.push(if dup: stem ⧺ tokens.i64_str(@dropunit(i)) else: stem)
     out
 
 // A name joined to the directory it is looked for in.  A name that
@@ -331,7 +334,7 @@ impl Reader:
             return
         // a file is read once into each module that asks for it: what
         // one module reads in plainly is that module's own
-        let mark : str = i64_str(self.cur) ⧺ ":" ⧺ path
+        let mark : str = tokens.i64_str(self.cur) ⧺ ":" ⧺ path
         if imp_holds(self.done, mark):
             return
         match std.fs.cwd().open_file(path):
@@ -361,18 +364,18 @@ impl Reader:
                         continue
                     let nm : str = imp_named(text, at, hi)
                     if nm = "":
-                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ """: @import takes one file name in
+                        self.why ← path ⧺ ":" ⧺ tokens.i64_str(ln) ⧺ """: @import takes one file name in
                                     " quotes and nothing else, as @import(\"./tokens.ngpl\")"""
                         return
                     let found : str = imp_resolve(nm, dir_of(path), self.paths)
                     if found = "":
-                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": cannot find '" ⧺ nm ⧺ "'" ⧺ imp_looked(nm)
+                        self.why ← path ⧺ ":" ⧺ tokens.i64_str(ln) ⧺ ": cannot find '" ⧺ nm ⧺ "'" ⧺ imp_looked(nm)
                         return
                     // the same file twice under two spellings is still
                     // the same file, so what is compared is what each
                     // one answered to
                     if imp_holds(want, found):
-                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": '" ⧺ nm ⧺ "' is imported here and already above; once is what it means"
+                        self.why ← path ⧺ ":" ⧺ tokens.i64_str(ln) ⧺ ": '" ⧺ nm ⧺ "' is imported here and already above; once is what it means"
                         return
                     want.push(found)
                     wline.push(ln)
@@ -380,7 +383,7 @@ impl Reader:
                     ln ← ln + 1
                 self.stack.push(path)
                 foreach i := 0¤ptrdiff…#want:
-                    self.take(want[i], path ⧺ ":" ⧺ i64_str(wline[i]))
+                    self.take(want[i], path ⧺ ":" ⧺ tokens.i64_str(wline[i]))
                     if self.why ≠ "":
                         return
                 _ ← self.stack.pop() ?? ""
@@ -398,7 +401,7 @@ impl Reader:
                     if bn ≠ "":
                         let bf : str = imp_bound_file(text, m2, hi2)
                         if bf = "":
-                            self.why ← path ⧺ ":" ⧺ i64_str(ln2) ⧺ """: @import takes one file name
+                            self.why ← path ⧺ ":" ⧺ tokens.i64_str(ln2) ⧺ """: @import takes one file name
                                         " in quotes and nothing else, as
                                         " @import(\"./tokens.ngpl\")"""
                             return
@@ -464,6 +467,7 @@ impl Reader:
             self.bowner.push(self.pend_owner[at])
             at ← at + 1¤ptrdiff
 
+@export
 @impure
 fn read_program(roots : str[], paths : str[]) → Program:
     let r : mut Reader = (Reader{why: "", paths: paths, src: [], names: [],

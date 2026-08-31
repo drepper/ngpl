@@ -11,11 +11,12 @@
 // int 0x80 with the six arguments staged below it.
 // ---------------------------------------------------------------------------
 
+let arch_a64 := @import("./arch_a64.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+
 // the cells: A, B, C, T at [ebp-8], [ebp-16], [ebp-24], [ebp-32]
 
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_a64.ngpl")
 
 fn i3_cello(r : i64) → i64:
     0 - 8 × (r + 1)
@@ -25,32 +26,36 @@ fn i3_sloto(slot : i64) → i64:
     0 - 32 - 8 × (slot + 1)
 
 // opcode + modrm(10, reg, 101) + disp32: the [ebp+disp] form
-fn i3_rm(em : &mut Emit, op : i64, reg : i64, disp : i64):
+fn i3_rm(em : &mut emit.Emit, op : i64, reg : i64, disp : i64):
     em.b2(op, 128 + reg × 8 + 5)
     em.w32(disp)
 
 // a pair into (lo, hi) registers, and back
-fn i3_ldpair(em : &mut Emit, lo : i64, hi : i64, disp : i64):
+fn i3_ldpair(em : &mut emit.Emit, lo : i64, hi : i64, disp : i64):
     i3_rm(&em, 139, lo, disp)
     i3_rm(&em, 139, hi, disp + 4)
 
-fn i3_stpair(em : &mut Emit, lo : i64, hi : i64, disp : i64):
+fn i3_stpair(em : &mut emit.Emit, lo : i64, hi : i64, disp : i64):
     i3_rm(&em, 137, lo, disp)
     i3_rm(&em, 137, hi, disp + 4)
 
-fn i3_movimm(em : &mut Emit, reg : i64, v : i64):
+@export
+fn i3_movimm(em : &mut emit.Emit, reg : i64, v : i64):
     em.b1(184 + reg)
     em.w32(v)
 
-fn i3g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
+@export
+fn i3g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
     i3_ldpair(&em, 0, 2, i3_sloto(slot))
     i3_stpair(&em, 0, 2, i3_cello(r))
 
-fn i3g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
+@export
+fn i3g_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
     i3_stpair(&em, 0, 2, i3_sloto(slot))
 
-fn i3g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
+@export
+fn i3g_const(em : &mut emit.Emit, tg : elf.Target, r : i64, v : i64):
     // straight into the cell, no register needed
     em.b2(199, 128 + 5)
     em.w32(i3_cello(r))
@@ -59,7 +64,8 @@ fn i3g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
     em.w32(i3_cello(r) + 4)
     em.w32(@wrap(v » 32) & 4294967295)
 
-fn i3g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+@export
+fn i3g_mov2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rs))
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
@@ -69,7 +75,7 @@ fn i3g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
 // where a pair would be two, and the flag it sets is about the value
 // the type actually holds.
 @pre(bits = 8 or bits = 16 or bits = 32)
-fn i3_opw(em : &mut Emit, bits : i64, opcode : i64, modrm : i64):
+fn i3_opw(em : &mut emit.Emit, bits : i64, opcode : i64, modrm : i64):
     if bits = 8:
         em.b2(opcode - 1, modrm)
     elif bits = 16:
@@ -77,47 +83,54 @@ fn i3_opw(em : &mut Emit, bits : i64, opcode : i64, modrm : i64):
     else:
         em.b2(opcode, modrm)
 
-fn i3_binprep(em : &mut Emit, rx : i64, ry : i64):
+fn i3_binprep(em : &mut emit.Emit, rx : i64, ry : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     i3_ldpair(&em, 1, 3, i3_cello(ry))
 
-fn i3g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_binprep(&em, rx, ry)
     em.b2(1, 200)                    // add eax, ecx
     em.b2(17, 218)                   // adc edx, ebx
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_sub3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_binprep(&em, rx, ry)
     em.b2(41, 200)                   // sub eax, ecx
     em.b2(25, 218)                   // sbb edx, ebx
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_and3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_binprep(&em, rx, ry)
     em.b2(33, 200)
     em.b2(33, 218)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_or3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_binprep(&em, rx, ry)
     em.b2(9, 200)
     em.b2(9, 218)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_xor3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_binprep(&em, rx, ry)
     em.b2(49, 200)
     em.b2(49, 218)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+@export
+fn i3g_not2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rs))
     em.b2(247, 208)                  // not eax
     em.b2(247, 210)                  // not edx
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+@export
+fn i3g_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rs))
     em.b2(247, 208)
     em.b2(247, 210)
@@ -125,7 +138,8 @@ fn i3g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
     em.b3(131, 210, 0)               // adc edx, 0
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     // x in esi:edi, y in ecx:ebx; the three half-products
     i3_ldpair(&em, 6, 7, i3_cello(rx))
     i3_ldpair(&em, 1, 3, i3_cello(ry))
@@ -137,7 +151,8 @@ fn i3g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     em.b2(1, 250)                    // add edx, edi
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_shl3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     i3_rm(&em, 139, 1, i3_cello(ry))     // mov ecx, count
     em.b3(128, 249, 32)              // cmp cl, 32
@@ -151,7 +166,8 @@ fn i3g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     em.b1(224)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_shr3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     i3_rm(&em, 139, 1, i3_cello(ry))
     em.b3(128, 249, 32)              // cmp cl, 32
@@ -165,7 +181,8 @@ fn i3g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     em.b1(234)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+@export
+fn i3g_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     i3_rm(&em, 139, 1, i3_cello(ry))
     em.b3(128, 249, 32)              // cmp cl, 32
@@ -179,24 +196,26 @@ fn i3g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     em.b1(250)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
+@export
+fn i3g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rs))
     // the driver only asks for small shifts; the pair form is shld
     em.b4(15, 164, 194, imm)         // shld edx, eax, imm
     em.b3(193, 224, imm)             // shl eax, imm
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+@export
+fn i3g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     i3_binprep(&em, rx, ry)
-    if cond = CC_EQ or cond = CC_NE:
+    if cond = arch_a64.CC_EQ or cond = arch_a64.CC_NE:
         em.b2(49, 200)               // xor eax, ecx
         em.b2(49, 218)               // xor edx, ebx
         em.b2(9, 208)                // or eax, edx
-        em.b3(15, if cond = CC_EQ: 148 else: 149, 192)
+        em.b3(15, if cond = arch_a64.CC_EQ: 148 else: 149, 192)
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
     else:
         // the swapped pair asks the mirrored question
-        let flip : bool = cond = CC_GT or cond = CC_LE
+        let flip : bool = cond = arch_a64.CC_GT or cond = arch_a64.CC_LE
         if flip:
             em.b2(135, 200)          // xchg eax, ecx
             em.b2(135, 218)          // xchg edx, ebx
@@ -208,12 +227,13 @@ fn i3g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i6
         em.b3(15, if sgn = 1: 156 else: 146, 192)   // setl / setb on the high
         em.b1(144)                   // nop
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
-        if cond = CC_GE or cond = CC_LE:
+        if cond = arch_a64.CC_GE or cond = arch_a64.CC_LE:
             em.b2(52, 1)             // xor al, 1
     em.b2(49, 210)                   // xor edx, edx
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
+@export
+fn i3g_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rc))
     em.b2(9, 208)                    // or eax, edx
     em.b2(117, 14)                   // jnz take-rx (+14)
@@ -222,14 +242,16 @@ fn i3g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64)
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
-    i3_helper2(&em, rd, rx, ry, if sgn = 1: RT_DIVS64 else: RT_DIVU64)
+@export
+fn i3g_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+    i3_helper2(&em, rd, rx, ry, if sgn = 1: emit.RT_DIVS64 else: emit.RT_DIVU64)
 
-fn i3g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
-    i3_helper2(&em, rd, rx, ry, if sgn = 1: RT_MODS64 else: RT_MODU64)
+@export
+fn i3g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+    i3_helper2(&em, rd, rx, ry, if sgn = 1: emit.RT_MODS64 else: emit.RT_MODU64)
 
 // a two-argument helper call: the cells staged, the answer stored
-fn i3_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
+fn i3_helper2(em : &mut emit.Emit, rd : i64, rx : i64, ry : i64, target : i64):
     i3_ldpair(&em, 0, 2, i3_cello(rx))
     em.b3(137, 68, 36)
     em.b1(0)                         // mov [esp], eax
@@ -245,7 +267,8 @@ fn i3_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
 
 // The result is stored before the branch: a move does not touch the
 // flags, so what the arithmetic said is still there to be read.
-fn i3g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+@export
+fn i3g_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     i3_binprep(&em, rx, ry)
     if bits < 64:
         i3_opw(&em, bits, 1, 200)
@@ -255,7 +278,8 @@ fn i3g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i
     i3_stpair(&em, 0, 2, i3_cello(rd))
     i3_jcc(&em, if sgn = 1: 129 else: 131, lab)      // jno / jnc
 
-fn i3g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+@export
+fn i3g_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     i3_binprep(&em, rx, ry)
     if bits < 64:
         i3_opw(&em, bits, 41, 200)
@@ -265,7 +289,8 @@ fn i3g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i
     i3_stpair(&em, 0, 2, i3_cello(rd))
     i3_jcc(&em, if sgn = 1: 129 else: 131, lab)      // jno / jnc
 
-fn i3g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+@export
+fn i3g_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     i3_binprep(&em, rx, ry)
     if bits < 64:
         // one instruction at the type's own width, and the high word of
@@ -280,7 +305,8 @@ fn i3g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     i3_stpair(&em, 0, 2, i3_cello(rd))
     i3_stpair(&em, 1, 3, i3_cello(rf))
 
-fn i3g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+@export
+fn i3g_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     i3_binprep(&em, rx, ry)
     if bits < 64:
         // one instruction at the type's own width, and the high word of
@@ -295,7 +321,8 @@ fn i3g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     i3_stpair(&em, 0, 2, i3_cello(rd))
     i3_stpair(&em, 1, 3, i3_cello(rf))
 
-fn i3g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+@export
+fn i3g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     // the helper's arguments staged, the product computed and parked
     // past them, the flag fetched, and only then the cells written --
     // the driver aliases the flag's cell with an operand's
@@ -328,7 +355,7 @@ fn i3g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     em.b1(24)
     em.b3(137, 84, 36)
     em.b1(28)
-    i3_call(&em, RT_MULOV64)
+    i3_call(&em, emit.RT_MULOV64)
     i3_stpair(&em, 0, 2, i3_cello(rf))
     em.b3(139, 68, 36)
     em.b1(24)
@@ -336,7 +363,8 @@ fn i3g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     em.b1(28)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
-fn i3g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
+@export
+fn i3g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64):
     if bits >= 64:
         return
     i3_ldpair(&em, 0, 2, i3_cello(r))
@@ -350,7 +378,8 @@ fn i3g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
         em.b2(49, 210)               // xor edx, edx
     i3_stpair(&em, 0, 2, i3_cello(r))
 
-fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+@export
+fn i3g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     i3_rm(&em, 139, 0, i3_cello(rbase))       // mov eax, base.lo
     if off ≠ 0:
@@ -384,7 +413,8 @@ fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width 
             em.b2(49, 219)
     i3_stpair(&em, 1, 3, i3_cello(rd))
 
-fn i3g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
+@export
+fn i3g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     i3_rm(&em, 139, 0, i3_cello(rbase))
     if off ≠ 0:
@@ -404,34 +434,40 @@ fn i3g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width 
 
 let I3F_REL : i64 = 32
 
-fn i3g_jmp(em : &mut Emit, tg : Target, lab : i64):
+@export
+fn i3g_jmp(em : &mut emit.Emit, tg : elf.Target, lab : i64):
     em.tf_pos.push(em.here() + 1)
     em.tf_lab.push(lab)
     em.tf_form.push(I3F_REL)
     em.b1(233)                       // jmp rel32
     em.w32(0)
 
-fn i3_jcc(em : &mut Emit, cc : i64, lab : i64):
+@export
+fn i3_jcc(em : &mut emit.Emit, cc : i64, lab : i64):
     em.tf_pos.push(em.here() + 2)
     em.tf_lab.push(lab)
     em.tf_form.push(I3F_REL)
     em.b2(15, cc)
     em.w32(0)
 
-fn i3g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+@export
+fn i3g_jz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
     em.b2(9, 208)                    // or eax, edx
     i3_jcc(&em, 132, lab)
 
-fn i3g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+@export
+fn i3g_jnz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
     em.b2(9, 208)
     i3_jcc(&em, 133, lab)
 
-fn i3g_label(em : &mut Emit, tg : Target, lab : i64):
+@export
+fn i3g_label(em : &mut emit.Emit, tg : elf.Target, lab : i64):
     em.set_label(lab)
 
-fn i3_call(em : &mut Emit, target : i64):
+@export
+fn i3_call(em : &mut emit.Emit, target : i64):
     if em.skipping = 1:
         return
     em.cf_pos.push(em.here() + 1)
@@ -439,14 +475,17 @@ fn i3_call(em : &mut Emit, target : i64):
     em.b1(232)                       // call rel32
     em.w32(0)
 
-fn i3g_call(em : &mut Emit, tg : Target, target : i64):
+@export
+fn i3g_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
     i3_call(&em, target)
 
-fn i3g_calli(em : &mut Emit, tg : Target, r : i64):
+@export
+fn i3g_calli(em : &mut emit.Emit, tg : elf.Target, r : i64):
     i3_rm(&em, 139, 0, i3_cello(r))
     em.b2(255, 208)                  // call eax
 
-fn i3g_ijmp(em : &mut Emit, tg : Target, r : i64):
+@export
+fn i3g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
     i3_rm(&em, 139, 0, i3_cello(r))
     em.b2(255, 224)                  // jmp eax
 
@@ -475,18 +514,21 @@ fn i3_argreg_hi(k : i64) → i64:
 // argument k of a private function, straight into the pair it travels
 // in.  The stack arguments go down first, since they travel through
 // eax:edx, which is where argument 0 is about to sit.
+@export
 @pre(k >= 0 and k < 3)
-fn i3g_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+fn i3g_argreg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
     i3_ldpair(&em, i3_argreg_lo(k), i3_argreg_hi(k), i3_sloto(slot))
 
-fn i3g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
+@export
+fn i3g_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
     i3_ldpair(&em, 0, 2, i3_sloto(slot))
     em.b3(137, 68, 36)
     em.b1(8 × k)
     em.b3(137, 84, 36)
     em.b1(8 × k + 4)
 
-fn i3g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
+@export
+fn i3g_argconst(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
     em.b3(199, 68, 36)
     em.b1(8 × k)
     em.w32(v & 4294967295)
@@ -494,37 +536,44 @@ fn i3g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
     em.b1(8 × k + 4)
     em.w32(@wrap(v » 32) & 4294967295)
 
-fn i3g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+@export
+fn i3g_argmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
     em.b3(137, 68, 36)
     em.b1(8 × k)
     em.b3(137, 84, 36)
     em.b1(8 × k + 4)
 
-fn i3g_retst(em : &mut Emit, tg : Target, slot : i64):
+@export
+fn i3g_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
     i3_stpair(&em, 0, 2, i3_sloto(slot))
 
-fn i3g_retld(em : &mut Emit, tg : Target, slot : i64):
+@export
+fn i3g_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
     i3_ldpair(&em, 0, 2, i3_sloto(slot))
 
-fn i3g_retmov(em : &mut Emit, tg : Target, r : i64):
+@export
+fn i3g_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
 
 // ebp is the frame pointer, and an address on a 32-bit machine is the
 // low half of the pair a value is kept in
-fn i3g_fptr(em : &mut Emit, tg : Target, r : i64):
+@export
+fn i3g_fptr(em : &mut emit.Emit, tg : elf.Target, r : i64):
     em.b2(137, 232)                  // mov eax, ebp
     em.b2(49, 210)                   // xor edx, edx
     i3_stpair(&em, 0, 2, i3_cello(r))
 
-fn i3g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
+@export
+fn i3g_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
     let pos : i64 = em.here() + 1
     i3_movimm(&em, 0, 0)             // mov eax, imm32
     em.b2(49, 210)                   // xor edx, edx
     i3_stpair(&em, 0, 2, i3_cello(r))
     pos
 
-fn i3g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
+@export
+fn i3g_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
     let pos : i64 = em.here() + 1
     i3_movimm(&em, 0, 0)
     em.b3(137, 68, 36)
@@ -536,23 +585,27 @@ fn i3g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
 
 // the kernel: the six arguments staged low in the outgoing area as
 // 4-byte words, then gathered into the registers int 0x80 reads
-fn i3g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+@export
+fn i3g_sysarg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
     i3_rm(&em, 139, 0, i3_sloto(slot))
     em.b3(137, 68, 36)
     em.b1(4 × k)
 
-fn i3g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
+@export
+fn i3g_sysimm(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
     em.b3(199, 68, 36)
     em.b1(4 × k)
     em.w32(v)
 
-fn i3g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+@export
+fn i3g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
     i3_rm(&em, 139, 0, i3_cello(r))
     em.b3(137, 68, 36)
     em.b1(4 × k)
 
-fn i3g_syscall(em : &mut Emit, tg : Target, scid : i64):
-    i3_movimm(&em, 0, sc_number(tg, scid))
+@export
+fn i3g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
+    i3_movimm(&em, 0, arch_a64.sc_number(tg, scid))
     em.b1(85)                        // push ebp
     em.b3(139, 92, 36)
     em.b1(4)                         // mov ebx, [esp+4]
@@ -575,22 +628,25 @@ fn i3g_syscall(em : &mut Emit, tg : Target, scid : i64):
     em.b2(114, 5)                    // jb done (+5)
     i3_movimm(&em, 2, ⁻1)            // mov edx, -1: a real error
 
-fn i3g_sysret(em : &mut Emit, tg : Target, r : i64):
+@export
+fn i3g_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
     i3_stpair(&em, 0, 2, i3_cello(r))
 
 // The address of the frame's object region, plus off.  The region
 // takes the slots just past the vregs; here the slots run downward
 // from ebp, so the region's lowest address is the last of them.  A
 // pointer is half a cell wide, and the high half is nought.
+@export
 @pre(off >= 0)
-fn i3g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+fn i3g_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
     let at : i64 = 0 - 32 - 8 × (nvregs + nobj) + off
     em.b2(141, 133)                  // lea eax, [ebp+disp32]
     em.w32(at)
     i3_movimm(&em, 2, 0)
     i3_stpair(&em, 0, 2, i3_cello(r))
 
-fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
+@export
+fn i3g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = 32 + 8 × nvregs + 128
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.b1(85)                        // push ebp
@@ -606,12 +662,14 @@ fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64)
             i3_ldpair(&em, 0, 2, 8 + 8 × j)
             i3_stpair(&em, 0, 2, i3_sloto(j))
 
-fn i3g_epilogue(em : &mut Emit, tg : Target):
+@export
+fn i3g_epilogue(em : &mut emit.Emit, tg : elf.Target):
     em.b2(137, 236)                  // mov esp, ebp
     em.b1(93)                        // pop ebp
     em.b1(195)                       // ret
 
-fn i3g_resolve(em : &mut Emit, tg : Target):
+@export
+fn i3g_resolve(em : &mut emit.Emit, tg : elf.Target):
     if #em.tf_pos > 0:
         foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
@@ -621,9 +679,10 @@ fn i3g_resolve(em : &mut Emit, tg : Target):
         _ ← em.tf_lab.pop() ?? 0
         _ ← em.tf_form.pop() ?? 0
 
-fn i3g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
+@export
+fn i3g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
     em.patch32(pos, v)
 
-fn i3g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
+@export
+fn i3g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
     em.patch32(pos, dest - (pos + 4))
-

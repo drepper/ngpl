@@ -1,3 +1,4 @@
+
 // ===========================================================================
 // SHA-256, for the bill of materials
 // ===========================================================================
@@ -19,6 +20,7 @@
 // parts of the cube roots of the first sixty-four primes.  A function
 // rather than a global, since a global begins at a constant the
 // compiler can see and an array is not one.
+@export
 fn sha_k() → u32[]:
     [1116352408, 1899447441, 3049323471, 3921009573,
       961987163, 1508970993, 2453635748, 2870763221,
@@ -39,6 +41,7 @@ fn sha_k() → u32[]:
 
 // the first thirty-two bits of the fractional parts of the square
 // roots of the first eight primes
+@export
 fn sha_h0() → u32[]:
     [1779033703, 3144134277, 1013904242, 2773480762,
      1359893119, 2600822924,  528734635, 1541459225]
@@ -53,6 +56,7 @@ fn sha_h0() → u32[]:
 // one does not go where the other is wanted.  The precondition below
 // is now something the type already carries; it stays as the statement
 // of what this depends on.
+@export
 @pre(@dropunit(#d) = 32)
 @post(r: #r = 64)
 fn hex_digest(d : u8[32]) → str:
@@ -63,6 +67,7 @@ fn hex_digest(d : u8[32]) → str:
     out
 
 // the same, for a message already in hand
+@export
 @post(r: #r = 64)
 fn sha256_hex(data : byte[]) → str:
     hex_digest(std.hash.sha256.digest(data))

@@ -5,37 +5,38 @@
 // compositions are checked against.
 // ---------------------------------------------------------------------------
 
+let arch_a64 := @import("./arch_a64.ngpl")
+let arch_x86_64 := @import("./arch_x86_64.ngpl")
+let dispatch := @import("./dispatch.ngpl")
+let elf := @import("./elf.ngpl")
+let emit := @import("./emit.ngpl")
+let ir_m := @import("./ir.ngpl")
+
 // a value that must fit its width or leave for RT_OV, composed with
 // scratch labels the caller hands out
 
-@import("./ir.ngpl")
-@import("./emit.ngpl")
-@import("./elf.ngpl")
-@import("./arch_x86_64.ngpl")
-@import("./arch_a64.ngpl")
-@import("./dispatch.ngpl")
 
-fn t_range_check(em : &mut Emit, tg : Target, w : i64, lok : i64):
+fn t_range_check(em : &mut emit.Emit, tg : elf.Target, w : i64, lok : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8
     if sgn = 0:
-        g_const(&em, tg, RG_B, (1 « bits) - 1)
-        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0, 64)
-        g_jnz(&em, tg, RG_C, lok)
-        g_call(&em, tg, RT_OV)
+        dispatch.g_const(&em, tg, arch_a64.RG_B, (1 « bits) - 1)
+        dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_LE, 0, 64)
+        dispatch.g_jnz(&em, tg, arch_a64.RG_C, lok)
+        dispatch.g_call(&em, tg, emit.RT_OV)
     else:
-        g_mov2(&em, tg, RG_B, RG_A)
-        g_ext2(&em, tg, RG_B, bits, 1)
-        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0, 64)
-        g_jnz(&em, tg, RG_C, lok)
-        g_call(&em, tg, RT_OV)
-    g_label(&em, tg, lok)
+        dispatch.g_mov2(&em, tg, arch_a64.RG_B, arch_a64.RG_A)
+        dispatch.g_ext2(&em, tg, arch_a64.RG_B, bits, 1)
+        dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_EQ, 0, 64)
+        dispatch.g_jnz(&em, tg, arch_a64.RG_C, lok)
+        dispatch.g_call(&em, tg, emit.RT_OV)
+    dispatch.g_label(&em, tg, lok)
 
 // the canonical form of a wrapped result
-fn t_canon(em : &mut Emit, tg : Target, w : i64):
+fn t_canon(em : &mut emit.Emit, tg : elf.Target, w : i64):
     let bits : i64 = w & 255
     if bits < 64:
-        g_ext2(&em, tg, RG_A, bits, w » 8)
+        dispatch.g_ext2(&em, tg, arch_a64.RG_A, bits, w » 8)
 
 // nreg is what this function itself takes in registers; nreg_of says
 // the same for every function it might call, indexed as a call target
@@ -59,14 +60,14 @@ fn t_least(bits : i64) → i64:
 // which is the work being avoided; the three whose word is thirty-two
 // bits hold a thirty-two bit value canonical for nothing, so freeing
 // it there would say only what is already true.
-fn t_freecmp(tg : Target) → i64:
+fn t_freecmp(tg : elf.Target) → i64:
     match tg.id:
-        Tgt.a64: 4
-        Tgt.rv64: 0
-        Tgt.i386: 0
-        Tgt.a32: 0
-        Tgt.rv32: 0
-        Tgt.x64: 0
+        elf.Tgt.a64: 4
+        elf.Tgt.rv64: 0
+        elf.Tgt.i386: 0
+        elf.Tgt.a32: 0
+        elf.Tgt.rv32: 0
+        elf.Tgt.x64: 0
 
 // Nothing is free to divide at its width.  aarch64 can -- sdiv and
 // udiv have a form for the lower half -- but dividing there it answers
@@ -75,14 +76,14 @@ fn t_freecmp(tg : Target) → i64:
 // two constants this machine must build a piece at a time.  Measured
 // at 160 bytes on a division probe and 60 on t07_widths against the
 // range check it would replace, so it keeps the range check.
-fn t_freediv(tg : Target) → i64:
+fn t_freediv(tg : elf.Target) → i64:
     match tg.id:
-        Tgt.a64: 0
-        Tgt.rv64: 0
-        Tgt.i386: 0
-        Tgt.a32: 0
-        Tgt.rv32: 0
-        Tgt.x64: 0
+        elf.Tgt.a64: 0
+        elf.Tgt.rv64: 0
+        elf.Tgt.i386: 0
+        elf.Tgt.a32: 0
+        elf.Tgt.rv32: 0
+        elf.Tgt.x64: 0
 
 // Which operations begin by loading their first operand into RG_A.
 // Only after one of those may the store before it be dropped: the value
@@ -90,35 +91,36 @@ fn t_freediv(tg : Target) → i64:
 // any other opening would put something else there first.  Read out of
 // the ladder below rather than written from memory of it.
 fn td_reads_a_first(o : i64) → bool:
-    if o >= IR_CEQ and o <= IR_CGE:
+    if o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
         return true
-    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_ASTO or o = IR_ALEN or o = IR_HLEN or o = IR_FLD or o = IR_FSTO or o = IR_CHR or o = IR_NARROW or o = IR_LDN or o = IR_STN or o = IR_RET or o = IR_EXT
+    o = ir_m.IR_MOV or o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW or o = ir_m.IR_MUL or o = ir_m.IR_MULW or o = ir_m.IR_NEG or o = ir_m.IR_NEGW or o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR or o = ir_m.IR_BNOTT or o = ir_m.IR_SHLL or o = ir_m.IR_SHRR or o = ir_m.IR_MAXX or o = ir_m.IR_MINN or o = ir_m.IR_DIVV or o = ir_m.IR_MODD or o = ir_m.IR_JZ or o = ir_m.IR_JNZ or o = ir_m.IR_AIDX or o = ir_m.IR_AREF or o = ir_m.IR_ASTO or o = ir_m.IR_ALEN or o = ir_m.IR_HLEN or o = ir_m.IR_FLD or o = ir_m.IR_FSTO or o = ir_m.IR_CHR or o = ir_m.IR_NARROW or o = ir_m.IR_LDN or o = ir_m.IR_STN or o = ir_m.IR_RET or o = ir_m.IR_EXT
 
 // The same reckoning the pioneer makes, over the same shared counts,
 // asking this ladder's own question about what comes next.
-fn td_can_drop(ir : IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
+fn td_can_drop(ir : ir_m.IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
     let d : i64 = ir.id[i]
     if d < 0 or d >= nv or i + 1 >= n:
         return false
     let nx : i64 = ir.op[i + 1]
-    if nx = IR_LABEL or not td_reads_a_first(nx):
+    if nx = ir_m.IR_LABEL or not td_reads_a_first(nx):
         return false
     if ir.ia[i + 1] ≠ d:
         return false
-    cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
+    cnt[d × 1¤ptrdiff] - ir_m.se_here(ir, i, d) = ir_m.se_here(ir, i + 1, d) and ir_m.se_here(ir, i + 1, d) = 1
 
-fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
+@export
+fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, strs : str[],
              nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     let n : i64 ¤ptrdiff = #ir.op
-    let secnt : i64[] = se_counts(ir, ir.nvregs)
+    let secnt : i64[] = ir_m.se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
-    let cwant : i64[] = canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
+    let cwant : i64[] = ir_m.canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
     em.begin_fn(ir.nlabels + @dropunit(6 × n) + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
-    g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
+    dispatch.g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
     foreach i := 0¤ptrdiff…n:
         let o : i64 = ir.op[i]
         let a : i64 = ir.ia[i]
@@ -136,201 +138,201 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
         let cwid : i64 = if (t_freecmp(tg) & wb9) ≠ 0: bits else: 64
         let dwid : i64 = if (t_freediv(tg) & wb9) ≠ 0: bits else: 64
         em.drop_slot ← if td_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
-        if o = IR_CONST:
-            g_const(&em, tg, RG_A, a)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_MOV:
-            g_lds(&em, tg, RG_A, a)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            if o = IR_ADD or o = IR_SUB:
+        if o = ir_m.IR_CONST:
+            dispatch.g_const(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_MOV:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            if o = ir_m.IR_ADD or o = ir_m.IR_SUB:
                 // Where the machine can settle it at this width, it
                 // does; otherwise the arithmetic is done at a word and
                 // the range asked afterwards.
-                if g_narrow_ok(tg, bits):
+                if dispatch.g_narrow_ok(tg, bits):
                     // the target says whether it can branch on what the
                     // arithmetic set or has to make a value of it first
-                    if o = IR_ADD:
-                        g_addchk(&em, tg, RG_A, RG_A, RG_B, sgn, bits, sl)
+                    if o = ir_m.IR_ADD:
+                        dispatch.g_addchk(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, bits, sl)
                     else:
-                        g_subchk(&em, tg, RG_A, RG_A, RG_B, sgn, bits, sl)
-                    g_call(&em, tg, RT_OV)
-                    g_label(&em, tg, sl)
+                        dispatch.g_subchk(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, bits, sl)
+                    dispatch.g_call(&em, tg, emit.RT_OV)
+                    dispatch.g_label(&em, tg, sl)
                     sl ← sl + 1
                     // a narrow result comes back in the shape its width
                     // leaves it; a word-wide one is already canonical
-                    if want_canon(cwant, d, w):
+                    if arch_x86_64.want_canon(cwant, d, w):
                         t_canon(&em, tg, w)
                 else:
-                    if o = IR_ADD:
-                        g_add3(&em, tg, RG_A, RG_A, RG_B)
+                    if o = ir_m.IR_ADD:
+                        dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                     else:
-                        g_sub3(&em, tg, RG_A, RG_A, RG_B)
+                        dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                     t_range_check(&em, tg, w, sl)
                     sl ← sl + 1
             else:
-                if o = IR_ADDW:
-                    g_add3(&em, tg, RG_A, RG_A, RG_B)
+                if o = ir_m.IR_ADDW:
+                    dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 else:
-                    g_sub3(&em, tg, RG_A, RG_A, RG_B)
-                if want_canon(cwant, d, w):
+                    dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+                if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_MUL or o = IR_MULW:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            if o = IR_MULW:
-                g_mul3(&em, tg, RG_A, RG_A, RG_B)
-                if want_canon(cwant, d, w):
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_MUL or o = ir_m.IR_MULW:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            if o = ir_m.IR_MULW:
+                dispatch.g_mul3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+                if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
             elif bits = 64:
-                g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
-                g_jz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_OV)
-                g_label(&em, tg, sl)
+                dispatch.g_mulov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, sgn, bits)
+                dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_call(&em, tg, emit.RT_OV)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
             else:
-                g_mul3(&em, tg, RG_A, RG_A, RG_B)
+                dispatch.g_mul3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 t_range_check(&em, tg, w, sl)
                 sl ← sl + 1
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_NEG or o = IR_NEGW:
-            g_lds(&em, tg, RG_A, a)
-            if o = IR_NEG and sgn = 1 and bits = 64:
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_NEG or o = ir_m.IR_NEGW:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            if o = ir_m.IR_NEG and sgn = 1 and bits = 64:
                 // the one signed value with no negation
-                g_const(&em, tg, RG_B, ⁻9223372036854775807 - 1)
-                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_NE, 0, 64)
-                g_jnz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_OV)
-                g_label(&em, tg, sl)
+                dispatch.g_const(&em, tg, arch_a64.RG_B, ⁻9223372036854775807 - 1)
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_NE, 0, 64)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_call(&em, tg, emit.RT_OV)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
-                g_neg2(&em, tg, RG_A, RG_A)
-            elif o = IR_NEG and sgn = 0:
+                dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
+            elif o = ir_m.IR_NEG and sgn = 0:
                 // a negated unsigned is only 0
-                g_jz(&em, tg, RG_A, sl)
-                g_call(&em, tg, RT_OV)
-                g_label(&em, tg, sl)
+                dispatch.g_jz(&em, tg, arch_a64.RG_A, sl)
+                dispatch.g_call(&em, tg, emit.RT_OV)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
-                g_neg2(&em, tg, RG_A, RG_A)
+                dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
             else:
-                g_neg2(&em, tg, RG_A, RG_A)
-                if o = IR_NEG:
+                dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
+                if o = ir_m.IR_NEG:
                     t_range_check(&em, tg, w, sl)
                     sl ← sl + 1
-                elif want_canon(cwant, d, w):
+                elif arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            if o = IR_BAND:
-                g_and3(&em, tg, RG_A, RG_A, RG_B)
-            elif o = IR_BORR:
-                g_or3(&em, tg, RG_A, RG_A, RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            if o = ir_m.IR_BAND:
+                dispatch.g_and3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+            elif o = ir_m.IR_BORR:
+                dispatch.g_or3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
             else:
-                g_xor3(&em, tg, RG_A, RG_A, RG_B)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_BNOTT:
-            g_lds(&em, tg, RG_A, a)
-            g_not2(&em, tg, RG_A, RG_A)
-            if want_canon(cwant, d, w):
+                dispatch.g_xor3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_BNOTT:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_not2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
+            if arch_x86_64.want_canon(cwant, d, w):
                 t_canon(&em, tg, w)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_SHLL or o = IR_SHRR:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_const(&em, tg, RG_C, bits - sgn)
-            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0, 64)
-            g_jnz(&em, tg, RG_C, sl)
-            g_call(&em, tg, RT_SHIFT)
-            g_label(&em, tg, sl)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_SHLL or o = ir_m.IR_SHRR:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, bits - sgn)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_call(&em, tg, emit.RT_SHIFT)
+            dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            if o = IR_SHLL:
-                g_shl3(&em, tg, RG_A, RG_A, RG_B)
-                if want_canon(cwant, d, w):
+            if o = ir_m.IR_SHLL:
+                dispatch.g_shl3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+                if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
             elif sgn = 1:
-                g_sar3(&em, tg, RG_A, RG_A, RG_B)
+                dispatch.g_sar3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
             else:
-                g_shr3(&em, tg, RG_A, RG_A, RG_B)
-            g_sts(&em, tg, RG_A, d)
-        elif o >= IR_CEQ and o <= IR_CGE:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, o - IR_CEQ, sgn, cwid)
-            g_mov2(&em, tg, RG_A, RG_C)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_MAXX or o = IR_MINN:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, if o = IR_MAXX: CC_GE else: CC_LE, sgn, cwid)
-            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_SEL:
-            g_lds(&em, tg, RG_C, a)
-            g_lds(&em, tg, RG_A, b)
-            g_lds(&em, tg, RG_B, c)
-            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_DIVV or o = IR_MODD:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
+                dispatch.g_shr3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, o - ir_m.IR_CEQ, sgn, cwid)
+            dispatch.g_mov2(&em, tg, arch_a64.RG_A, arch_a64.RG_C)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_MAXX or o = ir_m.IR_MINN:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, if o = ir_m.IR_MAXX: arch_a64.CC_GE else: arch_a64.CC_LE, sgn, cwid)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_SEL:
+            dispatch.g_lds(&em, tg, arch_a64.RG_C, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_DIVV or o = ir_m.IR_MODD:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
             let ldo9 : i64 = sl
             let lend9 : i64 = sl + 1
             sl ← sl + 2
-            g_jnz(&em, tg, RG_B, ldo9)
-            g_lds(&em, tg, RG_A, c)
-            g_jmp(&em, tg, lend9)
-            g_label(&em, tg, ldo9)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_B, ldo9)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, c)
+            dispatch.g_jmp(&em, tg, lend9)
+            dispatch.g_label(&em, tg, ldo9)
             // Dividing at the width, the least value over minus one is
             // answered wrongly rather than refused, so the check that
             // stood only at the word now stands wherever the division
             // is made where the value is.
             let dfree : bool = dwid ≠ 64
             if sgn = 1 and (bits = 64 or dfree):
-                g_const(&em, tg, RG_C, t_least(bits))
-                g_cmp3(&em, tg, RG_C, RG_A, RG_C, CC_NE, 0, dwid)
-                g_jnz(&em, tg, RG_C, sl)
-                g_const(&em, tg, RG_C, ⁻1)
-                g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_NE, 0, dwid)
-                g_jnz(&em, tg, RG_C, sl)
-                if o = IR_DIVV:
-                    g_call(&em, tg, RT_OV)
+                dispatch.g_const(&em, tg, arch_a64.RG_C, t_least(bits))
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_NE, 0, dwid)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_const(&em, tg, arch_a64.RG_C, ⁻1)
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_NE, 0, dwid)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                if o = ir_m.IR_DIVV:
+                    dispatch.g_call(&em, tg, emit.RT_OV)
                 else:
                     // the remainder is nought and always was; the
                     // machine faults only because it works the
                     // quotient out at the same time
-                    g_const(&em, tg, RG_A, 0)
-                    g_jmp(&em, tg, lend9)
-                g_label(&em, tg, sl)
+                    dispatch.g_const(&em, tg, arch_a64.RG_A, 0)
+                    dispatch.g_jmp(&em, tg, lend9)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
-            if o = IR_DIVV:
-                g_div3(&em, tg, RG_A, RG_A, RG_B, sgn, dwid)
+            if o = ir_m.IR_DIVV:
+                dispatch.g_div3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, dwid)
             else:
-                g_mod3(&em, tg, RG_A, RG_A, RG_B, sgn, dwid)
+                dispatch.g_mod3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, dwid)
             if sgn = 1 and bits ≠ 64 and not dfree:
                 t_range_check(&em, tg, w, sl)
                 sl ← sl + 1
-            g_label(&em, tg, lend9)
+            dispatch.g_label(&em, tg, lend9)
             // Only a division made at the width leaves a value only
             // that wide.  Made whole, of operands that were canonical,
             // it answers canonically and there is nothing to put right.
-            if dfree and want_canon(cwant, d, w):
+            if dfree and arch_x86_64.want_canon(cwant, d, w):
                 t_canon(&em, tg, w)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_JMP:
-            g_jmp(&em, tg, a)
-        elif o = IR_JZ or o = IR_JNZ:
-            g_lds(&em, tg, RG_A, a)
-            if o = IR_JZ:
-                g_jz(&em, tg, RG_A, b)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_JMP:
+            dispatch.g_jmp(&em, tg, a)
+        elif o = ir_m.IR_JZ or o = ir_m.IR_JNZ:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            if o = ir_m.IR_JZ:
+                dispatch.g_jz(&em, tg, arch_a64.RG_A, b)
             else:
-                g_jnz(&em, tg, RG_A, b)
-        elif o = IR_LABEL:
-            g_label(&em, tg, a)
-        elif o = IR_CALL:
+                dispatch.g_jnz(&em, tg, arch_a64.RG_A, b)
+        elif o = ir_m.IR_LABEL:
+            dispatch.g_label(&em, tg, a)
+        elif o = ir_m.IR_CALL:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
             let cnr : i64 = if a >= 0 and a < @dropunit(#nreg_of): nreg_of[a × 1¤ptrdiff] else: 0
             // The stack arguments are put down first.  Where a target
@@ -338,51 +340,51 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             // through the very register a later stack argument would
             // borrow, and going in this order the two never meet.
             foreach k := (cnr ⌊ argc)…argc:
-                g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
+                dispatch.g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
             foreach kr := 0…(argc ⌊ cnr):
-                g_argreg(&em, tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
-            g_call(&em, tg, a)
-            g_retst(&em, tg, d)
+                dispatch.g_argreg(&em, tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
+            dispatch.g_call(&em, tg, a)
+            dispatch.g_retst(&em, tg, d)
             // a returned value is only as wide as its type; where this
             // caller wants more, this caller is the one that says so
-            if want_canon(cwant, d, w):
-                g_lds(&em, tg, RG_A, d)
+            if arch_x86_64.want_canon(cwant, d, w):
+                dispatch.g_lds(&em, tg, arch_a64.RG_A, d)
                 t_canon(&em, tg, w)
-                g_sts(&em, tg, RG_A, d)
-        elif o = IR_CALLI:
+                dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_CALLI:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
             foreach ki := 0…argci:
-                g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
-            g_lds(&em, tg, RG_C, a)
-            g_calli(&em, tg, RG_C)
-            g_retst(&em, tg, d)
-            if want_canon(cwant, d, w):
-                g_lds(&em, tg, RG_A, d)
+                dispatch.g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
+            dispatch.g_lds(&em, tg, arch_a64.RG_C, a)
+            dispatch.g_calli(&em, tg, arch_a64.RG_C)
+            dispatch.g_retst(&em, tg, d)
+            if arch_x86_64.want_canon(cwant, d, w):
+                dispatch.g_lds(&em, tg, arch_a64.RG_A, d)
                 t_canon(&em, tg, w)
-                g_sts(&em, tg, RG_A, d)
-        elif o = IR_RET:
+                dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_RET:
             if a ≠ ⁻1:
-                g_retld(&em, tg, a)
-            g_epilogue(&em, tg)
-        elif o = IR_PRINTS or o = IR_EPRINTS or o = IR_ABORT:
-            let pos : i64 = g_absref_arg(&em, tg, 0)
+                dispatch.g_retld(&em, tg, a)
+            dispatch.g_epilogue(&em, tg)
+        elif o = ir_m.IR_PRINTS or o = ir_m.IR_EPRINTS or o = ir_m.IR_ABORT:
+            let pos : i64 = dispatch.g_absref_arg(&em, tg, 0)
             if em.skipping = 0:
                 em.sf_pos.push(pos)
                 em.sf_str.push(a)
-            g_argconst(&em, tg, 1, str_len(strs[a × 1¤ptrdiff]))
-            g_call(&em, tg, if o = IR_PRINTS: RT_WRITE1 else: (if o = IR_EPRINTS: RT_WRITE2 else: RT_ABORT))
-        elif o = IR_PRINTI or o = IR_PRINTU:
-            g_argld(&em, tg, 0, a)
-            g_call(&em, tg, if o = IR_PRINTI: RT_PRINTI else: RT_PRINTU)
-        elif o = IR_PRINTSV:
-            g_argld(&em, tg, 0, a)
-            g_call(&em, tg, RT_PRINTSTR)
-        elif o = IR_EXIT:
-            g_sysarg(&em, tg, 0, a)
-            g_syscall(&em, tg, SC_EXIT)
-        elif o = IR_GLOAD or o = IR_GSTORE:
-            let gg : i64 = if o = IR_GLOAD: a else: a
-            let pos : i64 = g_absref(&em, tg, RG_B)
+            dispatch.g_argconst(&em, tg, 1, emit.str_len(strs[a × 1¤ptrdiff]))
+            dispatch.g_call(&em, tg, if o = ir_m.IR_PRINTS: emit.RT_WRITE1 else: (if o = ir_m.IR_EPRINTS: emit.RT_WRITE2 else: emit.RT_ABORT))
+        elif o = ir_m.IR_PRINTI or o = ir_m.IR_PRINTU:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, if o = ir_m.IR_PRINTI: emit.RT_PRINTI else: emit.RT_PRINTU)
+        elif o = ir_m.IR_PRINTSV:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, emit.RT_PRINTSTR)
+        elif o = ir_m.IR_EXIT:
+            dispatch.g_sysarg(&em, tg, 0, a)
+            dispatch.g_syscall(&em, tg, arch_a64.SC_EXIT)
+        elif o = ir_m.IR_GLOAD or o = ir_m.IR_GSTORE:
+            let gg : i64 = if o = ir_m.IR_GLOAD: a else: a
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_B)
             if em.skipping = 0:
                 if em.gseg[gg × 1¤ptrdiff] = 0:
                     em.gr_pos.push(pos)
@@ -390,111 +392,111 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 else:
                     em.df_pos.push(pos)
                     em.df_off.push(em.gmap[gg × 1¤ptrdiff])
-            if o = IR_GLOAD:
-                g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
-                g_sts(&em, tg, RG_A, d)
+            if o = ir_m.IR_GLOAD:
+                dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8, 0)
+                dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
             else:
-                g_lds(&em, tg, RG_A, b)
-                g_sto(&em, tg, RG_A, RG_B, 0, 8)
-        elif o = IR_ANEW:
-            g_argconst(&em, tg, 0, a)
-            g_call(&em, tg, RT_ARRNEW)
-            g_retst(&em, tg, d)
-        elif o = IR_GIVEBACK:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_FREE)
-        elif o = IR_SNEW:
-            g_argconst(&em, tg, 0, 8 × a)
-            g_call(&em, tg, RT_ALLOC)
-            g_retst(&em, tg, d)
-        elif o = IR_APUSH:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_ARRPUSH)
-        elif o = IR_AIDX or o = IR_AREF:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
-            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0, 64)
-            g_jnz(&em, tg, RG_C, sl)
-            g_call(&em, tg, RT_BOUNDS)
-            g_label(&em, tg, sl)
+                dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
+                dispatch.g_sto(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8)
+        elif o = ir_m.IR_ANEW:
+            dispatch.g_argconst(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, emit.RT_ARRNEW)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_GIVEBACK:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_FREE)
+        elif o = ir_m.IR_SNEW:
+            dispatch.g_argconst(&em, tg, 0, 8 × a)
+            dispatch.g_call(&em, tg, emit.RT_ALLOC)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_APUSH:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_ARRPUSH)
+        elif o = ir_m.IR_AIDX or o = ir_m.IR_AREF:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_call(&em, tg, emit.RT_BOUNDS)
+            dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
-            g_shl3i(&em, tg, RG_T, RG_B, 3)
-            g_add3(&em, tg, RG_C, RG_C, RG_T)
-            if o = IR_AIDX:
-                g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_B, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
+            if o = ir_m.IR_AIDX:
+                dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_C, 0, 8, 0)
             else:
-                g_mov2(&em, tg, RG_A, RG_C)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_ASTO:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
-            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0, 64)
-            g_jnz(&em, tg, RG_C, sl)
-            g_call(&em, tg, RT_BOUNDS)
-            g_label(&em, tg, sl)
+                dispatch.g_mov2(&em, tg, arch_a64.RG_A, arch_a64.RG_C)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_ASTO:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_call(&em, tg, emit.RT_BOUNDS)
+            dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
-            g_shl3i(&em, tg, RG_T, RG_B, 3)
-            g_add3(&em, tg, RG_C, RG_C, RG_T)
-            g_lds(&em, tg, RG_B, c)
-            g_sto(&em, tg, RG_B, RG_C, 0, 8)
-        elif o = IR_APOP:
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_B, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
+            dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_C, 0, 8)
+        elif o = ir_m.IR_APOP:
             let lem : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
-            g_lds(&em, tg, RG_A, a)
-            g_ldo(&em, tg, RG_B, RG_A, 8, 8, 0)
-            g_jz(&em, tg, RG_B, lem)
-            g_const(&em, tg, RG_C, 1)
-            g_sub3(&em, tg, RG_B, RG_B, RG_C)
-            g_sto(&em, tg, RG_B, RG_A, 8, 8)
-            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
-            g_shl3i(&em, tg, RG_T, RG_B, 3)
-            g_add3(&em, tg, RG_C, RG_C, RG_T)
-            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
-            g_jmp(&em, tg, ldn)
-            g_label(&em, tg, lem)
-            g_lds(&em, tg, RG_A, b)
-            g_label(&em, tg, ldn)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_AGET:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_B, arch_a64.RG_A, 8, 8, 0)
+            dispatch.g_jz(&em, tg, arch_a64.RG_B, lem)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, 1)
+            dispatch.g_sub3(&em, tg, arch_a64.RG_B, arch_a64.RG_B, arch_a64.RG_C)
+            dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_A, 8, 8)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_B, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_C, 0, 8, 0)
+            dispatch.g_jmp(&em, tg, ldn)
+            dispatch.g_label(&em, tg, lem)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
+            dispatch.g_label(&em, tg, ldn)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_AGET:
             let ldf : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, b)
-            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
-            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_GE, 0, 64)
-            g_jnz(&em, tg, RG_C, ldf)
-            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
-            g_shl3i(&em, tg, RG_T, RG_B, 3)
-            g_add3(&em, tg, RG_C, RG_C, RG_T)
-            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
-            g_jmp(&em, tg, ldn)
-            g_label(&em, tg, ldf)
-            g_lds(&em, tg, RG_A, c)
-            g_label(&em, tg, ldn)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_ALEN:
-            g_lds(&em, tg, RG_A, a)
-            g_ldo(&em, tg, RG_A, RG_A, 8, 8, 0)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_HLEN:
-            g_lds(&em, tg, RG_A, a)
-            g_ldo(&em, tg, RG_A, RG_A, 16, 8, 0)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_SC:
-            let pos : i64 = g_absref(&em, tg, RG_A)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, ldf)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_B, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_C, 0, 8, 0)
+            dispatch.g_jmp(&em, tg, ldn)
+            dispatch.g_label(&em, tg, ldf)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, c)
+            dispatch.g_label(&em, tg, ldn)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_ALEN:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 8, 8, 0)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_HLEN:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 16, 8, 0)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_SC:
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.sd_pos.push(pos)
                 em.sd_str.push(a)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_FADDR:
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_FADDR:
             // Whatever this address reaches will be called indirectly,
             // by the architecture's convention.  A function taking a
             // convention of its own must therefore never be the one it
@@ -502,345 +504,345 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             // this is where a way it missed would show.
             assert(a < 0 or a >= @dropunit(#nreg_of) or nreg_of[a × 1¤ptrdiff] = 0,
                    "no private convention is reached through an address")
-            let pos : i64 = g_absref(&em, tg, RG_A)
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.ff_pos.push(pos)
                 em.ff_fn.push(a)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_FLD:
-            g_lds(&em, tg, RG_A, a)
-            g_ldo(&em, tg, RG_A, RG_A, 8 × b, 8, 0)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_FSTO:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, c)
-            g_sto(&em, tg, RG_B, RG_A, 8 × b, 8)
-        elif o = IR_HNEW:
-            g_argconst(&em, tg, 0, a)
-            g_argconst(&em, tg, 1, b)
-            g_call(&em, tg, RT_HNEW)
-            g_retst(&em, tg, d)
-        elif o = IR_HPUT:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_argld(&em, tg, 2, c)
-            g_call(&em, tg, RT_HPUT)
-        elif o = IR_HGET or o = IR_HELEM:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, if o = IR_HGET: RT_HGET else: RT_HELEM)
-            g_retst(&em, tg, d)
-        elif o = IR_CHR:
-            g_lds(&em, tg, RG_A, a)
-            g_const(&em, tg, RG_B, 1114111)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0, 64)
-            g_jnz(&em, tg, RG_C, sl)
-            g_call(&em, tg, RT_BADCHAR)
-            g_label(&em, tg, sl)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_FLD:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 8 × b, 8, 0)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_FSTO:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
+            dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_A, 8 × b, 8)
+        elif o = ir_m.IR_HNEW:
+            dispatch.g_argconst(&em, tg, 0, a)
+            dispatch.g_argconst(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_HNEW)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_HPUT:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_argld(&em, tg, 2, c)
+            dispatch.g_call(&em, tg, emit.RT_HPUT)
+        elif o = ir_m.IR_HGET or o = ir_m.IR_HELEM:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, if o = ir_m.IR_HGET: emit.RT_HGET else: emit.RT_HELEM)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_CHR:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, 1114111)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_LE, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_call(&em, tg, emit.RT_BADCHAR)
+            dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            g_mov2(&em, tg, RG_C, RG_A)
-            g_const(&em, tg, RG_B, 55296)
-            g_sub3(&em, tg, RG_C, RG_C, RG_B)
-            g_const(&em, tg, RG_B, 2048)
-            g_cmp3(&em, tg, RG_C, RG_C, RG_B, CC_GE, 0, 64)
-            g_jnz(&em, tg, RG_C, sl)
-            g_call(&em, tg, RT_BADCHAR)
-            g_label(&em, tg, sl)
+            dispatch.g_mov2(&em, tg, arch_a64.RG_C, arch_a64.RG_A)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, 55296)
+            dispatch.g_sub3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_B)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, 2048)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_B, arch_a64.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_call(&em, tg, emit.RT_BADCHAR)
+            dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_SIDX:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_STRIDX)
-            g_retst(&em, tg, d)
-        elif o = IR_SCCAT or o = IR_SEQV:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, if o = IR_SCCAT: RT_CONCAT else: RT_STREQ)
-            g_retst(&em, tg, d)
-        elif o = IR_HFINAL:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_HFINAL)
-            g_retst(&em, tg, d)
-        elif o = IR_SLENV or o = IR_CHARS or o = IR_CHARSTR or o = IR_SBYTES or o = IR_HSTART or o = IR_TORAW or o = IR_FREAD or o = IR_FOPEN:
-            g_argld(&em, tg, 0, a)
-            if o = IR_SLENV:
-                g_call(&em, tg, RT_STRCHARS)
-            elif o = IR_CHARS:
-                g_call(&em, tg, RT_CHARS)
-            elif o = IR_CHARSTR:
-                g_call(&em, tg, RT_CHARSTR)
-            elif o = IR_SBYTES:
-                g_call(&em, tg, RT_SBYTES)
-            elif o = IR_HSTART:
-                g_call(&em, tg, RT_HSTART)
-            elif o = IR_TORAW:
-                g_call(&em, tg, RT_TORAW)
-            elif o = IR_FREAD:
-                g_call(&em, tg, RT_FREAD)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_SIDX:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_STRIDX)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_SCCAT or o = ir_m.IR_SEQV:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, if o = ir_m.IR_SCCAT: emit.RT_CONCAT else: emit.RT_STREQ)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_HFINAL:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_HFINAL)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_SLENV or o = ir_m.IR_CHARS or o = ir_m.IR_CHARSTR or o = ir_m.IR_SBYTES or o = ir_m.IR_HSTART or o = ir_m.IR_TORAW or o = ir_m.IR_FREAD or o = ir_m.IR_FOPEN:
+            dispatch.g_argld(&em, tg, 0, a)
+            if o = ir_m.IR_SLENV:
+                dispatch.g_call(&em, tg, emit.RT_STRCHARS)
+            elif o = ir_m.IR_CHARS:
+                dispatch.g_call(&em, tg, emit.RT_CHARS)
+            elif o = ir_m.IR_CHARSTR:
+                dispatch.g_call(&em, tg, emit.RT_CHARSTR)
+            elif o = ir_m.IR_SBYTES:
+                dispatch.g_call(&em, tg, emit.RT_SBYTES)
+            elif o = ir_m.IR_HSTART:
+                dispatch.g_call(&em, tg, emit.RT_HSTART)
+            elif o = ir_m.IR_TORAW:
+                dispatch.g_call(&em, tg, emit.RT_TORAW)
+            elif o = ir_m.IR_FREAD:
+                dispatch.g_call(&em, tg, emit.RT_FREAD)
             else:
-                g_call(&em, tg, RT_FOPEN)
-            g_retst(&em, tg, d)
-        elif o = IR_SDEC:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_STRNEXT)
-            g_retst(&em, tg, d)
-            g_lds(&em, tg, RG_A, d)
-            g_const(&em, tg, RG_B, 32)
-            g_shr3(&em, tg, RG_B, RG_A, RG_B)
-            g_sts(&em, tg, RG_B, c)
-            g_const(&em, tg, RG_C, 4294967295)
-            g_and3(&em, tg, RG_A, RG_A, RG_C)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_AUXV:
-            g_argconst(&em, tg, 0, a)
-            g_call(&em, tg, RT_AUXV)
-            g_retst(&em, tg, d)
-        elif o = IR_EXECFN or o = IR_ENVN or o = IR_ARGS or o = IR_DENTS:
-            if o = IR_EXECFN:
-                g_call(&em, tg, RT_EXECFN)
-            elif o = IR_ENVN:
-                g_call(&em, tg, RT_ENVN)
-            elif o = IR_ARGS:
-                g_call(&em, tg, RT_ARGS)
+                dispatch.g_call(&em, tg, emit.RT_FOPEN)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_SDEC:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_STRNEXT)
+            dispatch.g_retst(&em, tg, d)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, d)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, 32)
+            dispatch.g_shr3(&em, tg, arch_a64.RG_B, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_B, c)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, 4294967295)
+            dispatch.g_and3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_C)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_AUXV:
+            dispatch.g_argconst(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, emit.RT_AUXV)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_EXECFN or o = ir_m.IR_ENVN or o = ir_m.IR_ARGS or o = ir_m.IR_DENTS:
+            if o = ir_m.IR_EXECFN:
+                dispatch.g_call(&em, tg, emit.RT_EXECFN)
+            elif o = ir_m.IR_ENVN:
+                dispatch.g_call(&em, tg, emit.RT_ENVN)
+            elif o = ir_m.IR_ARGS:
+                dispatch.g_call(&em, tg, emit.RT_ARGS)
             else:
-                g_call(&em, tg, RT_DENTS)
-            g_retst(&em, tg, d)
-        elif o = IR_ENVG:
-            g_argld(&em, tg, 0, a)
-            g_call(&em, tg, RT_ENVG)
-            g_retst(&em, tg, d)
-        elif o = IR_FCREATE:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_FCREATE)
-            g_retst(&em, tg, d)
-        elif o = IR_FWRITE or o = IR_WRITEV or o = IR_HUPDATE:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_call(&em, tg, if o = IR_HUPDATE: RT_HUPDATE else: (if o = IR_FWRITE: RT_FWRITE else: RT_WRITEV))
-        elif o = IR_FCLOSE:
-            g_sysarg(&em, tg, 0, a)
-            g_syscall(&em, tg, SC_CLOSE)
-        elif o = IR_EXT:
+                dispatch.g_call(&em, tg, emit.RT_DENTS)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_ENVG:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, emit.RT_ENVG)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_FCREATE:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, emit.RT_FCREATE)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_FWRITE or o = ir_m.IR_WRITEV or o = ir_m.IR_HUPDATE:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_call(&em, tg, if o = ir_m.IR_HUPDATE: emit.RT_HUPDATE else: (if o = ir_m.IR_FWRITE: emit.RT_FWRITE else: emit.RT_WRITEV))
+        elif o = ir_m.IR_FCLOSE:
+            dispatch.g_sysarg(&em, tg, 0, a)
+            dispatch.g_syscall(&em, tg, arch_a64.SC_CLOSE)
+        elif o = ir_m.IR_EXT:
             // asked for canonical, so it arrives canonical
-            g_lds(&em, tg, RG_A, a)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_NARROW:
-            g_lds(&em, tg, RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_NARROW:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             if bits = 64:
-                g_const(&em, tg, RG_B, 0)
-                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 1, 64)
-                g_jnz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_BADFIT)
-                g_label(&em, tg, sl)
+                dispatch.g_const(&em, tg, arch_a64.RG_B, 0)
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_GE, 1, 64)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_call(&em, tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
             elif sgn = 0:
-                g_const(&em, tg, RG_B, (1 « bits) - 1)
-                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0, 64)
-                g_jnz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_BADFIT)
-                g_label(&em, tg, sl)
+                dispatch.g_const(&em, tg, arch_a64.RG_B, (1 « bits) - 1)
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_LE, 0, 64)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_call(&em, tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
             else:
-                g_mov2(&em, tg, RG_B, RG_A)
-                g_ext2(&em, tg, RG_B, bits, 1)
-                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0, 64)
-                g_jnz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_BADFIT)
-                g_label(&em, tg, sl)
+                dispatch.g_mov2(&em, tg, arch_a64.RG_B, arch_a64.RG_A)
+                dispatch.g_ext2(&em, tg, arch_a64.RG_B, bits, 1)
+                dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_EQ, 0, 64)
+                dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
+                dispatch.g_call(&em, tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_ACAT or o = IR_AFILL or o = IR_ACYC:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            if o = IR_ACAT:
-                g_call(&em, tg, RT_ACAT)
-            elif o = IR_AFILL:
-                g_call(&em, tg, RT_AFILL)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_ACAT or o = ir_m.IR_AFILL or o = ir_m.IR_ACYC:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            if o = ir_m.IR_ACAT:
+                dispatch.g_call(&em, tg, emit.RT_ACAT)
+            elif o = ir_m.IR_AFILL:
+                dispatch.g_call(&em, tg, emit.RT_AFILL)
             else:
-                g_call(&em, tg, RT_ACYC)
-            g_retst(&em, tg, d)
-        elif o = IR_AFIND:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_argconst(&em, tg, 2, c)
-            g_call(&em, tg, RT_AFIND)
-            g_retst(&em, tg, d)
-        elif o = IR_ASLICE or o = IR_SSLICE:
-            g_argld(&em, tg, 0, a)
-            g_argld(&em, tg, 1, b)
-            g_argld(&em, tg, 2, c)
-            g_call(&em, tg, if o = IR_ASLICE: RT_ASLICE else: RT_SSLICE)
-            g_retst(&em, tg, d)
-        elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
+                dispatch.g_call(&em, tg, emit.RT_ACYC)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_AFIND:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_argconst(&em, tg, 2, c)
+            dispatch.g_call(&em, tg, emit.RT_AFIND)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_ASLICE or o = ir_m.IR_SSLICE:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_argld(&em, tg, 2, c)
+            dispatch.g_call(&em, tg, if o = ir_m.IR_ASLICE: emit.RT_ASLICE else: emit.RT_SSLICE)
+            dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.IR_SATADD or o = ir_m.IR_SATSUB or o = ir_m.IR_SATMUL:
             t_emit_sat(&em, tg, o, w, a, b, d, sl)
             sl ← sl + 2
-        elif o = IR_JTAB:
+        elif o = ir_m.IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            g_lds(&em, tg, RG_A, a)
-            g_const(&em, tg, RG_B, jmin)
-            g_sub3(&em, tg, RG_A, RG_A, RG_B)
-            g_const(&em, tg, RG_B, span)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 0, 64)
-            g_jnz(&em, tg, RG_C, ldef)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, jmin)
+            dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, span)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, tg, arch_a64.RG_C, ldef)
             let id : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            let pos : i64 = g_absref(&em, tg, RG_B)
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_B)
             if em.skipping = 0:
                 em.jt_pos.push(pos)
                 em.jt_id.push(id)
-            g_shl3i(&em, tg, RG_T, RG_A, 3)
-            g_add3(&em, tg, RG_B, RG_B, RG_T)
-            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
-            g_ijmp(&em, tg, RG_A)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_A, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_B, arch_a64.RG_B, arch_a64.RG_T)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8, 0)
+            dispatch.g_ijmp(&em, tg, arch_a64.RG_A)
             em.pj_id.push(id)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(span)
             foreach e := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
-        elif o = IR_VTAB:
+        elif o = ir_m.IR_VTAB:
             let vmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            g_lds(&em, tg, RG_A, a)
-            g_const(&em, tg, RG_B, vmin)
-            g_sub3(&em, tg, RG_A, RG_A, RG_B)
-            g_const(&em, tg, RG_B, span)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LT, 0, 64)
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, vmin)
+            dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, span)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_LT, 0, 64)
             // the load is clamped inside the table; the answer is
             // chosen after
-            g_const(&em, tg, RG_B, 0)
-            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, 0)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
             let id2 : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            let pos : i64 = g_absref(&em, tg, RG_B)
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_B)
             if em.skipping = 0:
                 em.jt_pos.push(pos)
                 em.jt_id.push(id2)
-            g_shl3i(&em, tg, RG_T, RG_A, 3)
-            g_add3(&em, tg, RG_B, RG_B, RG_T)
-            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
-            g_const(&em, tg, RG_B, defv)
-            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
-            g_sts(&em, tg, RG_A, d)
+            dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_A, 3)
+            dispatch.g_add3(&em, tg, arch_a64.RG_B, arch_a64.RG_B, arch_a64.RG_T)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8, 0)
+            dispatch.g_const(&em, tg, arch_a64.RG_B, defv)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(0 - span)
             foreach e2 := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
-        elif o = IR_SYSC:
+        elif o = arch_a64.IR_SYSC:
             let sargc : i64 = ir.extra[b × 1¤ptrdiff]
             foreach sk := 0…sargc:
-                g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
-            g_syscall(&em, tg, a)
+                dispatch.g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
+            dispatch.g_syscall(&em, tg, a)
             if d ≠ ⁻1:
-                g_sysret(&em, tg, RG_A)
-                g_sts(&em, tg, RG_A, d)
-        elif o = IR_LDN:
-            g_lds(&em, tg, RG_A, a)
-            g_ldo(&em, tg, RG_A, RG_A, b, bits, sgn)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_STN:
-            g_lds(&em, tg, RG_A, a)
-            g_lds(&em, tg, RG_B, c)
-            g_sto(&em, tg, RG_B, RG_A, b, bits)
-        elif o = IR_FRAME:
-            g_frameaddr(&em, tg, ir.nvregs, nobj, a, RG_A)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_KADDR:
-            let pos : i64 = g_absref(&em, tg, RG_A)
+                dispatch.g_sysret(&em, tg, arch_a64.RG_A)
+                dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_LDN:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, b, bits, sgn)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_STN:
+            dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+            dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
+            dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_A, b, bits)
+        elif o = ir_m.IR_FRAME:
+            dispatch.g_frameaddr(&em, tg, ir.nvregs, nobj, a, arch_a64.RG_A)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_KADDR:
+            let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.df_pos.push(pos)
                 em.df_off.push((if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_FPTR:
-            g_fptr(&em, tg, RG_A)
-            g_sts(&em, tg, RG_A, d)
-        elif o = IR_BTADDR:
-            let bpos : i64 = g_absref(&em, tg, RG_A)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_FPTR:
+            dispatch.g_fptr(&em, tg, arch_a64.RG_A)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
+        elif o = ir_m.IR_BTADDR:
+            let bpos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.bt_pos.push(bpos)
-            g_sts(&em, tg, RG_A, d)
+            dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         else:
             assert(false, "an IR op the driver knows")
-    g_resolve(&em, tg)
+    dispatch.g_resolve(&em, tg)
     em.resolve_jtabs()
 
 // saturating arithmetic, held at the type's edge; two scratch labels
-fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d : i64, sl : i64):
+fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b : i64, d : i64, sl : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8
-    g_lds(&em, tg, RG_A, a)
-    g_lds(&em, tg, RG_B, b)
+    dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
+    dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
     if bits < 64:
-        if o = IR_SATADD:
-            g_add3(&em, tg, RG_A, RG_A, RG_B)
-        elif o = IR_SATSUB:
-            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+        if o = ir_m.IR_SATADD:
+            dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
+        elif o = ir_m.IR_SATSUB:
+            dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
         else:
-            g_mul3(&em, tg, RG_A, RG_A, RG_B)
+            dispatch.g_mul3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
         if sgn = 1:
-            g_const(&em, tg, RG_C, 0 - (1 « (bits - 1)))
-            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1, 64)
-            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
-            g_const(&em, tg, RG_C, (1 « (bits - 1)) - 1)
-            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 1, 64)
-            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
-        elif o = IR_SATSUB:
-            g_const(&em, tg, RG_C, 0)
-            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1, 64)
-            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, 0 - (1 « (bits - 1)))
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_LT, 1, 64)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, (1 « (bits - 1)) - 1)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_GT, 1, 64)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
+        elif o = ir_m.IR_SATSUB:
+            dispatch.g_const(&em, tg, arch_a64.RG_C, 0)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_LT, 1, 64)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
         else:
-            g_const(&em, tg, RG_C, (1 « bits) - 1)
-            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 0, 64)
-            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
-        g_sts(&em, tg, RG_A, d)
+            dispatch.g_const(&em, tg, arch_a64.RG_C, (1 « bits) - 1)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_GT, 0, 64)
+            dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
+        dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         return
     if sgn = 0:
-        if o = IR_SATADD:
-            g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
-            g_jz(&em, tg, RG_C, sl)
-            g_const(&em, tg, RG_A, ⁻1)
-        elif o = IR_SATSUB:
-            g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
-            g_jz(&em, tg, RG_C, sl)
-            g_const(&em, tg, RG_A, 0)
+        if o = ir_m.IR_SATADD:
+            dispatch.g_addov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 0, 64)
+            dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻1)
+        elif o = ir_m.IR_SATSUB:
+            dispatch.g_subov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 0, 64)
+            dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_const(&em, tg, arch_a64.RG_A, 0)
         else:
-            g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
-            g_jz(&em, tg, RG_C, sl)
-            g_const(&em, tg, RG_A, ⁻1)
-        g_label(&em, tg, sl)
-        g_sts(&em, tg, RG_A, d)
+            dispatch.g_mulov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 0, 64)
+            dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
+            dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻1)
+        dispatch.g_label(&em, tg, sl)
+        dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         return
     // signed, full width: the direction of the clamp follows the
     // operands, read before they are lost
-    if o = IR_SATMUL:
-        g_xor3(&em, tg, RG_C, RG_A, RG_B)
-        g_mulov(&em, tg, RG_A, RG_B, RG_A, RG_B, 1, 64)
-        g_jz(&em, tg, RG_B, sl + 1)
-        g_const(&em, tg, RG_B, 0)
-        g_cmp3(&em, tg, RG_T, RG_C, RG_B, CC_LT, 1, 64)
-        g_const(&em, tg, RG_A, 9223372036854775807)
-        g_jz(&em, tg, RG_T, sl + 1)
-        g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
-        g_label(&em, tg, sl + 1)
-        g_sts(&em, tg, RG_A, d)
+    if o = ir_m.IR_SATMUL:
+        dispatch.g_xor3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
+        dispatch.g_mulov(&em, tg, arch_a64.RG_A, arch_a64.RG_B, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
+        dispatch.g_jz(&em, tg, arch_a64.RG_B, sl + 1)
+        dispatch.g_const(&em, tg, arch_a64.RG_B, 0)
+        dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_B, arch_a64.CC_LT, 1, 64)
+        dispatch.g_const(&em, tg, arch_a64.RG_A, 9223372036854775807)
+        dispatch.g_jz(&em, tg, arch_a64.RG_T, sl + 1)
+        dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻9223372036854775807 - 1)
+        dispatch.g_label(&em, tg, sl + 1)
+        dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         return
-    if o = IR_SATADD:
-        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1, 64)
+    if o = ir_m.IR_SATADD:
+        dispatch.g_addov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
     else:
-        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1, 64)
-    g_jz(&em, tg, RG_C, sl + 1)
-    g_const(&em, tg, RG_C, 0)
+        dispatch.g_subov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
+    dispatch.g_jz(&em, tg, arch_a64.RG_C, sl + 1)
+    dispatch.g_const(&em, tg, arch_a64.RG_C, 0)
     // an overflowed add went the way of b; a subtract the other way
-    g_cmp3(&em, tg, RG_T, RG_B, RG_C, if o = IR_SATADD: CC_LT else: CC_GT, 1, 64)
-    g_const(&em, tg, RG_A, 9223372036854775807)
-    g_jz(&em, tg, RG_T, sl + 1)
-    g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
-    g_label(&em, tg, sl + 1)
-    g_sts(&em, tg, RG_A, d)
+    dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_B, arch_a64.RG_C, if o = ir_m.IR_SATADD: arch_a64.CC_LT else: arch_a64.CC_GT, 1, 64)
+    dispatch.g_const(&em, tg, arch_a64.RG_A, 9223372036854775807)
+    dispatch.g_jz(&em, tg, arch_a64.RG_T, sl + 1)
+    dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻9223372036854775807 - 1)
+    dispatch.g_label(&em, tg, sl + 1)
+    dispatch.g_sts(&em, tg, arch_a64.RG_A, d)

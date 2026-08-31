@@ -1,3 +1,4 @@
+
 // ngplc -- the NGPL compiler, attempt 2.
 //
 // Written in the bootstrap subset of NGPL, and compiled by itself.  It
@@ -36,110 +37,205 @@
 // Token kinds
 // ===========================================================================
 
+@export
 let TK_EOF : i64 = 0
+@export
 let TK_NL : i64 = 1
+@export
 let TK_INDENT : i64 = 2
+@export
 let TK_DEDENT : i64 = 3
+@export
 let TK_IDENT : i64 = 10
+@export
 let TK_INT : i64 = 11
+@export
 let TK_STR : i64 = 12
 // keywords core-1 parses
+@export
 let TK_FN : i64 = 20
+@export
 let TK_LET : i64 = 21
+@export
 let TK_MUT : i64 = 22
+@export
 let TK_IF : i64 = 23
+@export
 let TK_ELIF : i64 = 24
+@export
 let TK_ELSE : i64 = 25
+@export
 let TK_WHILE : i64 = 26
+@export
 let TK_FOREACH : i64 = 27
+@export
 let TK_RETURN : i64 = 28
+@export
 let TK_BREAK : i64 = 29
+@export
 let TK_CONTINUE : i64 = 30
+@export
 let TK_TRUE : i64 = 31
+@export
 let TK_FALSE : i64 = 32
+@export
 let TK_AND : i64 = 33
+@export
 let TK_OR : i64 = 34
+@export
 let TK_NOT : i64 = 35
+@export
 let TK_STRUCT : i64 = 36
+@export
 let TK_IMPL : i64 = 37
 // punctuation and operators
+@export
 let TK_LPAR : i64 = 40
+@export
 let TK_RPAR : i64 = 41
+@export
 let TK_COLON : i64 = 42
+@export
 let TK_COMMA : i64 = 43
+@export
 let TK_DOT : i64 = 44
+@export
 let TK_ARROW : i64 = 45      // → or ->
+@export
 let TK_ASSIGN : i64 = 46     // ← or <-
+@export
 let TK_DEFINE : i64 = 47     // :=
+@export
 let TK_ELLIPSIS : i64 = 48   // …
+@export
 let TK_AT : i64 = 49         // @
+@export
 let TK_PLUS : i64 = 50
+@export
 let TK_MINUS : i64 = 51      // binary -
+@export
 let TK_NEG : i64 = 52        // unary ⁻
+@export
 let TK_MULT : i64 = 53       // ×
+@export
 let TK_DIVIDE : i64 = 54     // ÷
+@export
 let TK_MOD : i64 = 55
+@export
 let TK_EQ : i64 = 56         // =
+@export
 let TK_NE : i64 = 57         // ≠
+@export
 let TK_LT : i64 = 58
+@export
 let TK_GT : i64 = 59
+@export
 let TK_LE : i64 = 60
+@export
 let TK_GE : i64 = 61
+@export
 let TK_SHL : i64 = 62        // « or <<
+@export
 let TK_SHR : i64 = 63        // » or >>
+@export
 let TK_BAND : i64 = 64       // & (also the borrow marker)
+@export
 let TK_BOR : i64 = 65
+@export
 let TK_BXOR : i64 = 66
+@export
 let TK_BNOT : i64 = 67       // ~
+@export
 let TK_LAND : i64 = 68       // ∧
+@export
 let TK_LOR : i64 = 69        // ∨
+@export
 let TK_LNOT : i64 = 70       // ¬
+@export
 let TK_MAX : i64 = 71        // ⌈
+@export
 let TK_MIN : i64 = 72        // ⌊
+@export
 let TK_COALESCE : i64 = 73   // ??
+@export
 let TK_LBRACK : i64 = 74
+@export
 let TK_RBRACK : i64 = 75
+@export
 let TK_CURRENCY : i64 = 76   // ¤
+@export
 let TK_HASH : i64 = 77       // #
+@export
 let TK_CONCAT : i64 = 78     // ⧺
+@export
 let TK_LBRACE : i64 = 79
+@export
 let TK_RBRACE : i64 = 80
+@export
 let TK_QMARK : i64 = 81      // ? as a type's suffix
+@export
 let TK_SOME : i64 = 82       // ⊨
 // The quantifiers.  f ∀ v asks whether f holds of every one of the
 // things v holds, f ∃ v whether it holds of any.
+@export
 let TK_FORALL : i64 = 107    // ∀
+@export
 let TK_EXISTS : i64 = 108    // ∃
+@export
 let TK_NOTEX : i64 = 109     // ∄
 // a runs along the front of b, or along its back
+@export
 let TK_PREFIX : i64 = 110    // ⊑
+@export
 let TK_SUFFIX : i64 = 111    // ⊒
+@export
 let TK_EMPTY : i64 = 83      // ∅
+@export
 let TK_LHASH : i64 = 84      // ⸨
+@export
 let TK_RHASH : i64 = 85      // ⸩
+@export
 let TK_ELEM : i64 = 86       // ∊
+@export
 let TK_IOTA : i64 = 87       // ⍳
+@export
 let TK_SATADD : i64 = 88     // ⊞
+@export
 let TK_SATSUB : i64 = 89     // ⊟
+@export
 let TK_SATMUL : i64 = 90     // ⊠
+@export
 let TK_LXOR : i64 = 91       // ⊕
+@export
 let TK_LNAND : i64 = 92      // ⊼
+@export
 let TK_LNOR : i64 = 93       // ⊽
+@export
 let TK_RESHAPE : i64 = 94    // ⍴
+@export
 let TK_MATCH : i64 = 38
+@export
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
+@export
 let TK_LAMBDA : i64 = 100    // λ
+@export
 let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
+@export
 let TK_SEMI : i64 = 102      // ; -- between statements in a brace block
+@export
 let TK_TYPE : i64 = 103      // type: a name standing for a type
+@export
 let TK_ENUM : i64 = 104      // enum
+@export
 let TK_UNIT : i64 = 105      // unit: a measure the file gives a name
+@export
 let TK_MODULE : i64 = 106    // module: where what follows it lives
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
 // mapped to TK_RESERVED, so it is refused wherever a name is expected
 // rather than quietly accepted -- the strict-subset rule.
+@export
 let KEYWORDS : std.dict(str, i64) = (⸨
     "fn": 20, "let": 21, "mut": 22, "if": 23, "elif": 24, "else": 25,
     "while": 26, "foreach": 27, "return": 28, "break": 29, "continue": 30,
@@ -154,6 +250,7 @@ let KEYWORDS : std.dict(str, i64) = (⸨
 // The multi-byte glyphs, keyed by their UTF-8 bytes packed into one
 // number: b0×256+b1 for two-byte glyphs, b0×65536+b1×256+b2 for three.
 // One hash probe per glyph instead of a branch tree over byte values.
+@export
 let GLYPHS2 : std.dict(i64, i64) = (⸨
     49835: 62,      // « shl
     49851: 63,      // » shr
@@ -163,6 +260,7 @@ let GLYPHS2 : std.dict(i64, i64) = (⸨
     50103: 54,      // ÷
     52923: 100⸩)    // λ
 
+@export
 let GLYPHS3 : std.dict(i64, i64) = (⸨
     14847411: 87,   // ⍳
     14847412: 94,   // ⍴
@@ -200,9 +298,11 @@ let GLYPHS3 : std.dict(i64, i64) = (⸨
 // Whether a string is the one wanted.  The wanted one comes first so
 // that str_is(name) is a question about a single string, which is the
 // shape ∀ and ∃ ask for.
+@export
 fn str_is(want : str, s : str) → bool:
     s = want
 
+@export
 @post(r: #r > 0)
 fn i64_str(n : i64) → str:
     if n = 0: return "0"
@@ -218,6 +318,7 @@ fn i64_str(n : i64) → str:
     if neg: ("-" ⧺ s) else: s
 
 // The text of a byte run, for identifiers, keywords and messages.
+@export
 @pre(off >= 0 and n >= 0)
 fn run_str(src : byte[], off : i64, n : i64) → str:
     let s : mut str = ""

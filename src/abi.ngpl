@@ -1,3 +1,7 @@
+let ast := @import("./ast.ngpl")
+let lex := @import("./lex.ngpl")
+let tokens := @import("./tokens.ngpl")
+
 // ===========================================================================
 // The convention a function nobody outside can call may take
 // ===========================================================================
@@ -22,11 +26,9 @@
 // the Tgt enum, which is declared much later and must be declared
 // before it is used.
 
-@import("./tokens.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
 
 
+@export
 struct Abi:
     // One entry per function in a.fns, in the same order, so a function
     // index is an index here.
@@ -39,7 +41,7 @@ struct Abi:
 
 // Why a function is not free to take a convention of its own.  Each
 // answer is a reason a caller this compiler cannot see might exist.
-fn abi_why(f : FnDef, taken : i64) → str:
+fn abi_why(f : ast.FnDef, taken : i64) → str:
     // Two ways a function's address gets out, and both end the same
     // way: something calls it indirectly, having agreed with the
     // architecture and not with us.
@@ -56,8 +58,9 @@ fn abi_why(f : FnDef, taken : i64) → str:
                 " agrees with the architecture"""
     ""
 
+@export
 @post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
-fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
+fn analyze_abi(a : ast.Ast, toks : lex.Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
     let nfns : i64 ¤ptrdiff = #a.fns
 
     // A name taken as a value reaches its function through a register
@@ -72,11 +75,11 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     if nnodes > 0:
         foreach i := 0…nnodes:
             let k : i64 = a.nkind[i]
-            if k = NK_FNVAL:
+            if k = ast.NK_FNVAL:
                 let fi : i64 = a.na[i]
                 if fi >= 0 and fi < @dropunit(nfns):
                     taken[fi × 1¤ptrdiff] ← 1
-            if k = NK_LAMBDA:
+            if k = ast.NK_LAMBDA:
                 // A lambda that captures a function holds its value in
                 // the box, and calls it through that -- indirectly, by
                 // an agreement with the architecture rather than with
@@ -101,7 +104,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     let log : mut str[] = []
     if nfns > 0:
         foreach f := 0…nfns:
-            let fd : FnDef = a.fns[f]
+            let fd : ast.FnDef = a.fns[f]
             let why : str = abi_why(fd, taken[f])
             let p : i64 = if why = "": 1 else: 0
             // A private function takes more of its arguments in
@@ -119,6 +122,6 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
                 // the log says a number, as a diagnostic does, so the
                 // measure is parted with here
                 let line : i64 = @dropunit(toks.line[fd.tok × 1¤ptrdiff])
-                let ln : str = "{\"function\": \"" ⧺ fd.name ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"convention\", \"private\": " ⧺ (if p = 1: "true" else: "false") ⧺ ", \"argument-registers\": " ⧺ i64_str(argregs + hr) ⧺ ", \"beyond-the-abi\": " ⧺ i64_str(hr)
+                let ln : str = "{\"function\": \"" ⧺ fd.name ⧺ "\", \"line\": " ⧺ tokens.i64_str(line) ⧺ ", \"decision\": \"convention\", \"private\": " ⧺ (if p = 1: "true" else: "false") ⧺ ", \"argument-registers\": " ⧺ tokens.i64_str(argregs + hr) ⧺ ", \"beyond-the-abi\": " ⧺ tokens.i64_str(hr)
                 log.push(if p = 1: ln ⧺ "}" else: ln ⧺ ", \"because\": \"" ⧺ why ⧺ "\"}")
     Abi{private: priv, nreg: nreg, beyond: byd, span: span, log: log}

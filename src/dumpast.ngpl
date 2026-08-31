@@ -1,15 +1,16 @@
+let ast := @import("./ast.ngpl")
+let lex := @import("./lex.ngpl")
+let tokens := @import("./tokens.ngpl")
+let types := @import("./types.ngpl")
+
 // ===========================================================================
 // AST dump, one node a line
 // ===========================================================================
 
-@import("./tokens.ngpl")
-@import("./types.ngpl")
-@import("./lex.ngpl")
-@import("./ast.ngpl")
 
 
 @impure
-fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
+fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
     let pad : mut str = ""
     foreach d := 0…depth:
         pad ← pad ⧺ "  "
@@ -18,100 +19,100 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     let na : i64 = a.na[id × 1¤ptrdiff]
     let nb : i64 = a.nb[id × 1¤ptrdiff]
     let nc : i64 = a.nc[id × 1¤ptrdiff]
-    let ttext : str = run_str(src, toks.off[tok × 1¤ptrdiff], toks.len[tok × 1¤ptrdiff])
-    if k = NK_INT:
+    let ttext : str = tokens.run_str(src, toks.off[tok × 1¤ptrdiff], toks.len[tok × 1¤ptrdiff])
+    if k = ast.NK_INT:
         std.println("{}int {} big={}", pad, na, nb)
-    elif k = NK_BOOL:
+    elif k = ast.NK_BOOL:
         std.println("{}bool {}", pad, na)
-    elif k = NK_STR:
+    elif k = ast.NK_STR:
         std.println("{}str \"{}\"", pad, a.strs[na × 1¤ptrdiff])
-    elif k = NK_VAR:
+    elif k = ast.NK_VAR:
         std.println("{}var {}", pad, ttext)
-    elif k = NK_ARRLIT:
+    elif k = ast.NK_ARRLIT:
         std.println("{}arrlit", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_INDEX:
+    elif k = ast.NK_INDEX:
         std.println("{}index", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = NK_LEN:
+    elif k = ast.NK_LEN:
         std.println("{}len", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_CALL:
+    elif k = ast.NK_CALL:
         std.println("{}call {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_SCALL:
+    elif k = ast.NK_SCALL:
         std.println("{}scall {}", pad, na)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_MCALL:
+    elif k = ast.NK_MCALL:
         std.println("{}mcall {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_REF:
+    elif k = ast.NK_REF:
         std.println("{}ref {}", pad, nb)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_SLIT:
+    elif k = ast.NK_SLIT:
         std.println("{}slit {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 2 + i × 2) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_FIELD:
+    elif k = ast.NK_FIELD:
         std.println("{}field {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_STOREFLD:
+    elif k = ast.NK_STOREFLD:
         std.println("{}storefld {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = NK_BLOCK:
+    elif k = ast.NK_BLOCK:
         std.println("{}block", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = NK_LET:
-        std.println("{}let {} mut={} ty={}", pad, ttext, nb, type_name_m(nc, a.umarks))
+    elif k = ast.NK_LET:
+        std.println("{}let {} mut={} ty={}", pad, ttext, nb, types.type_name_m(nc, a.umarks))
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_ASSIGN:
+    elif k = ast.NK_ASSIGN:
         std.println("{}assign {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_STOREIDXP:
+    elif k = ast.NK_STOREIDXP:
         std.println("{}storeidx", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
         dump_node(a, nc, depth + 1, src, toks)
-    elif k = NK_DISCARD:
+    elif k = ast.NK_DISCARD:
         std.println("{}discard", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_IF:
+    elif k = ast.NK_IF:
         std.println("{}if", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
         if nc ≠ ⁻1:
             std.println("{}else", pad)
             dump_node(a, nc, depth + 1, src, toks)
-    elif k = NK_WHILE:
+    elif k = ast.NK_WHILE:
         std.println("{}while", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = NK_FOREACH:
+    elif k = ast.NK_FOREACH:
         std.println("{}foreach {}", pad, ttext)
         dump_node(a, a.extra[na × 1¤ptrdiff], depth + 1, src, toks)
         if a.extra[(na + 1) × 1¤ptrdiff] ≠ ⁻1:
             dump_node(a, a.extra[(na + 1) × 1¤ptrdiff], depth + 1, src, toks)
         dump_node(a, a.extra[(na + 2) × 1¤ptrdiff], depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = NK_FOREACHA:
+    elif k = ast.NK_FOREACHA:
         std.println("{}foreacha {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = NK_MATCHE:
+    elif k = ast.NK_MATCHE:
         std.println("{}match-enum", pad)
         dump_node(a, na, depth + 1, src, toks)
         let mn : i64 = a.extra[nb × 1¤ptrdiff]
@@ -119,27 +120,27 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
             let et : i64 = a.extra[(nb + 2 + mi × 3) × 1¤ptrdiff]
             let mt : i64 = a.extra[(nb + 3 + mi × 3) × 1¤ptrdiff]
             std.println("{}  arm {}.{}", pad,
-                        run_str(src, toks.off[et × 1¤ptrdiff], toks.len[et × 1¤ptrdiff]),
-                        run_str(src, toks.off[mt × 1¤ptrdiff], toks.len[mt × 1¤ptrdiff]))
+                        tokens.run_str(src, toks.off[et × 1¤ptrdiff], toks.len[et × 1¤ptrdiff]),
+                        tokens.run_str(src, toks.off[mt × 1¤ptrdiff], toks.len[mt × 1¤ptrdiff]))
             dump_node(a, a.extra[(nb + 4 + mi × 3) × 1¤ptrdiff], depth + 2, src, toks)
         if a.extra[(nb + 1) × 1¤ptrdiff] ≠ ⁻1:
             std.println("{}  arm _", pad)
             dump_node(a, a.extra[(nb + 1) × 1¤ptrdiff], depth + 2, src, toks)
-    elif k = NK_RETURN:
+    elif k = ast.NK_RETURN:
         std.println("{}return", pad)
         if na ≠ ⁻1:
             dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_BREAK:
+    elif k = ast.NK_BREAK:
         std.println("{}break", pad)
-    elif k = NK_CONTINUE:
+    elif k = ast.NK_CONTINUE:
         std.println("{}continue", pad)
-    elif k = NK_EXPRSTMT:
+    elif k = ast.NK_EXPRSTMT:
         std.println("{}exprstmt", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_WRAP:
+    elif k = ast.NK_WRAP:
         std.println("{}wrap", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_NEG or k = NK_NOT or k = NK_BNOT:
+    elif k = ast.NK_NEG or k = ast.NK_NOT or k = ast.NK_BNOT:
         std.println("{}unop {}", pad, k)
         dump_node(a, na, depth + 1, src, toks)
     else:
@@ -147,23 +148,23 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
 
+@export
 @impure
-fn dump_ast(a : Ast, src : byte[], toks : Toks):
+fn dump_ast(a : ast.Ast, src : byte[], toks : lex.Toks):
     foreach g := a.globals:
-        std.println("global {} mut={} ty={}", g.name, g.is_mut, type_name_m(g.ty, a.umarks))
+        std.println("global {} mut={} ty={}", g.name, g.is_mut, types.type_name_m(g.ty, a.umarks))
         dump_node(a, g.init, 1, src, toks)
     foreach f := a.fns:
         std.println("fn {} ret={} impure={} start={}", f.name,
-                    type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
+                    types.type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
         let np : i64 ¤ptrdiff = a.extra[f.params_off] × 1¤ptrdiff
         foreach i := 0…np:
             let ptok : i64 = a.extra[f.params_off + 1 + i × 2]
             let pty : i64 = a.extra[f.params_off + 2 + i × 2]
-            std.println("  param {} : {}", run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), type_name_m(pty, a.umarks))
+            std.println("  param {} : {}", tokens.run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), types.type_name_m(pty, a.umarks))
         dump_node(a, f.body, 1, src, toks)
     // the recipe is not among the functions, so it is shown apart from
     // them; a dump that left it out would not be a view of the file
     foreach b := a.builds:
         std.println("build fn {}", b.name)
         dump_node(a, b.body, 1, src, toks)
-
