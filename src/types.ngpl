@@ -58,6 +58,7 @@ fn builtin_enum_values() → i64[]:
     [0, 4096, 8192, 16384, 24576, 32768, 40960, 49152]
 let TY_IOVEC : i64 = 12     // one run of bytes waiting to be written: a base and a length
 let TY_HASH : i64 = 13      // std.hash.<alg>.start(): a digest being fed, a piece at a time
+let TY_BUILD : i64 = 14     // &mut std.Build: what a @build recipe declares a build on
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned

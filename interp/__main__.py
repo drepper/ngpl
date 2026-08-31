@@ -32,7 +32,7 @@ from interp.value import (
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
     register_struct_type,
-    UnitValue,
+    UnitValue, RefValue, mk_str,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
     _parse_array_type, format_shape, is_generic_type, declared_rank,
@@ -3598,9 +3598,20 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if program.build_func is not None:
                     raise DefinitionError("multiple @build functions defined",
                                           _node_pos(defn))
-                if defn.params:
+                # A recipe is handed the build it declares on, and what
+                # the command line said about where the result goes and
+                # what it is built for.
+                ptypes = [t for _n, t in defn.params]
+                if (len(defn.params) != 3
+                        or ptypes[0] != "std.Build"
+                        or defn.params[0][0] not in defn.param_refs
+                        or defn.params[0][0] not in defn.param_muts
+                        or ptypes[1] != "str" or ptypes[2] != "str"):
                     raise DefinitionError(
-                        "the @build function takes no parameters",
+                        "the @build function takes the build it declares on "
+                        "and what the command line said, as "
+                        "'fn build(b : &mut std.Build, output : str, "
+                        "target : str)'",
                         _node_pos(defn))
                 program.build_func = fv
 
@@ -4158,11 +4169,18 @@ def main():
         sys.exit(1)
 
     if program.build_func is not None:
-        # The build function is read for what it declares -- search
-        # paths and compiler flags land in std.build -- before anything
-        # runs.  Running a build recipe belongs to the compiler.
+        # The build function is read for what it declares -- the
+        # executables, the search paths, the compiler flags -- before
+        # anything runs.  Running a build recipe belongs to the
+        # compiler; the interpreter names no output and no target, so
+        # the recipe is handed the two empty strings that say so.
+        from interp.std import Build, host_target
+        held = Env()
+        held.define("b", ObjectValue(Build(host_target())))
         try:
-            evaluator._call_user_func(program.build_func, [])
+            evaluator._call_user_func(
+                program.build_func,
+                [RefValue(held, "b"), mk_str(""), mk_str("")])
         except Exception as e:
             _show_error(e, source, source_path, evaluator,
                         show_backtrace=args.interpreter_backtrace)

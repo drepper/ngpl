@@ -1,8 +1,0 @@
-// Nothing calls the recipe, so nothing could hand it anything.
-@build
-fn build(n : i64):
-    std.build.output("a")
-
-@start
-fn main():
-    _ ← 1

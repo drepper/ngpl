@@ -127,20 +127,35 @@ let SB_ENVH : i64 = 12      // std.env.has(name) → bool
 let SB_IOV : i64 = 14       // std.iov(x) → the bytes of x, ready to be written
 let SB_PROC : i64 = 13      // std.process.<member>: nb names which
 
-// std.build.<member>: what a @build recipe declares, and what it reads
-// back.  The five declarations come first and the five readers after,
-// so "is this a build builtin" and "is this a declaration" are each one
-// comparison against the ends of a run.
-let SB_BSRC : i64 = 15      // std.build.root_source_file(p)
-let SB_BOUT : i64 = 16      // std.build.output(n)
-let SB_BOUTD : i64 = 17     // std.build.output_dir(d)
-let SB_BPATH : i64 = 18     // std.build.search_path(p)
-let SB_BFLAG : i64 = 19     // std.build.flag(f)
-let SB_BSRCS : i64 = 20     // std.build.root_source_file_name() → str
-let SB_BOUTN : i64 = 21     // std.build.output_name() → str
-let SB_BOUTDN : i64 = 22    // std.build.output_directory() → str
-let SB_BPATHS : i64 = 23    // std.build.paths() → str[]
-let SB_BFLAGS : i64 = 24    // std.build.flags() → str[]
+// A struct literal writes a name and its fields; one of them names no
+// struct the program declares but the one the build system defines,
+// std.Build.Executable, and this in nb is how the node says so.
+let SLIT_PLAIN : i64 = 0
+let SLIT_EXE : i64 = 1      // std.Build.Executable{…}
+
+// What a recipe may say to the std.Build it is handed.  These are
+// member functions and data members of a value rather than names under
+// std, so they are dispatched where the receiver is known -- at
+// evaluation -- and are numbered only to be named in a diagnostic.
+let BM_ADDEXE : i64 = 1     // b.add_executable(cfg)
+let BM_PATH : i64 = 2       // b.search_path(p)
+let BM_FLAG : i64 = 3       // b.flag(f)
+let BM_HOST : i64 = 4       // b.host_target
+let BM_OUTDIR : i64 = 5     // b.output_dir
+
+fn build_member(name : str) → i64:
+    if name = "add_executable": return BM_ADDEXE
+    if name = "search_path": return BM_PATH
+    if name = "flag": return BM_FLAG
+    if name = "host_target": return BM_HOST
+    if name = "output_dir": return BM_OUTDIR
+    ⁻1
+
+// what a std.Build offers, for the diagnostic that says it does not
+fn build_members() → str:
+    """add_executable() declares an output; search_path() and flag() say where a source is
+     " looked for and what the compiler is asked for; host_target and output_dir are what it
+     " holds"""
 
 // std.hash.<alg>.<member>: which algorithm is in nc, so an algorithm
 // added later adds an entry to the table below and nothing else.

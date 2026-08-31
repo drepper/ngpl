@@ -1,51 +1,52 @@
 // The @build function is read for what it declares before anything
-// runs: the one file the program is rooted in, where the result goes,
-// the search paths and the compiler flags all land in std.build.
-// Acting on a build recipe belongs to the compiler; reading it does
-// not.
+// runs.  A recipe is handed the build it declares on, and what the
+// command line said about where the result goes and what it is built
+// for; it adds an executable for each thing to be built, the paths a
+// source is looked for along, and the flags the compiler is asked for.
+// Acting on any of that belongs to the compiler; reading the recipe
+// does not.
 //
-// Each thing is declared by naming it and answered by a reader.  The
-// three that hold a single name answer "" until one is declared; the
-// two that hold a list answer them in the order they were declared.
-// The program is rooted in one file and says the rest of itself with
-// @import, so a recipe names that one file and no more.
+// A recipe is a program and not a table: the names below are computed,
+// by the same functions the tests check, so what reaches the build is
+// what the recipe worked out rather than what was typed.
+
+fn suffixed(stem : str, ext : str) → str:
+    stem ⧺ "." ⧺ ext
+
+fn rooted(dir : str, name : str) → str:
+    if dir = "": name else: dir ⧺ "/" ⧺ name
 
 @build
-fn build():
-    let root : str = "src/" ⧺ "main" ⧺ ".ngpl"
-    std.build.root_source_file(root)
-    std.build.output_dir("build")
-    std.build.output("demo")
-    std.build.search_path("vendor")
-    std.build.search_path("third_party/ngpl")
-    std.build.flag("O1")
-    std.build.flag("contracts=enforce")
-
-// What was declared has been read by the time anything else runs.
-@test
-fn test_search_paths_are_read():
-    let p := std.build.paths()
-    assert(#p = 2)
-    assert(p[0] = "vendor")
-    assert(p[1] = "third_party/ngpl")
-
-@test
-fn test_flags_are_read():
-    let f := std.build.flags()
-    assert(#f = 2)
-    assert(f[0] = "O1")
-    assert(f[1] = "contracts=enforce")
-
-// A recipe is a program, not a table: the name here was computed and
-// is answered as it was declared.
-@test
-fn test_the_root_source_is_read():
-    assert(std.build.root_source_file_name() = "src/main.ngpl")
+fn build(b : &mut std.Build, output : str, target : str):
+    // where an executable that names no directory of its own goes
+    b.output_dir ← "build"
+    b.search_path("vendor")
+    b.search_path(rooted("third_party", "ngpl"))
+    b.flag("O1")
+    b.flag("contracts=enforce")
+    // two outputs from one recipe, the second saying where it goes
+    b.add_executable(std.Build.Executable{name: "demo",
+                                          root_source_file: suffixed("main", "ngpl")})
+    // What -o and --target said reaches a recipe as `output` and
+    // `target`, each empty where nothing was said.  This recipe leaves
+    // -o to the compiler and hands what --target said to the second of
+    // its outputs, which is the same thing the compiler would have done
+    // with it -- said here rather than around the recipe.
+    b.add_executable(std.Build.Executable{name: "demo-tools",
+                                          root_source_file: suffixed("tools", "ngpl"),
+                                          output_dir: rooted("build", "tools"),
+                                          target: target})
 
 @test
-fn test_the_output_is_read():
-    assert(std.build.output_name() = "demo")
-    assert(std.build.output_directory() = "build")
+fn test_a_name_is_computed():
+    assert(suffixed("main", "ngpl") = "main.ngpl")
+    assert(suffixed("tools", "ngpl") = "tools.ngpl")
+
+@test
+fn test_a_directory_that_is_empty_adds_nothing():
+    assert(rooted("", "ngpl") = "ngpl")
+    assert(rooted("third_party", "ngpl") = "third_party/ngpl")
+    assert(rooted("build", "tools") = "build/tools")
 
 @start
 @impure

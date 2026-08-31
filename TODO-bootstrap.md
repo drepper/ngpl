@@ -251,11 +251,15 @@ Outstanding
     swallows it silently -- which is why the name scanner now stops there rather than the
     refusal being left to catch a glyph that never reaches it.  tests/output/refuse_transpose.
 
-[x] the interpreter reads the @build function before anything runs: sources, output name,
-    output directory, search paths and compiler flags declared through std.build.source,
-    output, output_dir, search_path and flag land in std.build, answered back by sources(),
-    output_name(), output_directory(), paths() and flags().  At most one @build function,
-    no parameters.  tests/test_build.ngpl; spec Chapter 8.
+[x] the interpreter reads the @build function before anything runs.  A recipe is handed the
+    build it declares on and what the command line said --
+    `fn build(b : &mut std.Build, output : str, target : str)` -- and adds to it: an
+    executable per output through b.add_executable(std.Build.Executable{...}), the search
+    paths and the compiler flags through b.search_path() and b.flag(), with b.output_dir
+    written and b.host_target read.  At most one @build function, and that one signature.
+    The readers std.build once answered through are gone with it: what a recipe declares is
+    the compiler's to act on, not the program's to observe.  tests/test_build.ngpl; spec
+    Chapter 8.
 
 [x] the interpreter takes several source files and reads them as if they were one,
     concatenated in the order named; a file boundary is a line boundary, and a diagnostic

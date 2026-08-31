@@ -208,19 +208,24 @@ The Compiler
 [x] the compiler's own refusals have no home in the suite.  tests/compile/refuse/*.ngpl
     with an *.expected beside each, driven from run_compile_tests.sh: the program must be
     refused, and refused in those words.  The path is given relative to the tree so the
-    message is the same on every machine.  Four to begin with -- std.build outside a
-    recipe, two @build functions, a recipe taking parameters, a recipe reaching past the
-    subset -- and the shape takes far more than @build.
+    message is the same on every machine.  Four to begin with -- std.Build.Executable
+    outside a recipe, two @build functions, a recipe whose signature is not the one the
+    build system calls, a recipe reaching past the subset -- and the shape takes far more
+    than @build.
 
 [ ] (FULL) separate compilation: a source file compiled on its own into something the next
     step links, so a change to one file does not re-read the rest.  The module system is
     what decides the unit; until then, multi-file compilation above reads everything.
 
-[x] built-in build system: an @build-annotated comptime-only function provides the build
-    recipe; --build FILE finds it, runs it, and compiles what it names.  No code for it is
-    written into the executable.  Declares sources, output name, output directory, search
-    paths and flags.  Still to do: recompiled-when-source-changes, and SBOM generation in
-    the output binary, both of which want separate compilation first.
+[x] built-in build system, after zig's: an @build-annotated comptime-only function is
+    handed a &mut std.Build and what -o and --target said, and adds to it; --build FILE
+    finds it, runs it, and builds every executable it added, in the order it added them.
+    No code for the recipe is written into the executable.  An executable says its name,
+    the file it is rooted in, and optionally where it goes and what it is built for; the
+    build holds the default output directory, the host target, the search paths and the
+    flags.  -o overrides the name a recipe worked out, and is refused where the recipe adds
+    more than one.  Still to do: recompiled-when-source-changes, and SBOM generation in the
+    output binary, both of which want separate compilation first.
 
 [ ] what a violation does is always an error.  C++26 chooses between ignore, observe, enforce
     and quick-enforce at build time, which wants a build system to choose in.

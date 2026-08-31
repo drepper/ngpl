@@ -1,0 +1,25 @@
+// A recipe that adds more than one executable.  The first goes where
+// the build's own output_dir says, the second says where it goes; both
+// are named from where this file is, so the build means the same thing
+// from whatever directory it is run.
+//
+// The name each output is given is worked out rather than written out,
+// which is what says a recipe is a program: `named` is called while the
+// build is being read, and no code for it is written into either binary.
+
+fn named(stem : str) → str:
+    "demo-" ⧺ stem
+
+@build
+fn build(b : &mut std.Build, output : str, target : str):
+    b.output_dir ← "out"
+    b.add_executable(std.Build.Executable{name: named("one"),
+                                          root_source_file: "one.ngpl"})
+    b.add_executable(std.Build.Executable{name: named("two"),
+                                          root_source_file: "two.ngpl",
+                                          output_dir: "out/tools"})
+
+@start
+@impure
+fn main():
+    std.println("the recipe is not the program")

@@ -12,6 +12,6 @@ fn greeting(l : Level) → str:
     if l = Level.quiet: "hello" else: "HELLO"
 
 @build
-fn build():
-    std.build.root_source_file("c.ngpl")
-    std.build.output("split")
+fn build(b : &mut std.Build, output : str, target : str):
+    b.add_executable(std.Build.Executable{name: "split",
+                                          root_source_file: "c.ngpl"})

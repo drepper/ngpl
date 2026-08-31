@@ -1,8 +1,8 @@
-// std.build's readers answer for a recipe, and outside one there is no
-// recipe for them to answer for.  The interpreter allows it and ngplc
-// does not, which is the direction the subset rule permits.
+// std.Build.Executable is what a recipe declares an output with, and
+// outside one there is no build for it to be added to.  The
+// interpreter allows the type to be written and ngplc does not, which
+// is the direction the subset rule permits.
 @start
 @impure
 fn main():
-    foreach p := std.build.paths():
-        std.println("{}", p)
+    _ ← std.Build.Executable{name: "a", root_source_file: "a.ngpl"}

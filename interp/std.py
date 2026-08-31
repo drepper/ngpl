@@ -1104,42 +1104,106 @@ class ImplementationInfo:
     compiled = False
 
 
-class BuildModule:
-    """What the build function said, kept for whoever asks.
+class Executable:
+    """One output a recipe asked for: std.Build.Executable{…}.
 
-    The interpreter reads the @build function for what it declares --
-    the one file the program is rooted in, where the result goes, the
-    search paths and the compiler flags -- before anything else runs.
-    Acting on any of it belongs to the compiler; reading it does not.
-
-    Each thing is declared by naming it and answered by a reader:
-    `root_source_file(p)`/`root_source_file_name()`,
-    `output(n)`/`output_name()`, `output_dir(d)`/`output_directory()`,
-    `search_path(p)`/`paths()` and `flag(f)`/`flags()`.  The three that
-    hold a single name answer "" until one is declared; a build names
-    the file it is rooted in once, since what else the program is made
-    of is written in the program as @import lines.
+    A field the recipe did not name is empty, and what an empty one
+    means is settled by whoever builds it -- the compiler, from what
+    the command line said and from what the build holds.
     """
 
-    __slots__ = ("_paths", "_flags", "_root", "_output", "_output_dir")
+    __slots__ = ("name", "root_source_file", "output_dir", "target")
 
-    def __init__(self):
+    FIELDS: tuple[str, ...] = ("name", "root_source_file", "output_dir",
+                               "target")
+
+    def __init__(self, name: str = "", root_source_file: str = "",
+                 output_dir: str = "", target: str = ""):
+        self.name = name
+        self.root_source_file = root_source_file
+        self.output_dir = output_dir
+        self.target = target
+
+    def display(self) -> str:
+        return f"std.Build.Executable{{name: \"{self.name}\"}}"
+
+
+# What the machine underfoot is called where a target is named, in the
+# compiler's own spelling: `uname` says amd64 or x86_64 and a target is
+# x86-64, and a recipe reading b.host_target must read the same string
+# under both implementations.  A machine no target claims answers as
+# itself, since a recipe comparing against it will not match either way.
+_TARGET_SPELLING = {
+    "x86_64": "x86-64", "amd64": "x86-64",
+    "i386": "i386", "i486": "i386", "i586": "i386", "i686": "i386",
+    "aarch64": "aarch64", "arm64": "aarch64",
+    "armv7l": "arm", "armv6l": "arm", "arm": "arm",
+    "riscv64": "riscv64", "riscv32": "riscv32",
+}
+
+
+def host_target() -> str:
+    """The target name for the machine this is running on."""
+    import platform
+    machine = platform.machine()
+    return _TARGET_SPELLING.get(machine, machine)
+
+
+class Build:
+    """What a @build recipe declares its build on.
+
+    A recipe is handed one and adds to it: an executable for each thing
+    to be built, the paths a source is looked for along, the flags the
+    compiler is asked for.  `output_dir` is where an executable that
+    names none goes, and `host_target` is what the compiler builds for
+    when nothing says otherwise -- the first a recipe may write, the
+    second only read.
+
+    Acting on any of it belongs to the compiler; the interpreter reads
+    the recipe to hold it to the rules and to run what it computes.
+    """
+
+    __slots__ = ("_paths", "_flags", "_executables", "output_dir",
+                 "host_target")
+
+    def __init__(self, host_target: str = ""):
         self._paths: list[str] = []
         self._flags: list[str] = []
-        self._root: str = ""
-        self._output: str = ""
-        self._output_dir: str = ""
+        self._executables: list[Executable] = []
+        self.output_dir: str = ""
+        self.host_target: str = host_target
 
     def _one_str(self, args, who):
         from interp.eval import unwrap_optional
         from interp.value import StrValue, runtime_type_of
         if len(args) != 1:
-            raise TypeError(f"std.build.{who} takes the one string")
+            raise TypeError(f"std.Build.{who} takes the one string")
         v = unwrap_optional(args[0])
         if not isinstance(v, StrValue):
             raise TypeError(
-                f"std.build.{who} takes a string, not {runtime_type_of(v)}")
+                f"std.Build.{who} is told a string, not {runtime_type_of(v)}")
         return v.value
+
+    def add_executable(self, args):
+        from interp.value import none, ObjectValue
+        from interp.eval import unwrap_optional
+        if len(args) != 1:
+            raise TypeError(
+                "std.Build.add_executable takes the one std.Build.Executable")
+        v = unwrap_optional(args[0])
+        cfg = v.obj if isinstance(v, ObjectValue) else v
+        if not isinstance(cfg, Executable):
+            raise TypeError(
+                "std.Build.add_executable is told a std.Build.Executable")
+        if not cfg.name:
+            raise TypeError(
+                "an executable is named: its 'name' is what the file is called")
+        if not cfg.root_source_file:
+            raise TypeError(
+                "an executable names the file it is rooted in: its "
+                "'root_source_file'")
+        self._executables.append(cfg)
+        return none()
 
     def search_path(self, args):
         from interp.value import none
@@ -1151,55 +1215,9 @@ class BuildModule:
         self._flags.append(self._one_str(args, "flag"))
         return none()
 
-    def root_source_file(self, args):
-        from interp.value import none
-        name = self._one_str(args, "root_source_file")
-        if self._root:
-            raise TypeError("a build names the one file it is rooted in, "
-                            "and this one is named already")
-        self._root = name
-        return none()
-
-    def output(self, args):
-        from interp.value import none
-        self._output = self._one_str(args, "output")
-        return none()
-
-    def output_dir(self, args):
-        from interp.value import none
-        self._output_dir = self._one_str(args, "output_dir")
-        return none()
-
-    def _nothing(self, args, who):
-        if args:
-            raise TypeError(f"std.build.{who} takes no arguments")
-
-    def paths(self, args):
-        self._nothing(args, "paths")
-        return _str_array(self._paths)
-
-    def flags(self, args):
-        self._nothing(args, "flags")
-        return _str_array(self._flags)
-
-    def root_source_file_name(self, args):
-        from interp.value import mk_str
-        self._nothing(args, "root_source_file_name")
-        return mk_str(self._root)
-
-    def output_name(self, args):
-        from interp.value import mk_str
-        self._nothing(args, "output_name")
-        return mk_str(self._output)
-
-    def output_directory(self, args):
-        from interp.value import mk_str
-        self._nothing(args, "output_directory")
-        return mk_str(self._output_dir)
-
 
 # ---------------------------------------------------------------------------
-# std.hash — digests, one-shot and a byte at a time
+# std.hash -- digests, one-shot and a byte at a time
 # ---------------------------------------------------------------------------
 
 def _hash_message(arg, who: str) -> bytes:
@@ -1335,7 +1353,6 @@ class StdModule:
         self._syntax = None  # lazy-initialized syntax submodule
         self.args = ArgsModule()
         self.implementation = ImplementationInfo()
-        self.build = BuildModule()
         self.hash = HashModule()
 
     @property

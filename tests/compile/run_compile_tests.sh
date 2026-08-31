@@ -218,6 +218,92 @@ for d in "$testdir"/multi/*/; do
 done
 
 # ---------------------------------------------------------------------------
+# Recipes that build more than one thing: each directory under recipes/
+# holds its sources, a recipe.ngpl carrying the @build function, a
+# `built` naming the files the recipe should produce in the order it
+# adds them, and an `expected` holding what running them in that order
+# prints.
+#
+# The directory is copied into the work area first, because what a
+# recipe names is named from where the recipe is: a build run in the
+# source tree would write its binaries there.  The interpreter reads
+# the same recipe -- it builds nothing, but the recipe has to be one it
+# accepts, since it is the semantic authority for what a recipe may say.
+#
+# Where a recipe adds more than one, -o has nothing to name and must be
+# refused rather than silently applied to one of them.
+# ---------------------------------------------------------------------------
+echo
+for d in "$testdir"/recipes/*/; do
+    [ -f "$d/recipe.ngpl" ] || continue
+    name=recipe-$(basename "$d")
+    src="$workdir/$name.src"
+    rm -rf "$src"
+    cp -r "$d" "$src"
+
+    if ! python -m interp --skip-tests "$src/recipe.ngpl" \
+            > "$workdir/$name.interp.out" 2>&1; then
+        echo "FAIL $name: the interpreter refused the recipe"
+        sed 's/^/    /' "$workdir/$name.interp.out" | head -5
+        fail=$((fail + 1))
+        continue
+    fi
+
+    # The compiler writes files and not directories, so what the
+    # recipe names has to be there.  `built` says where each goes.
+    while read -r f; do
+        [ -n "$f" ] && mkdir -p "$src/$(dirname "$f")"
+    done < "$d/built"
+
+    if ! ngplc --build "$src/recipe.ngpl" > "$workdir/$name.out" 2>&1; then
+        echo "FAIL $name: --build refused the recipe"
+        sed 's/^/    /' "$workdir/$name.out" | head -5
+        fail=$((fail + 1))
+        continue
+    fi
+
+    : > "$workdir/$name.ran"
+    missing=""
+    while read -r f; do
+        [ -n "$f" ] || continue
+        if [ ! -x "$src/$f" ]; then
+            missing=$f
+            break
+        fi
+        "$src/$f" >> "$workdir/$name.ran" 2>&1
+    done < "$d/built"
+    if [ -n "$missing" ]; then
+        echo "FAIL $name: the recipe wrote no '$missing'"
+        fail=$((fail + 1))
+        continue
+    fi
+    if ! diff -u "$d/expected" "$workdir/$name.ran" > "$workdir/$name.diff"; then
+        echo "FAIL $name: what it built answers differently"
+        sed 's/^/    /' "$workdir/$name.diff" | head -10
+        fail=$((fail + 1))
+        continue
+    fi
+
+    if [ "$(grep -c . "$d/built")" -gt 1 ]; then
+        if ngplc --build "$src/recipe.ngpl" -o "$workdir/$name.one" \
+                > "$workdir/$name.o.out" 2>&1; then
+            echo "FAIL $name: -o was taken for a recipe that adds several"
+            fail=$((fail + 1))
+            continue
+        fi
+        if ! grep -q "names one file" "$workdir/$name.o.out"; then
+            echo "FAIL $name: -o was refused, but not in those words"
+            sed 's/^/    /' "$workdir/$name.o.out" | head -3
+            fail=$((fail + 1))
+            continue
+        fi
+    fi
+
+    echo "ok   $name"
+    pass=$((pass + 1))
+done
+
+# ---------------------------------------------------------------------------
 # Shared test files: bootstrap suite files whose whole @test surface
 # sits inside the compiled subset.  Each is compiled and run with
 # --test, and stdout, stderr and the exit code must match the

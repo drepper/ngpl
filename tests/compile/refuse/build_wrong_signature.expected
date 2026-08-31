@@ -1,0 +1,3 @@
+tests/compile/refuse/build_wrong_signature.ngpl:4:4: error: the @build function takes the build it declares on and what the command line said, as 'fn build(b : &mut std.Build, output : str, target : str)'
+  4 | fn build(n : i64):
+    |    ^

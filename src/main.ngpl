@@ -162,17 +162,22 @@ fn opt_value(a : str, name : str) → str:
 // cannot read this one; the two are checked against each other by the
 // bootstrap comparing the stage each built.
 @build
-fn build():
+fn build(b : &mut std.Build, output : str, target : str):
     // One file, and the program says the rest of itself: every source
     // names at its head what it is written against, so the list that
-    // used to live here lives in the files that know it.
-    std.build.root_source_file("main.ngpl")
-    std.build.output_dir("build")
-    std.build.output("ngplc")
+    // used to live here lives in the files that know it.  What -o and
+    // --target said reaches here as `output` and `target`; this recipe
+    // leaves both to the compiler, which applies them to what it adds.
+    //
+    // Where the compiler goes is named from where this file is: the
+    // recipe lives in src/ and the binary belongs beside it, in build/.
+    b.output_dir ← "../build"
+    b.add_executable(std.Build.Executable{name: "ngplc",
+                                          root_source_file: "main.ngpl"})
 
 fn empty_recipe() → Recipe:
-    (Recipe{root: "", output: "", output_dir: "", paths: [], flags: [],
-            diags: []})
+    (Recipe{names: [], roots: [], outdirs: [], targets: [], paths: [],
+            flags: [], diags: []})
 
 // A name the recipe gave, made into a path this run can open.  An
 // absolute name is taken as written; anything else is looked for beside
@@ -208,7 +213,8 @@ fn recipe_failed():
     std.exit(1)
 
 @impure
-fn read_build(path : str, json : bool) → Recipe:
+fn read_build(path : str, json : bool, output : str, target : str,
+              host : str) → Recipe:
     if not is_ngpl_source(path):
         std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", path)
         recipe_failed()
@@ -230,7 +236,7 @@ fn read_build(path : str, json : bool) → Recipe:
     // The recipe runs without the checker having seen the file: what it
     // may contain is settled by the evaluator's own first pass, and no
     // global has been folded, so it reads none.
-    let plan := build_recipe(ast, toks, src, [])
+    let plan := build_recipe(ast, toks, src, [], output, target, host)
     if #plan.diags > 0:
         report(plan.diags, files, json, src)
         recipe_failed()
@@ -299,124 +305,24 @@ fn help():
     std.println("")
     std.println("Report bugs to <https://github.com/drepper/ngpl/issues>.")
 
-@start
-@impure
-fn main() → u8:
-    let argv := std.args.all()
-    // --help is answered wherever it appears and before anything else
-    // is judged, so that a command line with a mistake in it can still
-    // be asked what it should have said.
-    foreach a := argv:
-        if a = "--help":
-            help()
-            return 0
-    if #argv = 0:
-        std.println("Usage: ngplc [OPTION...] SOURCE.ngpl...")
-        std.println("   or: ngplc [OPTION...] --build RECIPE.ngpl")
-        std.println("Try 'ngplc --help' for more information.")
-        return 1
-    let inputs : mut str[] = []
-    let output : mut str = ""
-    let build_file : mut str = ""
-    let want_tokens : mut bool = false
-    let want_ast : mut bool = false
-    let werror : mut bool = false
-    let want_log : mut bool = false
-    let incremental : mut bool = false
-    let json : mut bool = false
-    let stack_size : mut i64 = STACK_DEFAULT
-    let guard_size : mut i64 = GUARD_DEFAULT
-    // aim at the machine underfoot unless --target says otherwise
-    let tgt_index : mut i64 = target_index(host_target())
-    let i : mut i64 ¤ptrdiff = 0
-    while i < #argv:
-        let a := argv[i]
-        if a = "-o":
-            if i + 1 >= #argv:
-                std.println("ngplc: -o requires the output file name after it")
-                return 1
-            output ← argv[i + 1]
-            i ← i + 2
-            continue
-        if a = "--build":
-            if i + 1 >= #argv:
-                std.println("ngplc: --build requires the file holding the @build recipe after it")
-                return 1
-            build_file ← argv[i + 1]
-            i ← i + 2
-            continue
-        if opt_matches(a, "--stack-size") or opt_matches(a, "--guard-size"):
-            let is_stack : bool = opt_matches(a, "--stack-size")
-            let which : str = if is_stack: "--stack-size" else: "--guard-size"
-            let raw : str = opt_value(a, which)
-            let v : i64 = parse_size(raw)
-            if v = ⁻1:
-                std.println("ngplc: {} wants a size, as 8388608 or 8M; '{}' is not one", which, raw)
-                return 1
-            if v < PAGE or v > SIZE_MAX_OPT:
-                std.println("ngplc: {} runs from one page to a gibibyte; {} is outside it", which, i64_str(v))
-                return 1
-            if is_stack:
-                stack_size ← align_up(v, PAGE)
-            else:
-                guard_size ← align_up(v, PAGE)
-            i ← i + 1
-            continue
-        if opt_matches(a, "--target"):
-            let tname : str = opt_value(a, "--target")
-            let ti : i64 = target_index(tname)
-            if ti = ⁻1:
-                std.println("ngplc: '{}' is not a target this compiler has; they are {}", tname, target_names())
-                return 1
-            tgt_index ← ti
-            i ← i + 1
-            continue
-        if a = "--dump-tokens":
-            want_tokens ← true
-        elif a = "--dump-ast":
-            want_ast ← true
-        elif a = "--diag=json":
-            json ← true
-        elif a = "--log=json":
-            want_log ← true
-        elif a = "--incremental":
-            incremental ← true
-        elif a = "-Werror":
-            werror ← true
-        else:
-            inputs.push(a)
-        i ← i + 1
-    // --build reads the source list from the recipe, so naming files
-    // beside it would be saying two different things at once
-    if build_file ≠ "" and #inputs > 0:
-        std.println("""ngplc: --build reads the source list from the recipe; '{}' names a file
-                     " besides""", inputs[0¤ptrdiff])
-        return 1
-    let plan : Recipe = if build_file ≠ "": read_build(build_file, json) else: empty_recipe()
-    if build_file ≠ "":
-        if plan.root = "":
-            std.println("ngplc: the @build recipe in '{}' names no source", build_file)
-            return 1
-        // The one source it is rooted in, looked for beside the recipe
-        // first and then along each search path the recipe declared.
-        // What else the program is made of is written in the program,
-        // as the @import lines at the head of each file.
-        inputs.push(resolve_source(plan.root, dir_of(build_file), plan.paths))
-        if output = "" and plan.output ≠ "":
-            output ← if plan.output_dir = "": plan.output else: plan.output_dir ⧺ "/" ⧺ plan.output
-        foreach f := plan.flags:
-            std.println("""ngplc: the build recipe asks for flag '{}', which this compiler does not
-                         " have""", f)
-            return 1
-    if #inputs = 0:
-        std.println("ngplc: no source file named")
-        return 1
-    foreach nm := inputs:
-        if not is_ngpl_source(nm):
-            std.println("""ngplc: cannot tell what '{}' is: an NGPL source file's name ends in
-                         " '.ngpl'""", nm)
-            return 1
+// What the command line said, carried to each build the recipe asks
+// for rather than passed one argument at a time.  A recipe may ask for
+// several, and every one of them is compiled the same way.
+struct Options:
+    tgt_index : i64
+    stack_size : i64
+    guard_size : i64
+    want_tokens : bool
+    want_ast : bool
+    want_log : bool
+    werror : bool
+    json : bool
+    incremental : bool
 
+// Compile the program rooted in `inputs` and write it to `outname`.
+// Answers what the compiler answers: 0 where it wrote the file.
+@impure
+fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // One program, read from the file it is rooted in: what a file is
     // written against comes in ahead of it, however deep that goes.
     // The lexer sees one text and counts one set of line numbers over
@@ -432,24 +338,24 @@ fn main() → u8:
 
     let toks := lex(src)
     if #toks.diags > 0:
-        report(toks.diags, files, json, src)
+        report(toks.diags, files, o.json, src)
         return 1
-    if want_tokens:
+    if o.want_tokens:
         dump_tokens(toks, src, files)
         return 0
 
     let ast := parse(toks, src)
     if #ast.diags > 0:
-        report(ast.diags, files, json, src)
+        report(ast.diags, files, o.json, src)
         return 1
-    if want_ast:
+    if o.want_ast:
         dump_ast(ast, src, toks)
         return 0
 
     let chk := check(ast, toks, src)
     if #chk.diags > 0:
-        report(chk.diags, files, json, src)
-        if any_refusal(chk.diags, werror):
+        report(chk.diags, files, o.json, src)
+        if any_refusal(chk.diags, o.werror):
             return 1
 
     // What went in: the compiler, then each source and all of them
@@ -474,14 +380,15 @@ fn main() → u8:
     // involved, so a compiler that read it only when asked would accept
     // recipes the interpreter refuses -- the one direction this project
     // does not allow.  A file without a recipe pays one comparison.
-    let recipe := build_recipe(ast, toks, src, chk.gvals)
+    // What the recipe says here is not acted on -- --build is where a
+    // recipe is read for what it declares -- so it is handed nothing
+    // the command line said, and reads it only to be held to the rules.
+    let recipe := build_recipe(ast, toks, src, chk.gvals, "", "", "")
     if #recipe.diags > 0:
-        report(recipe.diags, files, json, src)
+        report(recipe.diags, files, o.json, src)
         return 1
 
-    let tgt := targets()[tgt_index × 1¤ptrdiff]
-    // as every Unix compiler has it: a.out unless -o names the file
-    let outname : str = if output ≠ "": output else: "a.out"
+    let tgt := targets()[o.tgt_index × 1¤ptrdiff]
 
     // Under --incremental the file about to be written is read first.
     // What it says -- a digest per function, an address and a slot per
@@ -489,13 +396,13 @@ fn main() → u8:
     // source moved and those that name one; where it says nothing
     // usable, this is a first build, which differs from a plain one
     // only in leaving each function room to grow.
-    let prev : Prev = if incremental: read_prev(outname) else: prev_none()
+    let prev : Prev = if o.incremental: read_prev(outname) else: prev_none()
     let fill : i64 = if tgt.id = TGT_X64: INCR_FILL_X86 else: INCR_FILL_ANY
     let incr : mut Incr = incr_off()
-    if incremental:
+    if o.incremental:
         incr ← incr_prev(ast, toks, src, prev, bom, fill,
                          tgt.machine.ord(), tgt.is64, tgt.eflags)
-    let first := codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log, incr)
+    let first := codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.want_log, incr)
     // A rebuild that could not be laid over the old file says why and
     // is done again whole, which is always right.  The whole build
     // still leaves padding, so the build after it is incremental.
@@ -505,8 +412,8 @@ fn main() → u8:
     let compiled := if why = "":
         first
     else:
-        codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log, incr_first(fill))
-    if incremental and want_log:
+        codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.want_log, incr_first(fill))
+    if o.incremental and o.want_log:
         if incr.mode ≠ 2:
             std.println("{}", "{\"decision\": \"incremental-first\", \"functions\": " ⧺ i64_str(@dropunit(#ast.fns)) ⧺ "}")
         elif why = "":
@@ -514,9 +421,9 @@ fn main() → u8:
         else:
             std.println("{}", "{\"decision\": \"incremental-fallback\", \"why\": \"" ⧺ why ⧺ "\"}")
     if #compiled.diags > 0:
-        report(compiled.diags, files, json, src)
+        report(compiled.diags, files, o.json, src)
         return 1
-    if want_log:
+    if o.want_log:
         // what the checker worked out, then what the lowering did
         foreach l := chk.log:
             std.println("{}", l)
@@ -534,7 +441,7 @@ fn main() → u8:
     // here: a second opinion about where .rodata begins is a second
     // chance to disagree with the instructions that name it.
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
-                       stack_size × 1¤byte, compiled.relro_size × 1¤byte,
+                       o.stack_size × 1¤byte, compiled.relro_size × 1¤byte,
                        compiled.syms, bom, compiled.text_room, compiled.ro_room,
                        compiled.tx_ends)
     let runs : mut std.iovec[] = []
@@ -578,4 +485,166 @@ fn main() → u8:
         runs.push(std.iov(e.shdrs))
     outf.writev(runs)
     outf.close()
+    0
+
+@start
+@impure
+fn main() → u8:
+    let argv := std.args.all()
+    // --help is answered wherever it appears and before anything else
+    // is judged, so that a command line with a mistake in it can still
+    // be asked what it should have said.
+    foreach a := argv:
+        if a = "--help":
+            help()
+            return 0
+    if #argv = 0:
+        std.println("Usage: ngplc [OPTION...] SOURCE.ngpl...")
+        std.println("   or: ngplc [OPTION...] --build RECIPE.ngpl")
+        std.println("Try 'ngplc --help' for more information.")
+        return 1
+    let inputs : mut str[] = []
+    let output : mut str = ""
+    let build_file : mut str = ""
+    let want_tokens : mut bool = false
+    let want_ast : mut bool = false
+    let werror : mut bool = false
+    let want_log : mut bool = false
+    let incremental : mut bool = false
+    let json : mut bool = false
+    let stack_size : mut i64 = STACK_DEFAULT
+    let guard_size : mut i64 = GUARD_DEFAULT
+    // aim at the machine underfoot unless --target says otherwise
+    let tgt_index : mut i64 = target_index(host_target())
+    let target_name : mut str = ""
+    let i : mut i64 ¤ptrdiff = 0
+    while i < #argv:
+        let a := argv[i]
+        if a = "-o":
+            if i + 1 >= #argv:
+                std.println("ngplc: -o requires the output file name after it")
+                return 1
+            output ← argv[i + 1]
+            i ← i + 2
+            continue
+        if a = "--build":
+            if i + 1 >= #argv:
+                std.println("ngplc: --build requires the file holding the @build recipe after it")
+                return 1
+            build_file ← argv[i + 1]
+            i ← i + 2
+            continue
+        if opt_matches(a, "--stack-size") or opt_matches(a, "--guard-size"):
+            let is_stack : bool = opt_matches(a, "--stack-size")
+            let which : str = if is_stack: "--stack-size" else: "--guard-size"
+            let raw : str = opt_value(a, which)
+            let v : i64 = parse_size(raw)
+            if v = ⁻1:
+                std.println("ngplc: {} wants a size, as 8388608 or 8M; '{}' is not one", which, raw)
+                return 1
+            if v < PAGE or v > SIZE_MAX_OPT:
+                std.println("ngplc: {} runs from one page to a gibibyte; {} is outside it", which, i64_str(v))
+                return 1
+            if is_stack:
+                stack_size ← align_up(v, PAGE)
+            else:
+                guard_size ← align_up(v, PAGE)
+            i ← i + 1
+            continue
+        if opt_matches(a, "--target"):
+            let tname : str = opt_value(a, "--target")
+            let ti : i64 = target_index(tname)
+            if ti = ⁻1:
+                std.println("ngplc: '{}' is not a target this compiler has; they are {}", tname, target_names())
+                return 1
+            tgt_index ← ti
+            // what --target said, as it said it: a recipe is handed the
+            // word rather than what the compiler made of it
+            target_name ← tname
+            i ← i + 1
+            continue
+        if a = "--dump-tokens":
+            want_tokens ← true
+        elif a = "--dump-ast":
+            want_ast ← true
+        elif a = "--diag=json":
+            json ← true
+        elif a = "--log=json":
+            want_log ← true
+        elif a = "--incremental":
+            incremental ← true
+        elif a = "-Werror":
+            werror ← true
+        else:
+            inputs.push(a)
+        i ← i + 1
+    // --build reads the source list from the recipe, so naming files
+    // beside it would be saying two different things at once
+    if build_file ≠ "" and #inputs > 0:
+        std.println("""ngplc: --build reads the source list from the recipe; '{}' names a file
+                     " besides""", inputs[0¤ptrdiff])
+        return 1
+    // The recipe is handed what the command line said, so it may act on
+    // it; the compiler then applies -o to what the recipe added.
+    let plan : Recipe = if build_file ≠ "": read_build(build_file, json, output, target_name, host_target()) else: empty_recipe()
+    if build_file ≠ "":
+        if #plan.names = 0:
+            std.println("""ngplc: the @build recipe in '{}' adds no executable, so there is nothing
+                         " to build""", build_file)
+            return 1
+        if output ≠ "" and #plan.names > 1:
+            std.println("""ngplc: -o names one file and this recipe adds {} of them; leave it out
+                         " and each goes where the recipe says""", @dropunit(#plan.names))
+            return 1
+        foreach f := plan.flags:
+            std.println("""ngplc: the build recipe asks for flag '{}', which this compiler does not
+                         " have""", f)
+            return 1
+    if #inputs = 0 and build_file = "":
+        std.println("ngplc: no source file named")
+        return 1
+    foreach nm := inputs:
+        if not is_ngpl_source(nm):
+            std.println("""ngplc: cannot tell what '{}' is: an NGPL source file's name ends in
+                         " '.ngpl'""", nm)
+            return 1
+
+    // Every executable the recipe asked for, in the order it asked.
+    // Without a recipe there is the one program the command line named.
+    let opts : Options = (Options{tgt_index: tgt_index, stack_size: stack_size,
+                                  guard_size: guard_size, want_tokens: want_tokens,
+                                  want_ast: want_ast, want_log: want_log,
+                                  werror: werror, json: json,
+                                  incremental: incremental})
+    if build_file = "":
+        return compile_one(inputs, if output ≠ "": output else: "a.out", opts)
+    foreach i := 0¤ptrdiff…#plan.names:
+        // What it is built for: what the executable named, else what
+        // --target named, else the machine underfoot.
+        let want : str = if plan.targets[i] ≠ "": plan.targets[i] else: target_name
+        let ti : i64 = if want = "": tgt_index else: target_index(want)
+        if ti = ⁻1:
+            std.println("ngplc: '{}' is not a target this compiler has; they are {}",
+                        want, target_names())
+            return 1
+        // Where it goes.  What a recipe names is named from where the
+        // recipe is, as the file it is rooted in is, so a recipe means
+        // the same thing from whatever directory it is run.  -o names
+        // the file instead, and is named from where the compiler runs.
+        let base : str = dir_of(build_file)
+        let dir : mut str = base
+        if plan.outdirs[i] ≠ "":
+            dir ← if "/" ⊑ plan.outdirs[i] or base = "": plan.outdirs[i] else: base ⧺ "/" ⧺ plan.outdirs[i]
+        let named : str = if dir = "": plan.names[i] else: dir ⧺ "/" ⧺ plan.names[i]
+        let where : str = if output ≠ "": output else: named
+        let one : Options = (Options{tgt_index: ti, stack_size: opts.stack_size,
+                                     guard_size: opts.guard_size,
+                                     want_tokens: opts.want_tokens,
+                                     want_ast: opts.want_ast, want_log: opts.want_log,
+                                     werror: opts.werror, json: opts.json,
+                                     incremental: opts.incremental})
+        let rc : u8 = compile_one([resolve_source(plan.roots[i], dir_of(build_file), plan.paths)],
+                                  where, one)
+        if rc ≠ 0:
+            return rc
     0

@@ -1,0 +1,6 @@
+// One of the two programs the recipe beside it builds.  Nothing joins
+// the two but the recipe: separate programs, one command.
+@start
+@impure
+fn main():
+    std.println("one says {}", 42)

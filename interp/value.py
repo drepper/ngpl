@@ -38,6 +38,8 @@ BUILTIN_TYPES: set[str] = {
     "syntax",
     # One run of bytes waiting to be written, as std.iov settles it.
     "std.iovec",
+    # What a @build recipe declares the build on.
+    "std.Build",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).

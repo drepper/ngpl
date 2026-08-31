@@ -303,8 +303,19 @@ impl Parser:
                 self.err("""'std.hash' is the digests now; the type that maps keys to values is
                           " 'std.dict(K, V)'""")
                 return TY_I64
+            if m = "Build":
+                // What a @build recipe declares on.  It is handed to the
+                // recipe rather than copied into it, and the recipe adds
+                // to it, so the parameter is written with the borrow that
+                // says both.
+                if refk ≠ 2:
+                    self.err("""a std.Build is handed to a recipe, which adds what it declares to
+                              " it; the parameter is written '&mut std.Build'""")
+                    return TY_I64
+                return TY_BUILD + 262144 × refk
             if m ≠ "iovec":
-                self.err("'std." ⧺ m ⧺ "' is not a core-2 type; std.dict(K, V) and std.iovec are")
+                self.err("'std." ⧺ m ⧺ """' is not a core-2 type; std.dict(K, V), std.iovec and
+                          " std.Build are""")
                 return TY_I64
             // a run of bytes waiting to be written; what it holds is
             // settled where it is made, not where it is named, so the
@@ -1055,29 +1066,37 @@ impl Parser:
                     self.pos ← self.pos + 1
                     let eoff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, esb, eoff, 0)
-                if m = "build":
-                    _ ← self.eat(TK_DOT, "'.' after std.build")
-                    let bm := self.ttext(self.pos)
-                    let bsb : mut i64 = ⁻1
-                    if bm = "root_source_file": bsb ← SB_BSRC
-                    elif bm = "output": bsb ← SB_BOUT
-                    elif bm = "output_dir": bsb ← SB_BOUTD
-                    elif bm = "search_path": bsb ← SB_BPATH
-                    elif bm = "flag": bsb ← SB_BFLAG
-                    elif bm = "root_source_file_name": bsb ← SB_BSRCS
-                    elif bm = "output_name": bsb ← SB_BOUTN
-                    elif bm = "output_directory": bsb ← SB_BOUTDN
-                    elif bm = "paths": bsb ← SB_BPATHS
-                    elif bm = "flags": bsb ← SB_BFLAGS
-                    else:
-                        self.err("'std.build." ⧺ bm ⧺ """' is not core-2; root_source_file(),
-                                " output(), output_dir(), search_path() and flag() declare a build,
-                                " and root_source_file_name(), output_name(), output_directory(),
-                                " paths() and flags() answer what was declared""")
+                if m = "Build":
+                    // std.Build.Executable{…}: the one struct the build
+                    // system defines rather than the program.  Its
+                    // fields are read as any struct literal's are, and
+                    // nb is how the node says which it is.
+                    _ ← self.eat(TK_DOT, "'.' after std.Build")
+                    let bt := self.ttext(self.pos)
+                    if bt ≠ "Executable":
+                        self.err("'std.Build." ⧺ bt ⧺ """' is not a type the build system defines;
+                                  " std.Build.Executable is""")
                         return 0
                     self.pos ← self.pos + 1
-                    let boff : i64 = self.parse_args()
-                    return self.mknode(NK_SCALL, at, bsb, boff, 0)
+                    _ ← self.eat(TK_LBRACE, "'{' after std.Build.Executable")
+                    let bitems : mut i64[] = []
+                    if self.peek() ≠ TK_RBRACE:
+                        while true:
+                            bitems.push(self.pos)
+                            _ ← self.eat_name("a field's name")
+                            _ ← self.eat(TK_COLON, "':' after the field's name")
+                            bitems.push(self.parse_expr())
+                            if self.failed(): return 0
+                            if self.peek() = TK_COMMA:
+                                self.pos ← self.pos + 1
+                            else:
+                                break
+                    _ ← self.eat(TK_RBRACE, "'}' closing std.Build.Executable")
+                    let boff : i64 = @dropunit(#self.extra)
+                    self.extra.push(@dropunit(#bitems) ÷ 2 ?? 0)
+                    foreach it := bitems:
+                        self.extra.push(it)
+                    return self.mknode(NK_SLIT, at, boff, SLIT_EXE, 0)
                 if m = "arena":
                     _ ← self.eat(TK_DOT, "'.' after std.arena")
                     if self.ttext(self.pos) ≠ "allocator":
@@ -1202,7 +1221,7 @@ impl Parser:
                 self.extra.push(@dropunit(#items) ÷ 2 ?? 0)
                 foreach it := items:
                     self.extra.push(it)
-                return self.parse_postfix(self.mknode(NK_SLIT, at, off, 0, 0))
+                return self.parse_postfix(self.mknode(NK_SLIT, at, off, SLIT_PLAIN, 0))
             self.pos ← self.pos + 1
             return self.parse_postfix(self.mknode(NK_VAR, at, 0, 0, 0))
         if k = TK_RESERVED:
@@ -2089,12 +2108,26 @@ impl Parser:
             if #self.builds > 0:
                 self.err_at(name_tok, "a program carries one @build function, and this is a second")
                 return
-            if #ptoks > 0:
-                self.err_at(ptoks[0¤ptrdiff], "the @build function takes no parameters")
+            // A recipe is handed the build it declares on, and what the
+            // command line said about where the result goes and what it
+            // is built for -- each an empty string where it said nothing.
+            if #ptoks ≠ 3¤ptrdiff:
+                self.err_at(name_tok, """the @build function takes the build it declares on and what
+                                       " the command line said, as
+                                       " 'fn build(b : &mut std.Build, output : str, target : str)'""")
+                return
+            if ty_strip_ref(ptypes[0¤ptrdiff]) ≠ TY_BUILD:
+                self.err_at(ptoks[0¤ptrdiff],
+                            "a recipe declares a build on what it is handed: '&mut std.Build'")
+                return
+            if ptypes[1¤ptrdiff] ≠ TY_STR or ptypes[2¤ptrdiff] ≠ TY_STR:
+                self.err_at(ptoks[1¤ptrdiff], """what the command line said reaches a recipe as two
+                                               " strings: the name -o gave and the target --target
+                                               " gave, each empty where it was not given""")
                 return
             if ret ≠ TY_UNIT:
-                self.err_at(name_tok, """the @build function answers nothing; it declares a build by
-                                       " calling std.build""")
+                self.err_at(name_tok, """the @build function answers nothing; it declares a build on
+                                       " the std.Build it is handed""")
                 return
             self.builds.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                                    ret: ret, body: body, is_export: false,

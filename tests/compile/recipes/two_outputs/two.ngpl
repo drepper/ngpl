@@ -1,0 +1,6 @@
+// The second, which goes in a directory of its own so that a recipe
+// naming output_dir per executable is exercised as well.
+@start
+@impure
+fn main():
+    std.println("two says {}", 100)

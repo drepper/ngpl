@@ -1,0 +1,9 @@
+// A recipe is handed the build it declares on and what the command
+// line said; anything else is not a signature the build system calls.
+@build
+fn build(n : i64):
+    _ ← n
+
+@start
+fn main():
+    _ ← 1

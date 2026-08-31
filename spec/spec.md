@@ -10001,21 +10001,23 @@ Naming several files on the command line still works and still means what it did
 
 ### The Build Function
 
-A program may carry one function annotated `@build`.  It is the build recipe: what the program is made of, and what should be done with it.
+A program may carry one function annotated `@build`.  It is the build recipe: what is to be built out of the program, and what should be done with it.
 
 ```
 @build
-fn build():
-    std.build.root_source_file("main.ngpl")
-    std.build.output_dir("build")
-    std.build.output("ngplc")
+fn build(b : &mut std.Build, output : str, target : str):
+    b.output_dir ← "build"
+    b.add_executable(std.Build.Executable{name: "ngplc",
+                                          root_source_file: "main.ngpl"})
 ```
 
-The recipe lives in the source, not in a file of its own — any source file may carry it — and it takes no parameters.  A program carries **at most one**; a second is refused where it is written.
+A recipe is **handed the build it declares on** and **what the command line said**, and its signature says exactly that: `b` is the build, `output` is the name `-o` gave and `target` the machine `--target` gave, each `""` where nothing was given.  Any other signature is refused where it is written.  The borrow is `&mut` because a recipe adds to what it is handed rather than answering something new.
+
+The recipe lives in the source, not in a file of its own — any source file may carry it.  A program carries **at most one**; a second is refused where it is written.
 
 A recipe is **comptime-only**: it runs while the program is being built and **no code for it is written into the executable**.  It cannot be called from the program, and the program cannot observe what it declared.
 
-`--build FILE` finds the recipe in `FILE`, runs it, and compiles the program rooted in the file it names:
+`--build FILE` finds the recipe in `FILE`, runs it, and builds each executable the recipe added:
 
 ```
 ngplc --build src/main.ngpl
@@ -10025,25 +10027,45 @@ Because only `FILE` is read at that point — the rest of the program is what th
 
 #### What a Recipe Declares
 
-Each thing is declared by naming it and answered by a reader.  The two that hold a list answer them in the order they were declared; the three that hold a single name answer `""` until one is declared, and the last two of those are last-writer-wins.
+An executable is declared by adding one, and everything about it is said in the `std.Build.Executable` that is added:
 
-| declares | answers | |
+```
+b.add_executable(std.Build.Executable{name: "sbom",
+                                      root_source_file: "tools/sbom.ngpl",
+                                      output_dir: "build/tools",
+                                      target: "aarch64"})
+```
+
+| field | means | when it is left out |
 |---|---|---|
-| `std.build.root_source_file(p)` | `std.build.root_source_file_name()` | the one file the program is rooted in |
-| `std.build.output(n)` | `std.build.output_name()` | what the result is called |
-| `std.build.output_dir(d)` | `std.build.output_directory()` | where the result goes |
-| `std.build.search_path(p)` | `std.build.paths()` | where a source is looked for |
-| `std.build.flag(f)` | `std.build.flags()` | a compiler flag |
+| `name` | what the file is called | required; an executable is named |
+| `root_source_file` | the one file the program is rooted in | required; a build has a root |
+| `output_dir` | where this one goes | `b.output_dir` |
+| `target` | what this one is built for | what `--target` said, else the machine underfoot |
 
-**One source, not a list.**  What else a program is made of is written in the program, as the `@import` lines at the head of each file, so a recipe names the file it is rooted in and no more.  Naming a second is refused: a build has one root.
+A recipe may add **as many executables as it likes**, and they are built in the order they were added.  One recipe can therefore build a program and its tools, or the same program for several machines, from one command.
 
-A relative source name is taken relative to the directory `FILE` is in, then against each search path in the order declared, so a recipe means the same thing from whatever directory it is run.
+What the build itself holds:
 
-Where the recipe and the command line say different things, **the command line wins**: it is the more specific statement of intent.  A flag the compiler does not have is refused rather than ignored, because accepting a directive and then doing something else is the one behaviour guaranteed to be wrong.
+| on `std.Build` | means |
+|---|---|
+| `b.output_dir` | where an executable that names no directory of its own goes — read and written |
+| `b.host_target` | the machine the compiler runs on — read only |
+| `b.add_executable(e)` | declare one thing to build |
+| `b.search_path(p)` | where a source is looked for |
+| `b.flag(f)` | a compiler flag |
+
+**One root per executable, not a list.**  What else a program is made of is written in the program, as the `@import` lines at the head of each file, so an executable names the file it is rooted in and no more.
+
+**Names are taken from where the recipe is.**  A relative `root_source_file` or `output_dir` is taken relative to the directory `FILE` is in, then — for a source — against each search path in the order declared, so a recipe means the same thing from whatever directory it is run.  A directory beginning with `/` is taken as it stands.  The compiler writes files and not directories, so a directory a recipe names has to exist; a build that cannot create its output says so and stops.
+
+Where the recipe and the command line say different things, **the command line wins**: it is the more specific statement of intent.  `-o` names the file to write instead of the one the recipe worked out, and is taken relative to where the compiler runs; because it names *one* file, a recipe that adds more than one executable and a command line that gives `-o` are refused together rather than one of them being guessed at.  `--target` applies to every executable that does not name a target of its own.  A flag the compiler does not have is refused rather than ignored, because accepting a directive and then doing something else is the one behaviour guaranteed to be wrong.
+
+The two strings a recipe is handed are the same statements, said to the recipe rather than around it: a recipe that wants to decide *itself* what `-o` or `--target` mean for what it adds reads `output` and `target` and works them into the executables it declares.
 
 #### What a Recipe May Say
 
-A recipe is a program, not a table — it may compute the name it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings.
+A recipe is a program, not a table — it may compute the names it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings, and the build it was handed.  `std.Build.Executable` is the one struct literal it may write: a recipe holds no program, so a program's struct is not one of the things it can make.
 
 The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
 
@@ -10272,17 +10294,17 @@ A program may carry one `@build` function: the build recipe, described in full i
 
 ```
 @build
-fn build():
-    std.build.root_source_file("main.ngpl")
-    std.build.output_dir("build")
-    std.build.output("demo")
-    std.build.search_path("vendor")
-    std.build.flag("contracts=enforce")
+fn build(b : &mut std.Build, output : str, target : str):
+    b.output_dir ← "build"
+    b.search_path("vendor")
+    b.flag("contracts=enforce")
+    b.add_executable(std.Build.Executable{name: "demo",
+                                          root_source_file: "main.ngpl"})
 ```
 
-A recipe names the one file the program is rooted in; the rest of the program is reached from it by the `@import` lines the sources carry.  A recipe is a program, not a table, so the name may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
+Each executable names the one file it is rooted in; the rest of the program is reached from it by the `@import` lines the sources carry.  A recipe is a program, not a table, so the names may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
 
-The function takes no parameters, and a program carries at most one.
+The interpreter builds nothing, so it hands the recipe a fresh `std.Build` and two empty strings: it names no output and no target, which is what a recipe reads `""` as meaning.  The signature is checked as the compiler checks it, and a program carries at most one recipe.
 
 ### Entering the REPL
 

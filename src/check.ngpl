@@ -1103,7 +1103,16 @@ impl Checker:
             else:
                 self.set_type(id, ty_drop_unit(dt))
         elif k = NK_SLIT:
-            self.check_slit(id, tok, na)
+            // The recipe is the one function the checker never walks,
+            // so a std.Build.Executable reaching here is outside one by
+            // construction: it is the build system's struct, and only a
+            // recipe has a build to hand it to.
+            if nb = SLIT_EXE:
+                self.derr(tok, """std.Build.Executable belongs to the @build function; nothing else
+                                " declares a build""")
+                self.set_type(id, TY_UNIT)
+            else:
+                self.check_slit(id, tok, na)
         elif k = NK_FIELD:
             self.check_field(id, tok, na)
         elif k = NK_SOME:
@@ -3736,14 +3745,6 @@ impl Checker:
         n
 
     fn check_scall(&mut self, id : i64, tok : i64, sb : i64, args_off : i64 ¤"aextra"):
-        if sb >= SB_BSRC and sb <= SB_BFLAGS:
-            // The recipe is the one function the checker never walks,
-            // so a std.build reaching here is outside one by
-            // construction -- no flag to set, and nothing to carry.
-            self.derr(tok, """std.build belongs to the @build function; nothing else declares or
-                            " reads a build""")
-            self.set_type(id, TY_UNIT)
-            return
         if sb = SB_PROC:
             // the member's own index rides where an argument list would;
             // what it answers cannot change, so reading it is pure

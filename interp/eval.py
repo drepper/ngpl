@@ -176,6 +176,7 @@ from interp.value import (
 )
 from interp.env import Env, Decl
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
+                       Build as _BuildObj, Executable as _ExeObj,
                        resolve_abort_signal)
 from interp.errors import (Contract, Level, attach_backtrace, diagnostic_level, coded,
                           strip_position_prefix, ContractError,
@@ -3932,6 +3933,24 @@ class Evaluator:
         return some(value)
 
     def _ee_StructLit(self, node):
+        # std.Build.Executable is the build system's own struct rather
+        # than one the program declares, so it is built here instead of
+        # being looked up among the program's types.
+        if node.name == "std.Build.Executable":
+            fields = {}
+            for fname, fexpr in node.field_inits:
+                if fname not in _ExeObj.FIELDS:
+                    raise TypeError(
+                        f"'{fname}' is no field of std.Build.Executable; "
+                        + ", ".join(_ExeObj.FIELDS[:-1])
+                        + f" and {_ExeObj.FIELDS[-1]} are")
+                value = unwrap_optional(self.eval_expr(fexpr))
+                if not isinstance(value, StrValue):
+                    raise TypeError(
+                        "a field of std.Build.Executable is a string, and "
+                        f"'{fname}' is {self._value_type_name(value)}")
+                fields[fname] = value.value
+            return ObjectValue(_ExeObj(**fields))
         return self._eval_struct_lit(node)
 
     def _ee_FuncCall(self, node):
@@ -5174,6 +5193,18 @@ class Evaluator:
                 # would be a way to have one that does not keep to
                 # it.
                 self._check_invariants(inst)
+            elif isinstance(au, ObjectValue) and isinstance(au.obj, _BuildObj):
+                # what a std.Build holds and a recipe may write
+                if target_ast.attr != "output_dir":
+                    raise TypeError(
+                        f"'{target_ast.attr}' is nothing a recipe may "
+                        "write; output_dir is")
+                setting = unwrap_optional(rhs)
+                if not isinstance(setting, StrValue):
+                    raise TypeError(
+                        "what a std.Build holds is a string, and this is "
+                        f"{self._value_type_name(setting)}")
+                au.obj.output_dir = setting.value
             elif isinstance(au, ObjectValue) and au.obj is std \
                     and target_ast.attr in _STD_SETTINGS:
                 setting = unwrap_optional(rhs)

@@ -668,8 +668,8 @@ which is how the split was checked.  The rest were written afterwards,
 That is the order the imports put them in, not an order anyone wrote
 down.  Build it with `ngplc src/main.ngpl`, or with
 `ngplc --build src/main.ngpl`; the recipe in `main.ngpl` is a `@build`
-function, which generates no code and cannot be called, and it names
-that one file.
+function, which generates no code and cannot be called, and it adds one
+executable rooted in that one file.
 
 **The order is part of the program**, and the program says it.  A
 struct, a function, a global and an `enum` may be declared below

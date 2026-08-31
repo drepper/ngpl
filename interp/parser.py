@@ -44,6 +44,19 @@ DEFINITION_STARTERS = frozenset({
 })
 
 
+def _dotted(node) -> str:
+    """The name a chain of plain identifiers spells, or "" for anything else."""
+    parts: list[str] = []
+    while isinstance(node, GetAttr):
+        parts.append(node.attr)
+        node = node.obj
+    if not isinstance(node, VarRef):
+        return ""
+    parts.append(node.name)
+    parts.reverse()
+    return ".".join(parts)
+
+
 class ParseError(Exception):
     """Raised when the parser encounters invalid input."""
 
@@ -1151,8 +1164,9 @@ class Parser:
     def _parse_base_type_name(self) -> str:
         """Read the name a type starts with, container types and all.
 
-        Only std.dict, std.set and std.iovec take the dot: every other
-        type is one name, and a dot after one means something else.
+        Only std.dict, std.set, std.iovec and std.Build take the dot:
+        every other type is one name, and a dot after one means
+        something else.
         """
         name = self._eat(TokenType.IDENT).value
         # std.hash was this type's name until std.hash became digests.
@@ -1169,7 +1183,7 @@ class Parser:
                 and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].type is TokenType.IDENT
                 and f"{name}.{self.tokens[self.pos + 1].value}"
-                in ("std.dict", "std.set", "std.iovec")):
+                in ("std.dict", "std.set", "std.iovec", "std.Build")):
             self.pos += 1
             name += "." + self._eat(TokenType.IDENT).value
             return self._parse_type_arguments(name)
@@ -3192,7 +3206,9 @@ class Parser:
                         args = self._parse_call_args()
                         node = self._set_pos(MethodCall(node, attr_name, args), dot_tok)
                     else:
-                        node = self._set_pos(GetAttr(node, attr_name), dot_tok)
+                        node = self._maybe_exe_lit(
+                            self._set_pos(GetAttr(node, attr_name), dot_tok),
+                            dot_tok)
                 elif self._check(TokenType.PUNCT) and self._cur().value == "[":
                     bracket_tok = self._cur()
                     self.pos += 1
@@ -3305,6 +3321,21 @@ class Parser:
             f"expected a member name after '.', got {self._tok_display(tok)}",
             tok)
 
+    def _maybe_exe_lit(self, node, dot_tok):
+        """std.Build.Executable{…} where the chain just spelled that name.
+
+        It is the one struct literal written under a dotted name: the
+        build system defines the type rather than the program, so it is
+        spelled where it comes from.  Anything else is left as the
+        attribute reference it already is.
+        """
+        if (_dotted(node) != "std.Build.Executable"
+                or not self._check(TokenType.PUNCT)
+                or self._cur().value != "{"):
+            return node
+        return self._set_pos(self._parse_struct_lit("std.Build.Executable"),
+                             dot_tok)
+
     def _parse_postfix(self, node):
         """Chain .attr, [idx], and (args) postfix operators onto node."""
         while True:
@@ -3317,7 +3348,9 @@ class Parser:
                     node = self._set_pos(MethodCall(node, attr_name, args),
                                          dot_tok)
                 else:
-                    node = self._set_pos(GetAttr(node, attr_name), dot_tok)
+                    node = self._maybe_exe_lit(
+                        self._set_pos(GetAttr(node, attr_name), dot_tok),
+                        dot_tok)
             elif self._check(TokenType.PUNCT) and self._cur().value == "[":
                 self.pos += 1
                 node = self._parse_bracket_access(node)
