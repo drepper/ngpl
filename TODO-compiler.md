@@ -661,3 +661,7 @@ Tooling
     the interpreter -- and only on the path that reaches the second
     one, so the parse check misses it.  A crude reading of the sources
     finds them: every `let NAME` in one function, counted.
+
+[ ] Functions marked as impure but which do not need this attribute are
+    flagged with an error.  Unnecessary @impure attributes are not
+    allowed.
