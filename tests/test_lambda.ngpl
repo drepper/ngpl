@@ -240,7 +240,7 @@ fn test_lambda_multi_stmt_layout():
 // Multi-statement lambda with brace block
 @test
 fn test_lambda_multi_stmt_brace():
-  let f := λx : i64 → i64: {
+  let f := λx : i64 → i64 {
     let y := x + 10;
     let z := y × 2;
     z
@@ -292,7 +292,7 @@ fn test_lambda_multi_stmt_loop():
 // Multi-statement lambda as argument (braces required inside parens)
 @test
 fn test_lambda_multi_stmt_as_arg():
-  let result := apply(λx : i64 → i64: {
+  let result := apply(λx : i64 → i64 {
     let a := x + 1;
     a × 2
   }, 4)

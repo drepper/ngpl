@@ -82,6 +82,13 @@ struct Parser:
     diags : diag.Diag[]
     poisoned : bool      // the statement at hand already misparsed
 
+// What a block is opened with, said once because four constructs say
+// it: the colon means the block is laid out under it and the brace
+// means it is delimited, so one of them opens a block and never both.
+fn both_openers() → str:
+    """a ':' opens a block laid out under it and a '{' opens one written
+     " in braces; a block takes one of them, not both"""
+
 // Whether a name carries the module it was asked of.  A name written
 // bare is its own module's or nobody's; one with a period was reached
 // through a binding and says where to look.
@@ -828,14 +835,17 @@ impl Parser:
                               " or a string""")
                     return self.mknode(ast.NK_INT, at, 0, 0, 0)
         let body : mut i64 = ⁻1
-        if self.peek() = tokens.TK_COLON and self.peek2() = tokens.TK_NL:
+        if self.peek() = tokens.TK_LBRACE:
+            // written in braces, as any other block may be
+            body ← self.parse_brace_block()
+        elif self.peek() = tokens.TK_COLON and self.peek2() = tokens.TK_NL:
             // a layout block, statement by statement, as a function's
             body ← self.parse_block()
         elif self.peek() = tokens.TK_COLON and self.peek2() = tokens.TK_LBRACE:
-            _ ← self.eat(tokens.TK_COLON, "':' and the lambda's body")
-            body ← self.parse_brace_block()
+            self.err(both_openers())
+            return self.mknode(ast.NK_INT, at, 0, 0, 0)
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' and the lambda's body")
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' and the lambda's body")
             body ← self.parse_expr()
         if bad ≠ 0:
             return self.mknode(ast.NK_BADLAM, at, bad, 0, 0)
@@ -1538,14 +1548,14 @@ impl Parser:
         // through here -- a function's body, an if's, a while's, a
         // walk's -- so saying it once says it for all of them.
         //
-        // The braces stand where the colon would, and are also allowed
-        // after one: a lambda writes `λx → i64: { … }`, and what is
-        // good there is good here.
+        // The colon says the block is laid out and the brace says it is
+        // delimited, so one or the other opens it and never both.
         if self.peek() = tokens.TK_LBRACE:
             return self.parse_brace_block()
         _ ← self.eat(tokens.TK_COLON, "':' or '{' beginning the block")
         if self.peek() = tokens.TK_LBRACE:
-            return self.parse_brace_block()
+            self.err(both_openers())
+            return 0
         let stmts : mut i64[] = []
         if self.peek() ≠ tokens.TK_NL:
             // The sole statement of a one-line block ends where the
@@ -2302,20 +2312,33 @@ impl Parser:
             return
         self.edecl.push(self.qual_type(name, name_tok))
         let w : mut i64 = types.TY_I64
-        if self.peek() = tokens.TK_COLON and self.peek2() ≠ tokens.TK_NL:
+        // `enum E : u8:` says what the values are held in.  A brace
+        // after the colon is not that; it is the other opener, which
+        // the check below has words for.
+        if self.peek() = tokens.TK_COLON and self.peek2() ≠ tokens.TK_NL and self.peek2() ≠ tokens.TK_LBRACE:
             self.pos ← self.pos + 1
             w ← self.parse_type(false)
             if not (types.ty_is_int(w) and types.ty_unit(w) = 0):
                 self.err("an enum's values are held in a plain integer type")
                 return
-        _ ← self.eat(tokens.TK_COLON, "':' beginning the enumerators")
-        _ ← self.eat(tokens.TK_NL, "the enumerators on their own lines")
-        _ ← self.eat(tokens.TK_INDENT, "an indented list of enumerators")
+        // laid out under a colon, or written in braces, as a struct's
+        // fields and a block's statements are
+        let braced : bool = self.peek() = tokens.TK_LBRACE
+        if braced:
+            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the enumerators")
+        else:
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' beginning the enumerators")
+            if self.peek() = tokens.TK_LBRACE:
+                self.err(both_openers())
+                return
+            _ ← self.eat(tokens.TK_NL, "the enumerators on their own lines")
+            _ ← self.eat(tokens.TK_INDENT, "an indented list of enumerators")
+        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
         let first : i64 ¤ptrdiff = #self.emembers
         // a flag's members are bits, so the automatic values double
         // where an ordinary enum's count on
         let next_val : mut i64 = if is_flag: 1 else: 0
-        while self.peek() ≠ tokens.TK_DEDENT and self.peek() ≠ tokens.TK_EOF and not self.failed():
+        while self.peek() ≠ ender and self.peek() ≠ tokens.TK_EOF and not self.failed():
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
                 continue
@@ -2378,9 +2401,11 @@ impl Parser:
                 next_val ← if next_val ≠ 0: @wrap(next_val « 1) else: 1
             else:
                 next_val ← next_val + 1
+            if self.peek() = tokens.TK_SEMI:
+                self.pos ← self.pos + 1
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
-        _ ← self.eat(tokens.TK_DEDENT, "the end of the enumerators")
+        _ ← self.eat(ender, if braced: "'}' closing the enumerators" else: "the end of the enumerators")
         if is_flag:
             // a flag set holds the empty combination under 'nil'
             // unless some member already stands for zero
@@ -2592,18 +2617,18 @@ impl Parser:
         let name := self.ttext(name_tok)
         _ ← self.eat_name("the struct's name")
         // The fields are written the two ways a block is: indented
-        // under a colon, or in braces, which may stand where the colon
-        // would or follow it.  Inside braces a line ends nothing --
-        // the lexer stops counting them there, which is what lets a
-        // struct literal be spread out -- so ';' separates the fields
-        // and the next field's name will do on its own.
-        let braced : mut bool = self.peek() = tokens.TK_LBRACE
-        if not braced:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the struct's name")
-            braced ← self.peek() = tokens.TK_LBRACE
+        // under a colon, or in braces.  Inside braces a line ends
+        // nothing -- the lexer stops counting them there, which is
+        // what lets a struct literal be spread out -- so ';' separates
+        // the fields and the next field's name will do on its own.
+        let braced : bool = self.peek() = tokens.TK_LBRACE
         if braced:
             _ ← self.eat(tokens.TK_LBRACE, "'{' opening the fields")
         else:
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the struct's name")
+            if self.peek() = tokens.TK_LBRACE:
+                self.err(both_openers())
+                return
             _ ← self.eat(tokens.TK_NL, "the fields on their own lines")
             _ ← self.eat(tokens.TK_INDENT, "an indented field list")
         let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
@@ -2664,10 +2689,20 @@ impl Parser:
         // carries that already, so the whole name comes out as the
         // struct's module, the struct, and then the method.
         let name : str = if types.ty_is_struct(sty): parse_bare(self.snames[types.ty_sidx(sty) × 1¤ptrdiff]) else: name0
-        _ ← self.eat(tokens.TK_COLON, "':' after the name")
-        _ ← self.eat(tokens.TK_NL, "the methods on their own lines")
-        _ ← self.eat(tokens.TK_INDENT, "an indented method list")
-        while self.peek() ≠ tokens.TK_DEDENT and not self.failed():
+        // laid out under a colon, or written in braces, as a struct's
+        // fields and a block's statements are
+        let braced : bool = self.peek() = tokens.TK_LBRACE
+        if braced:
+            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the methods")
+        else:
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the name")
+            if self.peek() = tokens.TK_LBRACE:
+                self.err(both_openers())
+                return
+            _ ← self.eat(tokens.TK_NL, "the methods on their own lines")
+            _ ← self.eat(tokens.TK_INDENT, "an indented method list")
+        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
+        while self.peek() ≠ ender and not self.failed():
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
                 continue
@@ -2718,7 +2753,7 @@ impl Parser:
                               pres, post_toks, posts, name, sty)
             else:
                 self.err("an impl block holds methods and nothing else")
-        _ ← self.eat(tokens.TK_DEDENT, "the end of the impl block")
+        _ ← self.eat(ender, if braced: "'}' closing the impl block" else: "the end of the impl block")
         if self.peek() = tokens.TK_NL:
             self.pos ← self.pos + 1
 

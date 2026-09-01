@@ -8,9 +8,10 @@
 // checks, since nothing a program prints could show it.
 //
 // Both forms are accepted everywhere a block goes: a function's body,
-// an if's, a while's, a walk's, a lambda's -- and a struct's fields go
-// the same two ways.  This file indents all of them and gives every
-// statement and every field its own line.
+// an if's, a while's, a walk's, a lambda's -- and so do a struct's
+// fields, an enum's members and an impl block's methods.  This file
+// indents all of them and gives every statement, field and member its
+// own line.
 
 struct Pair:
     a : i64
@@ -20,9 +21,22 @@ struct Wide:
     lo : i64
     hi : i64
 
+enum Side:
+    left
+    right
+
+impl Pair:
+    fn wider(&self) → i64:
+        self.b - self.a
+
 fn spread(p : Pair) → i64:
     let w : Wide = Wide{lo: p.a, hi: p.b}
     w.hi - w.lo
+
+fn sided(s : Side) → i64:
+    if s = Side.left:
+        return 1
+    2
 
 fn work(n : i64) → i64:
     let step := λx : i64 → i64:
@@ -57,4 +71,4 @@ fn walked(v : i64[]) → i64:
 @impure
 fn main():
     let v : i64[] = [1, 2, 3]
-    std.println("{} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}))
+    std.println("{} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right))

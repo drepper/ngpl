@@ -1,0 +1,3 @@
+tests/compile/refuse/struct_two_openers.ngpl:2:15: error: a ':' opens a block laid out under it and a '{' opens one written in braces; a block takes one of them, not both
+  2 | struct Point: { x : i64; y : i64 }
+    |               ^

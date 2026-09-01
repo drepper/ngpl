@@ -149,6 +149,14 @@ class _EnumAlias:
 
 
 
+# What a block is opened with, said once because four constructs say
+# it: the colon means the block is laid out under it and the brace
+# means it is delimited, so one of them opens a block and never both.
+BOTH_OPENERS = ("a ':' opens a block laid out under it and a '{' opens "
+                "one written in braces; a block takes one of them, not "
+                "both")
+
+
 class Parser:
     """Recursive descent parser."""
 
@@ -1251,15 +1259,25 @@ class Parser:
             self._eat(TokenType.PUNCT, ":")
             underlying_type = self._eat(TokenType.IDENT).value
 
-        self._eat(TokenType.PUNCT, ":")
-        while self._try_eat(TokenType.NEWLINE):
-            pass
-        self._eat(TokenType.INDENT)
+        # laid out under a colon, or written in braces, as a struct's
+        # fields and a block's statements are
+        braced = self._at_punct("{")
+        if braced:
+            self._eat(TokenType.PUNCT, "{")
+        else:
+            self._eat(TokenType.PUNCT, ":")
+            if self._at_punct("{"):
+                raise ParseError(BOTH_OPENERS, self._cur())
+            while self._try_eat(TokenType.NEWLINE):
+                pass
+            self._eat(TokenType.INDENT)
 
         members: list[tuple[str, int | None]] = []
         while True:
             while self._try_eat(TokenType.NEWLINE):
                 pass
+            if braced and self._at_punct("}"):
+                break
             if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             member_name_tok = self._eat(TokenType.IDENT)
@@ -1292,7 +1310,10 @@ class Parser:
             while self._try_eat(TokenType.NEWLINE):
                 pass
 
-        self._eat(TokenType.DEDENT)
+        if braced:
+            self._eat(TokenType.PUNCT, "}")
+        else:
+            self._eat(TokenType.DEDENT)
         return self._set_pos(
             EnumDef(name, underlying_type, members, is_flag), kw_tok)
 
@@ -1323,10 +1344,9 @@ class Parser:
         """Parse: struct Name: INDENT fields DEDENT, or struct Name { … }
 
         The fields are written the two ways a block is: indented under
-        a colon, or in braces, which may stand where the colon would or
-        follow it.  Inside braces a line ends nothing -- the lexer
-        stops counting them there -- so ';' separates the fields and
-        the next field's name will do on its own.
+        a colon, or in braces.  Inside braces a line ends nothing --
+        the lexer stops counting them there -- so ';' separates the
+        fields and the next field's name will do on its own.
         """
         kw_tok = self._eat(TokenType.STRUCT)
         name_tok = self._eat(TokenType.IDENT)
@@ -1334,7 +1354,8 @@ class Parser:
         braced = self._at_punct("{")
         if not braced:
             self._eat(TokenType.PUNCT, ":")
-            braced = self._at_punct("{")
+            if self._at_punct("{"):
+                raise ParseError(BOTH_OPENERS, self._cur())
         while self._try_eat(TokenType.NEWLINE):
             pass
 
@@ -1397,19 +1418,31 @@ class Parser:
         return self._set_pos(sdef, kw_tok)
 
     def _parse_impl_block(self):
-        """Parse: impl StructName: INDENT method_definitions DEDENT"""
+        """Parse: impl Name: INDENT methods DEDENT, or impl Name { … }
+
+        The methods are written the two ways a block is: indented under
+        a colon, or in braces.
+        """
         self._eat(TokenType.IMPL)
         name_tok = self._eat(TokenType.IDENT)
         struct_name = name_tok.value
-        self._eat(TokenType.PUNCT, ":")
-        while self._try_eat(TokenType.NEWLINE):
-            pass
-        self._eat(TokenType.INDENT)
+        braced = self._at_punct("{")
+        if braced:
+            self._eat(TokenType.PUNCT, "{")
+        else:
+            self._eat(TokenType.PUNCT, ":")
+            if self._at_punct("{"):
+                raise ParseError(BOTH_OPENERS, self._cur())
+            while self._try_eat(TokenType.NEWLINE):
+                pass
+            self._eat(TokenType.INDENT)
 
         methods: list[FuncDef] = []
         while True:
             while self._try_eat(TokenType.NEWLINE):
                 pass
+            if braced and self._at_punct("}"):
+                break
             if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             is_impure = False
@@ -1457,7 +1490,11 @@ class Parser:
                 is_noreturn=is_noreturn, preconditions=preconditions,
                 postconditions=postconditions)
             methods.append(method)
-        self._eat(TokenType.DEDENT)
+            self._try_eat(TokenType.PUNCT, ";")
+        if braced:
+            self._eat(TokenType.PUNCT, "}")
+        else:
+            self._eat(TokenType.DEDENT)
         return ImplBlock(struct_name, methods)
 
     def _skip_to_next_definition(self):
@@ -1862,16 +1899,17 @@ class Parser:
     def _parse_layout_block(self):
         """Parse a block introduced by a colon.
 
-        Either form may follow the colon and they mean the same thing:
-        an indented run of statements, or braces with semicolons between
-        them.  A single statement on the same line as the colon is also
-        accepted.  Every block a colon introduces comes through here --
-        a function's body, an if's, a while's, a walk's -- so the two
-        forms are equal everywhere by being made equal once.
+        The colon says the block is laid out under it: an indented run
+        of statements, or a single statement on the same line.  A block
+        written in braces is opened by the brace instead, so a colon
+        before one is refused rather than read as either.  Every block
+        a colon introduces comes through here -- a function's body, an
+        if's, a while's, a walk's -- so the rule is the same everywhere
+        by being made the same once.
         """
         self._eat(TokenType.PUNCT, ":")
         if self._check(TokenType.PUNCT) and self._cur().value == "{":
-            return self._parse_brace_block()
+            raise ParseError(BOTH_OPENERS, self._cur())
         while self._try_eat(TokenType.NEWLINE):
             pass
         if not self._check(TokenType.INDENT):
@@ -2414,30 +2452,34 @@ class Parser:
             self.pos += 1
             ret_type += "?std.errors"
 
-        self._eat(TokenType.PUNCT, ":")
-        if self._check(TokenType.PUNCT) and self._cur().value == "{":
+        if self._at_punct("{"):
+            # written in braces, as any other block may be
             body = self._parse_brace_block()
-        elif self._check(TokenType.NEWLINE):
-            self._try_eat(TokenType.NEWLINE)
-            while self._try_eat(TokenType.NEWLINE):
-                pass
-            if self._check(TokenType.INDENT):
-                self._eat(TokenType.INDENT)
-                stmts: list = []
-                while True:
-                    while self._try_eat(TokenType.NEWLINE):
-                        pass
-                    if self._check(TokenType.DEDENT, TokenType.EOF):
-                        break
-                    stmt = self._parse_statement()
-                    if stmt is not None:
-                        stmts.append(stmt)
-                self._eat(TokenType.DEDENT)
-                body = stmts
+        else:
+            self._eat(TokenType.PUNCT, ":")
+            if self._at_punct("{"):
+                raise ParseError(BOTH_OPENERS, self._cur())
+            if self._check(TokenType.NEWLINE):
+                self._try_eat(TokenType.NEWLINE)
+                while self._try_eat(TokenType.NEWLINE):
+                    pass
+                if self._check(TokenType.INDENT):
+                    self._eat(TokenType.INDENT)
+                    stmts: list = []
+                    while True:
+                        while self._try_eat(TokenType.NEWLINE):
+                            pass
+                        if self._check(TokenType.DEDENT, TokenType.EOF):
+                            break
+                        stmt = self._parse_statement()
+                        if stmt is not None:
+                            stmts.append(stmt)
+                    self._eat(TokenType.DEDENT)
+                    body = stmts
+                else:
+                    body = self._parse_expr()
             else:
                 body = self._parse_expr()
-        else:
-            body = self._parse_expr()
         return self._set_pos(
             LambdaExpr(params, captures, ret_type, body, is_listable,
                        param_units),

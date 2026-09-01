@@ -2,32 +2,41 @@
 // braces where that one indents, and several statements to a line where
 // that one gives each its own.  See the note there.
 //
-// A struct's fields are written the same two ways, and this file writes
-// them both ways: the braces may stand where the colon would or follow
-// it, and inside them ';' separates the fields where a line cannot.
+// A struct's fields, an enum's members and an impl block's methods are
+// written the same two ways, and this file writes them all in braces.
+// The brace opens the block where the colon would have, never after
+// one, and inside it ';' separates what a line cannot.
 
 struct Pair { a : i64; b : i64 }
 
-struct Wide: {
+struct Wide {
     lo : i64
     hi : i64
 }
 
-fn spread(p : Pair) → i64: { let w : Wide = Wide{lo: p.a, hi: p.b}; w.hi - w.lo }
+enum Side { left; right }
 
-fn work(n : i64) → i64: { let step := λx : i64 → i64: { let y : i64 = x + 1; let z : i64 = y × 2; z }; step(n) }
+impl Pair {
+    fn wider(&self) → i64 { self.b - self.a }
+}
 
-fn grade(n : i64) → str: { if n > 10: { return "big" }; if n > 0: { return "small" }; "none" }
+fn spread(p : Pair) → i64 { let w : Wide = Wide{lo: p.a, hi: p.b}; w.hi - w.lo }
 
-fn total(n : i64) → i64: {
+fn sided(s : Side) → i64 { if s = Side.left { return 1 }; 2 }
+
+fn work(n : i64) → i64 { let step := λx : i64 → i64 { let y : i64 = x + 1; let z : i64 = y × 2; z }; step(n) }
+
+fn grade(n : i64) → str { if n > 10 { return "big" }; if n > 0 { return "small" }; "none" }
+
+fn total(n : i64) → i64 {
     let t : mut i64 = 0;
     let i : mut i64 = 0;
-    while i < n: { if i > 1: { t ← t + i }; i ← i + 1 };
+    while i < n { if i > 1 { t ← t + i }; i ← i + 1 };
     t
 }
 
-fn walked(v : i64[]) → i64: { let s : mut i64 = 0; foreach x := v: { s ← s + x × 2 }; s }
+fn walked(v : i64[]) → i64 { let s : mut i64 = 0; foreach x := v { s ← s + x × 2 }; s }
 
 @start
 @impure
-fn main(): { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9})) }
+fn main() { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right)) }

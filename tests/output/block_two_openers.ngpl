@@ -1,0 +1,9 @@
+// A ':' opens a block laid out under it and a '{' opens one written in
+// braces.  A block takes one of them: writing both says the block is
+// laid out and delimited at once, which is two answers to one question.
+fn twice() → i64: { 1 }
+
+@start
+@impure
+fn main():
+    std.println("{}", twice())

@@ -85,10 +85,27 @@ let SBOM_CHUNK : i64 ¤byte = 65536
 // what follows is not a block edge and what preceded was not one
 // either.  A block edge already says a statement ended, and a run of
 // blank lines says nothing at all.
+//
+// The colon needs the same treatment, and for the same reason: the
+// laid-out form opens its block with one where the braced form opens
+// with the brace alone.  A colon that opens a block is therefore not
+// written down; every other colon -- a type's, a field's, a match
+// arm's -- is a colon and says so.
 
 let TC_OPEN : i64 = 1        // an indent, or {
 let TC_CLOSE : i64 = 2       // a dedent, or }
 let TC_SEP : i64 = 3         // a newline, or ;
+
+// Whether the colon at `i` is the one opening a laid-out block, which
+// is the case exactly when what follows it, past the newlines, is an
+// indent.  A colon before anything else -- a type, a field's type, the
+// statement of a one-line block -- is written down like any token.
+fn colon_opens(t : lex.Toks, i : i64 ¤ptrdiff) → bool:
+    let n : i64 ¤ptrdiff = #t.kind
+    let j : mut i64 ¤ptrdiff = i + 1¤ptrdiff
+    while j < n and t.kind[j] = tokens.TK_NL:
+        j ← j + 1¤ptrdiff
+    j < n and t.kind[j] = tokens.TK_INDENT
 
 @post(r: r >= 0)
 fn canon_kind(k : i64) → i64:
@@ -205,7 +222,8 @@ fn sbom_sources(a : ast.Ast, t : lex.Toks, src : byte[], files : diag.Files,
             else:
                 fnext ← fnext + 1¤ptrdiff
         // the token's own bytes, read once however many digests want them
-        let c : i64 = canon_kind(t.kind[i])
+        let opener : bool = t.kind[i] = tokens.TK_COLON and colon_opens(t, i)
+        let c : i64 = if opener: TC_SEP else: canon_kind(t.kind[i])
         ready ← []
         if c ≠ TC_SEP:
             token_bytes(t, src, i, &ready)

@@ -41,15 +41,16 @@ fn body_brace_lines(x : i64) → i64 {
     y
 }
 
-// The braces may also stand where the block would, after the colon.
-fn body_colon_brace(x : i64) → i64: { x + 1 }
+// The brace opens the block where the colon would have.  It never
+// follows one: a block takes one opener, not both.
+fn body_brace_again(x : i64) → i64 { x + 1 }
 
 @test
 fn test_a_body_either_way():
     assert_eq(body_layout(1), 2)
     assert_eq(body_brace(1), 2)
     assert_eq(body_brace_lines(1), 2)
-    assert_eq(body_colon_brace(1), 2)
+    assert_eq(body_brace_again(1), 2)
 
 // ---------------------------------------------------------------------
 // if and else
@@ -176,7 +177,7 @@ fn test_a_walk_either_way():
 fn test_a_lambda_either_way():
     let v : i64[] = [1, 2, 3]
     let laid : i64[] = (λx : i64 → i64: x + 1)¨v
-    let braced : i64[] = (λx : i64 → i64: { x + 1 })¨v
+    let braced : i64[] = (λx : i64 → i64 { x + 1 })¨v
     assert_eq(laid[0¤ptrdiff], 2)
     assert_eq(braced[0¤ptrdiff], 2)
     assert_eq(laid[2¤ptrdiff], 4)

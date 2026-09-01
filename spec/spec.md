@@ -4447,24 +4447,46 @@ fn abs(x : int) → int {
 
 Braces enclose zero or more statements, separated by `;`.  A statement that is itself a block ends at its own `}` and needs no separator of its own, so `{ if c { a } b }` is two statements.  Indentation inside braces is not significant — it is conventional but not enforced by the parser.
 
-#### A Struct's Fields
+**The brace stands where the colon would, never after one.**  The colon says the block is laid out under it and the brace says it is delimited; a block takes one opener, and writing both says it is laid out and delimited at once:
 
-A struct's fields are laid out the same two ways, and mean the same either way:
+```
+if c: { a }
+
+error: a ':' opens a block laid out under it and a '{' opens one written
+in braces; a block takes one of them, not both
+```
+
+#### Everything Else With a Body
+
+A struct's fields, an enum's members and an `impl` block's methods are laid out the same two ways, and mean the same either way:
 
 ```
 struct Point:
     x : i64
     y : i64
 
+enum Level:
+    quiet
+    loud
+
+impl Point:
+    fn sum(&self) → i64:
+        self.x + self.y
+```
+
+and the same three written in braces:
+
+```
 struct Point { x : i64; y : i64 }
 
-struct Point: {
-    x : i64
-    y : i64
+enum Level { quiet; loud }
+
+impl Point {
+    fn sum(&self) → i64 { self.x + self.y }
 }
 ```
 
-The braces stand where the colon would, and are also allowed after one, as they are for a block.  Inside them a line ends nothing — [indentation is not tracked inside brackets](#layout-driven-blocks), which is what lets a struct literal be spread over several lines — so `;` separates the fields, and a field's own name will do on its own where the fields are written a line each.
+The same rule holds: the brace opens the body where the colon would have, and never follows one.  Inside braces a line ends nothing — [indentation is not tracked inside brackets](#layout-driven-blocks), which is what lets a struct literal be spread over several lines — so `;` separates what a line cannot, and a field's or member's own name will do on its own where they are written a line each.
 
 #### Layout-Driven Blocks
 
@@ -5470,7 +5492,7 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 - **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.  A parameter may state a measure against its type — `λi : i64 ¤ptrdiff → bool: …` — which is where a return type states its own.  It is what lets a walk over a measured range hand the lambda an index that is still an index, rather than the measure coming off to build the range and going back on at every subscript.
 - **Return type**: mandatory, specified with `→` (or `->`) followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `→ int?`, `→ int!`).
 - **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
-- **Body**: either a single expression after the colon, or a multi-statement block using the same syntax as function bodies (layout-driven with `:` and indentation, or brace-delimited with `{ … }`).  In a multi-statement body the value of the last expression is the return value; explicit `return` is also supported for early exit.
+- **Body**: either a single expression after the colon, or a multi-statement block using the same syntax as function bodies — laid out under a `:`, or written in `{ … }`, which stands where the colon would rather than after it.  In a multi-statement body the value of the last expression is the return value; explicit `return` is also supported for early exit.
 
 #### Multi-Statement Lambda Bodies
 
@@ -5483,7 +5505,7 @@ let f : mut = λx : int → int:
     y + 1
 
 // Brace-delimited
-let g : mut = λx : int → int: {
+let g : mut = λx : int → int {
     let y : mut = x + 10;
     let z : mut = y × 2;
     z
@@ -5504,7 +5526,7 @@ let clamp : mut = λx : int |lo, hi| → int:
 When passing a multi-statement lambda as a function argument, braces are required because indentation tracking is suppressed inside parentheses:
 
 ```
-let result : mut = apply(λx : int → int: {
+let result : mut = apply(λx : int → int {
     let a : mut = x + 1;
     a × 2
 }, 4)

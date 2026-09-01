@@ -1,0 +1,3 @@
+tests/compile/refuse/block_two_openers.ngpl:4:19: error: a ':' opens a block laid out under it and a '{' opens one written in braces; a block takes one of them, not both
+  4 | fn twice() → i64: { 1 }
+    |                   ^
