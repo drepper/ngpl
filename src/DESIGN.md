@@ -667,7 +667,7 @@ which is how the split was checked.  The rest were written afterwards,
 `comptime.ngpl` first.
 
     tokens imports types diag lex ast parse dumpast check abi comptime
-    ir lower emit sha256 symbols sbom incr elf
+    ir lower emit sha256 symbols sbom incr elf machine
     arch_x86_64 rt_x86_64 arch_a64 arch_rv64 arch_i386 arch_arm
     arch_rv32 dispatch tdriver rt_hash rt_sha256 rt_bigint rt_signal
     rt_backtrace rt_portable codegen_t codegen main
@@ -687,10 +687,20 @@ writes `¤"shndx"`.  Each file names what it is written against at its
 head and the compiler follows those, so alphabetical order never comes
 into it and no list outside the sources can drift from them.
 
-One seam the list does not hide: `impl Emit` is opened in both
-`emit.ngpl`, which declares it, and `arch_a64.ngpl`, which adds the two
-methods aarch64 writes words through.  The language allows a second
-`impl` block and this was already true inside the one file.
+`machine.ngpl` is what every target agrees on: the abstract registers
+`RG_A`…`RG_T`, the comparison conditions, the `SC_*` names the runtime
+calls the kernel by with `sc_number` to resolve them per target, and
+`code_word`.  All of it was written at the head of `arch_a64.ngpl`,
+because aarch64 was the first target to arrive through the shared path
+-- which made every other machine, riscv32 included, import the aarch64
+emitter to reach a syscall number.  Now nothing in an instruction layer
+names another machine's, except riscv32 naming riscv64, whose encoders
+it genuinely shares.
+
+Each machine's `*_startup` -- the program's door, which a target spells
+whole rather than composing out of the abstract operations -- lives
+beside that machine's instructions rather than in the shared driver,
+and `dispatch.g_startup` picks between them like every other operation.
 
 ## Modules
 

@@ -1,89 +1,7 @@
 let elf := @import("elf")
 let emit := @import("emit")
-
-// ===========================================================================
-// The retargetable backend's abstract machine
-//
-// Three abstract 64-bit registers, RA, RB and RC, every IR value in an
-// 8-byte stack slot, and a small set of operations each target spells
-// in its own instructions.  The driver below composes every IR op out
-// of these; a target teaches the machine its spelling and gets the
-// whole language.  The x86-64 pioneer keeps its hand-tuned emitter;
-// everything else arrives through here.
-// ===========================================================================
-
-
-
-@export
-let RG_A : i64 = 0
-@export
-let RG_B : i64 = 1
-@export
-let RG_C : i64 = 2
-
-// comparison conditions, signedness aside
-@export
-let CC_EQ : i64 = 0
-@export
-let CC_NE : i64 = 1
-@export
-let CC_LT : i64 = 2
-@export
-let CC_LE : i64 = 3
-@export
-let CC_GT : i64 = 4
-@export
-let CC_GE : i64 = 5
-
-// what the runtime asks of the kernel, named so the builders stay
-// architecture-blind; the target row resolves each to its number
-@export
-let SC_READ : i64 = 0
-@export
-let SC_WRITE : i64 = 1
-@export
-let SC_CLOSE : i64 = 2
-@export
-let SC_FSTAT : i64 = 3
-@export
-let SC_MMAP : i64 = 4
-@export
-let SC_MPROT : i64 = 5
-@export
-let SC_WRITEV : i64 = 6
-let SC_GETPID : i64 = 7
-let SC_KILL : i64 = 8
-@export
-let SC_EXIT : i64 = 9
-@export
-let SC_GETDENTS : i64 = 10
-@export
-let SC_OPENAT : i64 = 11
-@export
-let SC_STATX : i64 = 12
-@export
-let SC_RT_SIGACTION : i64 = 13
-@export
-let SC_SIGALTSTACK : i64 = 14
-
-@export
-fn sc_number(tg : elf.Target, id : i64) → i64:
-    if id = SC_READ: return tg.sc_read
-    if id = SC_WRITE: return tg.sc_write
-    if id = SC_CLOSE: return tg.sc_close
-    if id = SC_FSTAT: return tg.sc_fstat
-    if id = SC_MMAP: return tg.sc_mmap
-    if id = SC_MPROT: return tg.sc_mprotect
-    if id = SC_WRITEV: return tg.sc_writev
-    if id = SC_GETPID: return tg.sc_getpid
-    if id = SC_KILL: return tg.sc_kill
-    if id = SC_EXIT: return tg.sc_exit
-    if id = SC_GETDENTS: return tg.sc_getdents
-    if id = SC_OPENAT: return tg.sc_openat
-    if id = SC_RT_SIGACTION: return tg.sc_rt_sigaction
-    if id = SC_SIGALTSTACK: return tg.sc_sigaltstack
-    assert(id = SC_STATX, "a syscall the table knows")
-    tg.sc_statx
+let lower := @import("lower")
+let machine := @import("machine")
 
 // ---------------------------------------------------------------------------
 // aarch64: the A64 instruction layer
@@ -107,17 +25,7 @@ let A64_T0 : i64 = 12
 let A64_T1 : i64 = 13
 
 fn a64_r(r : i64) → i64:
-    if r = RG_A: A64_RA else: (if r = RG_B: A64_RB else: A64_RC)
-
-// one little-endian word read back from the code, each byte widened
-// before it is shifted
-@export
-fn code_word(em : &emit.Emit, pos : i64) → i64:
-    let b0 : i64 = @dropunit(em.code[pos × 1¤byte])
-    let b1 : i64 = @dropunit(em.code[(pos + 1) × 1¤byte])
-    let b2 : i64 = @dropunit(em.code[(pos + 2) × 1¤byte])
-    let b3 : i64 = @dropunit(em.code[(pos + 3) × 1¤byte])
-    b0 + (b1 « 8) + (b2 « 16) + (b3 « 24)
+    if r = machine.RG_A: A64_RA else: (if r = machine.RG_B: A64_RB else: A64_RC)
 
 @export
 fn a64_movimm(em : &mut emit.Emit, rd : i64, v : i64):
@@ -351,7 +259,7 @@ fn a64_resolve(em : &mut emit.Emit):
         foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            let word : i64 = code_word(&em, pos)
+            let word : i64 = machine.code_word(&em, pos)
             if em.tf_form[i] = A64F_B26:
                 em.patch32(pos, word + (((delta » 2) & 67108863)))
             else:
@@ -366,14 +274,10 @@ fn a64_resolve(em : &mut emit.Emit):
 // here is one small spelling decision; the thinking lives in the
 // driver below, written once.
 // ---------------------------------------------------------------------------
-
-@export
-let RG_T : i64 = 3
-
 fn a64_ar(r : i64) → i64:
-    if r = RG_A: return A64_RA
-    if r = RG_B: return A64_RB
-    if r = RG_C: return A64_RC
+    if r = machine.RG_A: return A64_RA
+    if r = machine.RG_B: return A64_RB
+    if r = machine.RG_C: return A64_RC
     A64_T0
 
 @export
@@ -444,16 +348,16 @@ fn a64g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i6
 
 // the A64 spelling of a comparison's answer
 fn a64_cc(cond : i64, sgn : i64) → i64:
-    if cond = CC_EQ: return A64_EQ
-    if cond = CC_NE: return A64_NE
+    if cond = machine.CC_EQ: return A64_EQ
+    if cond = machine.CC_NE: return A64_NE
     if sgn = 1:
-        if cond = CC_LT: return A64_LT
-        if cond = CC_LE: return A64_LE
-        if cond = CC_GT: return A64_GT
+        if cond = machine.CC_LT: return A64_LT
+        if cond = machine.CC_LE: return A64_LE
+        if cond = machine.CC_GT: return A64_GT
         return A64_GE
-    if cond = CC_LT: return A64_CC
-    if cond = CC_LE: return A64_LS
-    if cond = CC_GT: return A64_HI
+    if cond = machine.CC_LT: return A64_CC
+    if cond = machine.CC_LE: return A64_LS
+    if cond = machine.CC_GT: return A64_HI
     A64_CS
 
 // rd ← rx rel ry, materialized as 0 or 1
@@ -668,7 +572,7 @@ fn a64g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
 
 @export
 fn a64g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    a64_movimm(&em, 8, sc_number(tg, scid))
+    a64_movimm(&em, 8, machine.sc_number(tg, scid))
     a64_svc(&em)
 
 @export
@@ -723,5 +627,91 @@ fn a64g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
 
 @export
 fn a64g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
-    let word : i64 = code_word(&em, pos)
+    let word : i64 = machine.code_word(&em, pos)
     em.patch32(pos, word + (((dest - pos) » 2) & 67108863))
+
+// the door of the program: keep what the kernel handed over, stand up
+// the guarded stack, run the phases, and leave through exit
+// aarch64's own startup.  It was written inline as the one the
+// dispatch below fell through to, which made it the machine a
+// seventh would have been given; a match wants every arm to name
+// something, so it names this.
+@export
+fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+               stack_size : i64, guard_size : i64, ginit : i64,
+               tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    // the kernel block: argc, argv, envp, auxv as four 8-byte cells
+    let pos : i64 = a64_absref(&em, A64_RB)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    a64_ldo(&em, A64_RA, 31, 0)                  // argc
+    a64_sto(&em, A64_RA, A64_RB, 0)
+    a64_addi(&em, A64_RC, 31, 8)                 // argv
+    a64_sto(&em, A64_RC, A64_RB, 8)
+    em.aw(3544186880 + (61 « 16) + (60 « 10) + (A64_RA « 5) + A64_T0)  // lsl t0, argc, #3
+    a64_addr_(&em, A64_T0, A64_T0, A64_RC)
+    a64_addi(&em, A64_T0, A64_T0, 8)             // envp = argv + 8×argc + 8
+    a64_sto(&em, A64_T0, A64_RB, 16)
+    em.set_label(0)                              // walk to the env's end
+    a64_ldw(&em, A64_T1, A64_T0, 8, 0)
+    a64_addi(&em, A64_T0, A64_T0, 8)
+    a64_cbnz(&em, A64_T1, 0)
+    a64_sto(&em, A64_T0, A64_RB, 24)             // auxv
+    // the stack: one PROT_NONE reservation, the top opened RW
+    a64_movimm(&em, 0, 0)
+    a64_movimm(&em, 1, guard_size + stack_size)
+    a64_movimm(&em, 2, 0)
+    a64_movimm(&em, 3, 147490)
+    a64_movimm(&em, 4, ⁻1)
+    a64_movimm(&em, 5, 0)
+    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_MMAP))
+    a64_svc(&em)
+    a64_cmpr(&em, 0, 31)                         // the flags of x0 - xzr
+    a64_bcond(&em, A64_MI, 1)                    // the kernel refused
+    a64_movr(&em, A64_RB, 0)                     // the region's foot
+    a64_movimm(&em, 0, guard_size)
+    a64_addr_(&em, 0, 0, A64_RB)
+    a64_movimm(&em, 1, stack_size)
+    a64_movimm(&em, 2, 3)
+    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_MPROT))
+    a64_svc(&em)
+    a64_cmpr(&em, 0, 31)
+    a64_bcond(&em, A64_MI, 1)
+    a64_movimm(&em, A64_RA, guard_size + stack_size)
+    a64_addr_(&em, A64_RA, A64_RA, A64_RB)
+    em.aw(2432696320 + (A64_RA « 5) + 31)        // mov sp, ra
+    a64_jmp(&em, 2)
+    em.set_label(1)
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    let spos : i64 = a64_absref(&em, 0)
+    em.sf_pos.push(spos)
+    em.sf_str.push(smsg)
+    a64_movimm(&em, 1, emit.str_len("the stack could not be reserved\n"))
+    a64_call(&em, emit.RT_ABORT)
+    em.set_label(2)
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = a64_absref(&em, A64_T0)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    a64_sto(&em, A64_RB, A64_T0, emit.KB_GLO)
+    a64_movimm(&em, A64_T1, guard_size)
+    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
+    a64_sto(&em, A64_T1, A64_T0, emit.KB_GHI)
+    a64_movimm(&em, A64_T1, guard_size + stack_size)
+    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
+    a64_sto(&em, A64_T1, A64_T0, emit.KB_STOP)
+    a64_call(&em, emit.RT_SIGINIT)
+    if ginit >= 0:
+        a64_call(&em, ginit)
+    a64_call(&em, emit.RT_RELRO)
+    a64_call(&em, tdriver)
+    if start_fn >= 0:
+        a64_call(&em, start_fn)
+    if not sret:
+        a64_movimm(&em, 0, 0)
+    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_EXIT))
+    a64_svc(&em)
+    a64_resolve(&em)

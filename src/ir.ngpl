@@ -13,6 +13,10 @@
 enum Ir : u8:
     const = 1   // d ← imm a
     mov = 2   // d ← vreg a
+    // d ← vreg a in its canonical form, sign- or zero-extended from
+    // the width w says.  A value is kept only as wide as its type, so
+    // this is what a widening emits: the wider read wants the bits
+    // above, and only this puts them there.
     ext = 3
     add = 10
     sub = 11
@@ -80,6 +84,7 @@ enum Ir : u8:
     fcreate = 82   // d ← a fresh file at path a with mode b
     fread = 83   // d ← file a's bytes, a u8[]
     fident = 120   // d ← what says which file a is: b picks the
+                   // device (0) or the number on it (1)
     fthere = 121   // d ← whether the path a answers to a file to read
     fidp = 122   // d ← the pair (device, number) the path a is, or (0, 0)
     fwrite = 84   // file a takes the bytes of array b
@@ -108,9 +113,18 @@ enum Ir : u8:
     hstart = 112   // d ← a handle for the algorithm a, ready to be fed
     hupdate = 113   // handle a takes the bytes of the array b
     hfinal = 114   // d ← handle a's digest, and the end of the handle
+    // A function's frame carries two regions: a slot for every vreg,
+    // and below them the objects that live in the frame outright -- a
+    // sized array is its elements and nothing else, and the elements
+    // are here.  The offset counts from the bottom of the region, so
+    // it does not move when a later object is added.
     frame = 115   // d ← the address of this frame's bytes at offset a
+    // the block at vreg a, of b bytes, goes back to the allocator;
+    // emitted only where the compiler has worked out nothing holds it
     giveback = 116
     calli = 100   // d ← call the address in vreg a, args at extra b
+    // the next three were written where aarch64 was first taught them;
+    // they are the IR's, and live here with the rest of it
     ldn = 109   // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
     stn = 110   // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
     kaddr = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
@@ -122,23 +136,6 @@ enum Ir : u8:
     snew = 66   // d ← a fresh struct of a fields
     fld = 67   // d ← field b of struct a
     fsto = 68   // field b of struct a ← c
-
-// d ← vreg a in its canonical form, sign- or zero-extended from the
-// width w says.  A value is kept only as wide as its type, so this is
-// what a widening emits: the wider read wants the bits above, and only
-// this puts them there.
-                           // device (0) or the number on it (1)
-// 108 through 111 are the retargetable path's own, declared in
-// arch_a64.ngpl where that path begins
-// A function's frame carries two regions: a slot for every vreg, and
-// below them the objects that live in the frame outright -- a sized
-// array is its elements and nothing else, and the elements are here.
-// The offset counts from the bottom of the region, so it does not move
-// when a later object is added.
-// The block at vreg a, of b bytes, goes back to the allocator.  Emitted
-// only where the compiler has worked out that nothing holds it.
-// these three were written where aarch64 was first taught them; they
-// are the IR's, and live with the rest of it
 
 
 @export

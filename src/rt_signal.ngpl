@@ -24,9 +24,9 @@
 // program computes with, so they carry no unit -- as everywhere the IR
 // is built.
 
-let arch_a64 := @import("arch_a64")
 let elf := @import("elf")
 let emit := @import("emit")
+let machine := @import("machine")
 let ir := @import("ir")
 let lower := @import("lower")
 let rt_portable := @import("rt_portable")
@@ -60,7 +60,7 @@ fn rt_siginit_ir(tg : elf.Target) → ir.IrFn:
     // A stack for the handler.  If the kernel will not give one there
     // is no handler to install: a handler without a stack is worse
     // than none, because it turns a report into a second fault.
-    let m : i64 = b.sys6(arch_a64.SC_MMAP, z, b.cst(emit.SIGALT_BYTES), b.cst(3),
+    let m : i64 = b.sys6(machine.SC_MMAP, z, b.cst(emit.SIGALT_BYTES), b.cst(3),
                          b.cst(16418), b.cst(⁻1), z)
     let bad : i64 = b.clts(m, z)
     let lout : i64 = b.l()
@@ -68,14 +68,14 @@ fn rt_siginit_ir(tg : elf.Target) → ir.IrFn:
     b.stn(s, emit.SIG_ALT, m, pw)
     b.stn(s, emit.SIG_ALT + pw, z, 4)
     b.stn(s, emit.SIG_ALT + 2 × pw, b.cst(emit.SIGALT_BYTES), pw)
-    _ ← b.sys2(arch_a64.SC_SIGALTSTACK, b.add(s, b.cst(emit.SIG_ALT)), z)
+    _ ← b.sys2(machine.SC_SIGALTSTACK, b.add(s, b.cst(emit.SIG_ALT)), z)
     // and the action: the handler, and the flags that ask for the
     // faulting address and for the handler's own stack
     let h : i64 = b.faddr(emit.RT_SEGV)
     b.stn(s, emit.SIG_ACT, h, pw)
     b.stn(s, emit.SIG_ACT + pw, b.cst(emit.SA_FLAGS_N), pw)
     b.stn(s, emit.SIG_ACT + sa_mask_off(tg), z, 8)
-    _ ← b.sys4(arch_a64.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
+    _ ← b.sys4(machine.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
                b.add(s, b.cst(emit.SIG_ACT)), z, b.cst(8))
     b.lab(lout)
     b.retn()
@@ -109,12 +109,12 @@ fn rt_segv_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     b.jnz(b.cltu(at, b.ldn(k, emit.KB_GLO, 8)), lnot)
     b.jnz(b.cgeu(at, b.ldn(k, emit.KB_GHI, 8)), lnot)
     b.eprint_msg(lw.intern(emit.stack_overflow_msg()))
-    _ ← b.sys1(arch_a64.SC_EXIT, b.cst(emit.EXIT_STACK_OVERFLOW))
+    _ ← b.sys1(machine.SC_EXIT, b.cst(emit.EXIT_STACK_OVERFLOW))
     b.lab(lnot)
     let s : i64 = b.kaddr(2, 0)
     b.stn(s, emit.SIG_ACT, z, pw)
     b.stn(s, emit.SIG_ACT + pw, z, pw)
-    _ ← b.sys4(arch_a64.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
+    _ ← b.sys4(machine.SC_RT_SIGACTION, b.cst(emit.SIGSEGV_NO),
                b.add(s, b.cst(emit.SIG_ACT)), z, b.cst(8))
     b.retn()
     rt_portable.rtb_fn(b)

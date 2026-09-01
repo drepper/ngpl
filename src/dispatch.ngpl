@@ -20,9 +20,10 @@
 // have been emitted as riscv32 -- silently, and only on that machine.
 //
 // x86-64 is named too, and what it says is that it does not come here.
-// t_startup in codegen_t.ngpl is the same shape and says the same, for
-// the same reason -- aarch64's startup was lifted out of it into
-// a64_startup so that its arm has something to name.
+// g_startup at the foot of this file is one of these: the program's
+// door is the one operation a target spells whole rather than out of
+// the others, so each machine writes its own beside its instructions
+// and this picks between them.
 
 let arch_a64 := @import("arch_a64")
 let arch_arm := @import("arch_arm")
@@ -31,6 +32,8 @@ let arch_rv32 := @import("arch_rv32")
 let arch_rv64 := @import("arch_rv64")
 let elf := @import("elf")
 let emit := @import("emit")
+let lower := @import("lower")
+let machine := @import("machine")
 
 // The arm every dispatcher gives x86-64.  It has its own emitter in
 // x86.ngpl and never reaches these, so this is not a case to handle
@@ -47,7 +50,7 @@ fn g_pioneer():
 // that would have put it in memory was dropped, is no load at all.
 @export
 fn g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
-    if r = arch_a64.RG_A and slot = em.hold_slot:
+    if r = machine.RG_A and slot = em.hold_slot:
         em.hold_slot ← ⁻1
         return
     em.hold_slot ← ⁻1
@@ -64,7 +67,7 @@ fn g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
 // one operation that wants it is about to look.
 @export
 fn g_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
-    if r = arch_a64.RG_A and slot = em.drop_slot:
+    if r = machine.RG_A and slot = em.drop_slot:
         em.drop_slot ← ⁻1
         em.hold_slot ← slot
         return
@@ -499,7 +502,7 @@ fn g_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
 fn g_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
     if slot = em.hold_slot:
         em.hold_slot ← ⁻1
-        g_retmov(&em, tg, arch_a64.RG_A)
+        g_retmov(&em, tg, machine.RG_A)
         return
     em.hold_slot ← ⁻1
     match tg.id:
@@ -656,4 +659,26 @@ fn g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
         elf.Tgt.i386: arch_i386.i3g_patch_call(&em, tg, pos, dest)
         elf.Tgt.a32: arch_arm.a32g_patch_call(&em, tg, pos, dest)
         elf.Tgt.rv32: arch_rv32.r32g_patch_call(&em, tg, pos, dest)
+        elf.Tgt.x64: g_pioneer()
+
+// The program's door: what the kernel jumps to, which keeps what it
+// handed over, stands up the guarded stack, runs the phases and leaves
+// through exit.  Every machine spells the whole of it rather than
+// composing it out of the operations above, so each writes its own
+// beside its instructions; this picks between them.
+@export
+fn g_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+             stack_size : i64, guard_size : i64, ginit : i64,
+             tdriver : i64, start_fn : i64, sret : bool):
+    match tg.id:
+        elf.Tgt.a64: arch_a64.a64_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        elf.Tgt.rv64: arch_rv64.rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        elf.Tgt.i386: arch_i386.i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        elf.Tgt.a32: arch_arm.a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        elf.Tgt.rv32: arch_rv32.r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                               ginit, tdriver, start_fn, sret)
         elf.Tgt.x64: g_pioneer()

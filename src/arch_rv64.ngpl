@@ -1,6 +1,7 @@
-let arch_a64 := @import("arch_a64")
 let elf := @import("elf")
 let emit := @import("emit")
+let lower := @import("lower")
+let machine := @import("machine")
 
 // ---------------------------------------------------------------------------
 // riscv64: the RV64IM instruction layer
@@ -30,9 +31,9 @@ let RV_S1 : i64 = 30
 let RV_S2 : i64 = 31
 
 fn rv_r(r : i64) → i64:
-    if r = arch_a64.RG_A: return RV_RA
-    if r = arch_a64.RG_B: return RV_RB
-    if r = arch_a64.RG_C: return RV_RC
+    if r = machine.RG_A: return RV_RA
+    if r = machine.RG_B: return RV_RB
+    if r = machine.RG_C: return RV_RC
     RV_T
 
 // the four instruction shapes
@@ -215,20 +216,20 @@ fn rvg_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, 
     let x : i64 = rv_r(rx)
     let y : i64 = rv_r(ry)
     let d : i64 = rv_r(rd)
-    if cond = arch_a64.CC_EQ or cond = arch_a64.CC_NE:
+    if cond = machine.CC_EQ or cond = machine.CC_NE:
         rv_R(&em, 0, y, x, 4, RV_S0, 51)                    // xor t4, x, y
-        if cond = arch_a64.CC_EQ:
+        if cond = machine.CC_EQ:
             rv_I(&em, 1, RV_S0, 3, d, 19)                   // sltiu d, t4, 1
         else:
             rv_R(&em, 0, RV_S0, 0, 3, d, 51)                // sltu d, x0, t4
         return
     let f3 : i64 = if sgn = 1: 2 else: 3// slt / sltu
-    if cond = arch_a64.CC_LT:
+    if cond = machine.CC_LT:
         rv_R(&em, 0, y, x, f3, d, 51)
-    elif cond = arch_a64.CC_GE:
+    elif cond = machine.CC_GE:
         rv_R(&em, 0, y, x, f3, d, 51)
         rv_I(&em, 1, d, 4, d, 19)                           // xori
-    elif cond = arch_a64.CC_GT:
+    elif cond = machine.CC_GT:
         rv_R(&em, 0, x, y, f3, d, 51)
     else:
         rv_R(&em, 0, x, y, f3, d, 51)
@@ -256,13 +257,13 @@ fn rvg_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, 
 // tested exactly as it was before there was another way.
 @export
 fn rvg_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    rvg_addov(&em, tg, rd, arch_a64.RG_C, rx, ry, sgn, bits)
-    rvg_jz(&em, tg, arch_a64.RG_C, lab)
+    rvg_addov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, tg, machine.RG_C, lab)
 
 @export
 fn rvg_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    rvg_subov(&em, tg, rd, arch_a64.RG_C, rx, ry, sgn, bits)
-    rvg_jz(&em, tg, arch_a64.RG_C, lab)
+    rvg_subov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, tg, machine.RG_C, lab)
 
 @export
 fn rvg_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
@@ -462,7 +463,7 @@ fn rvg_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
 
 @export
 fn rvg_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    rv_movimm(&em, 17, arch_a64.sc_number(tg, scid))
+    rv_movimm(&em, 17, machine.sc_number(tg, scid))
     em.aw(115)                                              // ecall
 
 @export
@@ -513,7 +514,7 @@ fn rvg_resolve(em : &mut emit.Emit, tg : elf.Target):
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
             assert(delta >= ⁻1048576 and delta < 1048576, "a local jump inside jal's reach")
-            em.patch32(pos, arch_a64.code_word(&em, pos) + rv_jimm(delta))
+            em.patch32(pos, machine.code_word(&em, pos) + rv_jimm(delta))
     while #em.tf_pos > 0:
         _ ← em.tf_pos.pop() ?? 0
         _ ← em.tf_lab.pop() ?? 0
@@ -522,12 +523,91 @@ fn rvg_resolve(em : &mut emit.Emit, tg : elf.Target):
 @export
 fn rvg_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
     let hi : i64 = (v + 2048) » 12
-    em.patch32(pos, arch_a64.code_word(&em, pos) + ((hi & 1048575) « 12))
-    em.patch32(pos + 4, arch_a64.code_word(&em, pos + 4) + (((v - (hi « 12)) & 4095) « 20))
+    em.patch32(pos, machine.code_word(&em, pos) + ((hi & 1048575) « 12))
+    em.patch32(pos + 4, machine.code_word(&em, pos + 4) + (((v - (hi « 12)) & 4095) « 20))
 
 @export
 fn rvg_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
     let delta : i64 = dest - pos
     let hi : i64 = (delta + 2048) » 12
-    em.patch32(pos, arch_a64.code_word(&em, pos) + ((hi & 1048575) « 12))
-    em.patch32(pos + 4, arch_a64.code_word(&em, pos + 4) + (((delta - (hi « 12)) & 4095) « 20))
+    em.patch32(pos, machine.code_word(&em, pos) + ((hi & 1048575) « 12))
+    em.patch32(pos + 4, machine.code_word(&em, pos + 4) + (((delta - (hi « 12)) & 4095) « 20))
+
+// the same door, spelled in RV64
+@export
+fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+              stack_size : i64, guard_size : i64, ginit : i64,
+              tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    let pos : i64 = rv_absref(&em, RV_RB)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    rv_I(&em, 0, 2, 3, RV_RA, 3)                 // ld t0, 0(sp): argc
+    rv_S(&em, 0, RV_RA, RV_RB, 3)
+    rv_I(&em, 8, 2, 0, RV_RC, 19)                // addi t2, sp, 8: argv
+    rv_S(&em, 8, RV_RC, RV_RB, 3)
+    rv_I(&em, 3, RV_RA, 1, RV_T, 19)             // slli t3, argc, 3
+    rv_R(&em, 0, RV_RC, RV_T, 0, RV_T, 51)       // add t3, t3, argv
+    rv_I(&em, 8, RV_T, 0, RV_T, 19)              // envp
+    rv_S(&em, 16, RV_T, RV_RB, 3)
+    em.set_label(0)                              // walk to the env's end
+    rv_I(&em, 0, RV_T, 3, RV_S1, 3)              // ld t5, 0(t3)
+    rv_I(&em, 8, RV_T, 0, RV_T, 19)
+    rv_bshort(&em, 0, RV_S1, 0, 8)               // beq t5, x0, +8
+    rvg_jmp(&em, tg, 0)
+    rv_S(&em, 24, RV_T, RV_RB, 3)                // auxv
+    rv_movimm(&em, 10, 0)
+    rv_movimm(&em, 11, guard_size + stack_size)
+    rv_movimm(&em, 12, 0)
+    rv_movimm(&em, 13, 147490)
+    rv_movimm(&em, 14, ⁻1)
+    rv_movimm(&em, 15, 0)
+    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MMAP))
+    em.aw(115)
+    rv_bshort(&em, 5, 10, 0, 8)                  // bge a0, x0, +8
+    rvg_jmp(&em, tg, 1)                          // the kernel refused
+    rv_mv(&em, RV_RB, 10)                        // the region's foot
+    rv_movimm(&em, 10, guard_size)
+    rv_R(&em, 0, RV_RB, 10, 0, 10, 51)
+    rv_movimm(&em, 11, stack_size)
+    rv_movimm(&em, 12, 3)
+    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MPROT))
+    em.aw(115)
+    rv_bshort(&em, 5, 10, 0, 8)
+    rvg_jmp(&em, tg, 1)
+    rv_movimm(&em, RV_RA, guard_size + stack_size)
+    rv_R(&em, 0, RV_RB, RV_RA, 0, 2, 51)         // sp = foot + whole
+    rvg_jmp(&em, tg, 2)
+    em.set_label(1)
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    let spos : i64 = rv_absref(&em, 10)
+    em.sf_pos.push(spos)
+    em.sf_str.push(smsg)
+    rv_movimm(&em, 11, emit.str_len("the stack could not be reserved\n"))
+    rvg_call(&em, tg, emit.RT_ABORT)
+    em.set_label(2)
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = rv_absref(&em, RV_RA)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    rv_S(&em, emit.KB_GLO, RV_RB, RV_RA, 3)
+    rv_movimm(&em, RV_RC, guard_size)
+    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
+    rv_S(&em, emit.KB_GHI, RV_RC, RV_RA, 3)
+    rv_movimm(&em, RV_RC, guard_size + stack_size)
+    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
+    rv_S(&em, emit.KB_STOP, RV_RC, RV_RA, 3)
+    rvg_call(&em, tg, emit.RT_SIGINIT)
+    if ginit >= 0:
+        rvg_call(&em, tg, ginit)
+    rvg_call(&em, tg, emit.RT_RELRO)
+    rvg_call(&em, tg, tdriver)
+    if start_fn >= 0:
+        rvg_call(&em, tg, start_fn)
+    if not sret:
+        rv_movimm(&em, 10, 0)
+    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    em.aw(115)
+    rvg_resolve(&em, tg)

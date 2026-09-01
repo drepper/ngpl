@@ -11,9 +11,10 @@
 // int 0x80 with the six arguments staged below it.
 // ---------------------------------------------------------------------------
 
-let arch_a64 := @import("arch_a64")
 let elf := @import("elf")
 let emit := @import("emit")
+let lower := @import("lower")
+let machine := @import("machine")
 
 // the cells: A, B, C, T at [ebp-8], [ebp-16], [ebp-24], [ebp-32]
 
@@ -207,15 +208,15 @@ fn i3g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64
 @export
 fn i3g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     i3_binprep(&em, rx, ry)
-    if cond = arch_a64.CC_EQ or cond = arch_a64.CC_NE:
+    if cond = machine.CC_EQ or cond = machine.CC_NE:
         em.b2(49, 200)               // xor eax, ecx
         em.b2(49, 218)               // xor edx, ebx
         em.b2(9, 208)                // or eax, edx
-        em.b3(15, if cond = arch_a64.CC_EQ: 148 else: 149, 192)
+        em.b3(15, if cond = machine.CC_EQ: 148 else: 149, 192)
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
     else:
         // the swapped pair asks the mirrored question
-        let flip : bool = cond = arch_a64.CC_GT or cond = arch_a64.CC_LE
+        let flip : bool = cond = machine.CC_GT or cond = machine.CC_LE
         if flip:
             em.b2(135, 200)          // xchg eax, ecx
             em.b2(135, 218)          // xchg edx, ebx
@@ -227,7 +228,7 @@ fn i3g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, 
         em.b3(15, if sgn = 1: 156 else: 146, 192)   // setl / setb on the high
         em.b1(144)                   // nop
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
-        if cond = arch_a64.CC_GE or cond = arch_a64.CC_LE:
+        if cond = machine.CC_GE or cond = machine.CC_LE:
             em.b2(52, 1)             // xor al, 1
     em.b2(49, 210)                   // xor edx, edx
     i3_stpair(&em, 0, 2, i3_cello(rd))
@@ -605,7 +606,7 @@ fn i3g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
 
 @export
 fn i3g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    i3_movimm(&em, 0, arch_a64.sc_number(tg, scid))
+    i3_movimm(&em, 0, machine.sc_number(tg, scid))
     em.b1(85)                        // push ebp
     em.b3(139, 92, 36)
     em.b1(4)                         // mov ebx, [esp+4]
@@ -686,3 +687,122 @@ fn i3g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
 @export
 fn i3g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
     em.patch32(pos, dest - (pos + 4))
+
+// the door on 32-bit x86: the kernel's words are four bytes, the
+// cells they land in stay eight
+@export
+fn i3_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+              stack_size : i64, guard_size : i64, ginit : i64,
+              tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    let pos : i64 = em.here() + 1
+    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    em.b3(139, 4, 36)                // mov eax, [esp]: argc
+    em.b2(137, 6)                    // mov [esi], eax
+    em.b3(199, 70, 4)
+    em.w32(0)                        // the cell's high half is zero
+    em.b4(141, 76, 36, 4)            // lea ecx, [esp+4]: argv
+    em.b3(137, 78, 8)                // mov [esi+8], ecx
+    em.b3(199, 70, 12)
+    em.w32(0)
+    em.b4(141, 76, 132, 8)           // lea ecx, [esp+eax*4+8]: envp
+    em.b3(137, 78, 16)
+    em.b3(199, 70, 20)
+    em.w32(0)
+    em.set_label(0)                  // walk to the env's end
+    em.b2(139, 17)                   // mov edx, [ecx]
+    em.b3(131, 193, 4)               // add ecx, 4
+    em.b2(133, 210)                  // test edx, edx
+    i3_jcc(&em, 133, 0)              // jnz
+    em.b3(137, 78, 24)               // mov [esi+24], ecx: auxv
+    em.b3(199, 70, 28)
+    em.w32(0)
+    // the stack: mmap2, then the top opened, then the move
+    i3_movimm(&em, 0, machine.sc_number(tg, machine.SC_MMAP))
+    em.b2(49, 219)                   // xor ebx, ebx
+    i3_movimm(&em, 1, guard_size + stack_size)
+    em.b2(49, 210)                   // xor edx, edx: PROT_NONE
+    i3_movimm(&em, 6, 147490)
+    i3_movimm(&em, 7, ⁻1)
+    em.b1(85)                        // push ebp
+    em.b2(49, 237)                   // xor ebp, ebp: page offset 0
+    em.b2(205, 128)                  // int 0x80
+    em.b1(93)                        // pop ebp
+    em.b1(61)
+    em.w32(⁻4096)                    // cmp eax, -4096
+    i3_jcc(&em, 131, 1)              // jae: the kernel refused
+    em.b2(137, 199)                  // mov edi, eax: the region's foot
+    i3_movimm(&em, 0, machine.sc_number(tg, machine.SC_MPROT))
+    em.b2(137, 251)                  // mov ebx, edi
+    em.b2(129, 195)
+    em.w32(guard_size)               // add ebx, guard
+    i3_movimm(&em, 1, stack_size)
+    i3_movimm(&em, 2, 3)
+    em.b2(205, 128)
+    em.b1(61)
+    em.w32(⁻4096)
+    i3_jcc(&em, 131, 1)
+    em.b2(137, 252)                  // mov esp, edi
+    em.b2(129, 196)
+    em.w32(guard_size + stack_size)  // add esp, the whole reservation
+    i3g_jmp(&em, tg, 2)
+    em.set_label(1)
+    em.b2(131, 236)
+    em.b1(16)                       // sub esp, 16: room for the message
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    let spos : i64 = em.here() + 1
+    i3_movimm(&em, 0, 0)
+    em.sf_pos.push(spos)
+    em.sf_str.push(smsg)
+    em.b3(137, 4, 36)                // mov [esp], eax
+    em.b3(199, 68, 36)
+    em.b1(4)
+    em.w32(0)
+    em.b3(199, 68, 36)
+    em.b1(8)
+    em.w32(emit.str_len("the stack could not be reserved\n"))
+    em.b3(199, 68, 36)
+    em.b1(12)
+    em.w32(0)
+    i3_call(&em, emit.RT_ABORT)
+    em.set_label(2)
+    em.b2(131, 236)
+    em.b1(96)                        // sub esp, 96: the door's own outgoing area
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = em.here() + 1
+    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    em.b3(137, 126, emit.KB_GLO)          // mov [esi+KB_GLO], edi
+    em.b3(199, 70, emit.KB_GLO + 4)
+    em.w32(0)                        // the cell's high half
+    em.b2(137, 248)                  // mov eax, edi
+    em.b1(5)
+    em.w32(guard_size)               // add eax, guard
+    em.b3(137, 70, emit.KB_GHI)           // mov [esi+KB_GHI], eax
+    em.b3(199, 70, emit.KB_GHI + 4)
+    em.w32(0)
+    em.b2(137, 248)                  // mov eax, edi
+    em.b1(5)
+    em.w32(guard_size + stack_size)  // add eax, guard + stack
+    em.b3(137, 70, emit.KB_STOP)          // mov [esi+KB_STOP], eax
+    em.b3(199, 70, emit.KB_STOP + 4)
+    em.w32(0)
+    i3_call(&em, emit.RT_SIGINIT)
+    if ginit >= 0:
+        i3_call(&em, ginit)
+    i3_call(&em, emit.RT_RELRO)
+    i3_call(&em, tdriver)
+    if start_fn >= 0:
+        i3_call(&em, start_fn)
+    if sret:
+        em.b2(137, 195)              // mov ebx, eax: the status
+    else:
+        em.b2(49, 219)
+    i3_movimm(&em, 0, machine.sc_number(tg, machine.SC_EXIT))
+    em.b2(205, 128)
+    i3g_resolve(&em, tg)

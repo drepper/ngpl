@@ -1,6 +1,7 @@
-let arch_a64 := @import("arch_a64")
 let elf := @import("elf")
 let emit := @import("emit")
+let lower := @import("lower")
+let machine := @import("machine")
 
 // ---------------------------------------------------------------------------
 // arm (32-bit, EABI): the A32 instruction layer
@@ -257,16 +258,16 @@ fn a32g_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64)
 @export
 fn a32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     a32_binprep(&em, rx, ry)
-    if cond = arch_a64.CC_EQ or cond = arch_a64.CC_NE:
+    if cond = machine.CC_EQ or cond = machine.CC_NE:
         a32_dp(&em, A32_EOR, 0, 0, 2)
         a32_dp(&em, A32_EOR, 1, 1, 3)
         a32_dp(&em, A32_ORR + 1048576, 0, 0, 1)      // orrs r0, r0, r1
         a32_zero9(&em, 0)
-        a32_movc1(&em, if cond = arch_a64.CC_EQ: A32_EQ else: A32_NE, 0)
+        a32_movc1(&em, if cond = machine.CC_EQ: A32_EQ else: A32_NE, 0)
     else:
         // subs/sbcs leave the whole comparison in the flags; GT and LE
         // ask the mirrored question
-        let flip : bool = cond = arch_a64.CC_GT or cond = arch_a64.CC_LE
+        let flip : bool = cond = machine.CC_GT or cond = machine.CC_LE
         let xl : i64 = if flip: 2 else: 0
         let xh : i64 = if flip: 3 else: 1
         let yl : i64 = if flip: 0 else: 2
@@ -276,7 +277,7 @@ fn a32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64,
         let base : i64 = if sgn = 1: A32_LT else: A32_CC
         let inv : i64 = if sgn = 1: A32_GE else: A32_CS
         a32_zero9(&em, 0)
-        a32_movc1(&em, if cond = arch_a64.CC_GE or cond = arch_a64.CC_LE: inv else: base, 0)
+        a32_movc1(&em, if cond = machine.CC_GE or cond = machine.CC_LE: inv else: base, 0)
     a32_zero9(&em, 1)
     a32_stpair(&em, 0, 1, a32_cello(rd))
 
@@ -582,7 +583,7 @@ fn a32g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
     a32_ldsp(&em, 3, 116)
     a32_ldsp(&em, 4, 120)
     a32_ldsp(&em, 5, 124)
-    a32_movimm(&em, 7, arch_a64.sc_number(tg, scid))
+    a32_movimm(&em, 7, machine.sc_number(tg, scid))
     em.aw(A32_SVC)
     // only the errno band is negative
     a32_zero9(&em, 1)
@@ -639,7 +640,7 @@ fn a32g_resolve(em : &mut emit.Emit, tg : elf.Target):
         foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            em.patch32(pos, arch_a64.code_word(&em, pos) + (((delta - 8) » 2) & 16777215))
+            em.patch32(pos, machine.code_word(&em, pos) + (((delta - 8) » 2) & 16777215))
     while #em.tf_pos > 0:
         _ ← em.tf_pos.pop() ?? 0
         _ ← em.tf_lab.pop() ?? 0
@@ -647,14 +648,14 @@ fn a32g_resolve(em : &mut emit.Emit, tg : elf.Target):
 
 @export
 fn a32g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
-    let w0 : i64 = arch_a64.code_word(&em, pos)
+    let w0 : i64 = machine.code_word(&em, pos)
     em.patch32(pos, w0 + (((v » 12) & 15) « 16) + (v & 4095))
-    let w1 : i64 = arch_a64.code_word(&em, pos + 4)
+    let w1 : i64 = machine.code_word(&em, pos + 4)
     em.patch32(pos + 4, w1 + (((v » 28) & 15) « 16) + ((v » 16) & 4095))
 
 @export
 fn a32g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
-    em.patch32(pos, arch_a64.code_word(&em, pos) + (((dest - pos - 8) » 2) & 16777215))
+    em.patch32(pos, machine.code_word(&em, pos) + (((dest - pos - 8) » 2) & 16777215))
 
 @export
 fn a32g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
@@ -664,3 +665,97 @@ fn a32g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i6
     em.aw(A32_ORR + (1 « 16) + (1 « 12) + ((32 - imm) « 7) + (1 « 5) + 0)
     em.aw(A32_MOVR + (0 « 12) + (imm « 7) + 0)
     a32_stpair(&em, 0, 1, a32_cello(rd))
+
+// the door on 32-bit ARM
+@export
+fn a32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off : i64,
+               stack_size : i64, guard_size : i64, ginit : i64,
+               tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    let pos : i64 = em.here()
+    a32_movw(&em, 4, 0)                          // r4 = args-block (patched)
+    a32_movt(&em, 4, 0)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    em.aw(A32_LDRR + (13 « 16) + (0 « 12))       // ldr r0, [sp]: argc
+    em.aw(A32_STRR + (4 « 16) + (0 « 12))
+    a32_zero9(&em, 5)
+    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 4)
+    em.aw(A32_ADDI + (13 « 16) + (1 « 12) + 4)   // add r1, sp, #4: argv
+    em.aw(A32_STRR + (4 « 16) + (1 « 12) + 8)
+    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 12)
+    // envp = argv + 4×argc + 4
+    em.aw(A32_ADD + (1 « 16) + (2 « 12) + (0 « 8) + (0 « 5) + 256 + 0)  // add r2, r1, r0 lsl #2
+    em.aw(A32_ADDI + (2 « 16) + (2 « 12) + 4)
+    em.aw(A32_STRR + (4 « 16) + (2 « 12) + 16)
+    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 20)
+    em.set_label(0)
+    em.aw(A32_LDRR + (2 « 16) + (3 « 12))         // ldr r3, [r2]
+    em.aw(A32_ADDI + (2 « 16) + (2 « 12) + 4)
+    em.aw(A32_CMP0 + (3 « 16) + 0)               // cmp r3, #0
+    em.tf_pos.push(em.here())
+    em.tf_lab.push(0)
+    em.tf_form.push(A32F_B24)
+    em.aw((A32_NE « 28) + (A32_B & 268435455))
+    em.aw(A32_STRR + (4 « 16) + (2 « 12) + 24)    // auxv
+    em.aw(A32_STRR + (4 « 16) + (5 « 12) + 28)
+    // stack: mmap2 takes the offset in pages, which is zero here
+    a32_movimm(&em, 0, 0)
+    a32_movimm(&em, 1, guard_size + stack_size)
+    a32_zero9(&em, 2)
+    a32_movimm(&em, 3, 147490)
+    a32_movimm(&em, 4, 4294967295)
+    a32_zero9(&em, 5)
+    a32_movimm(&em, 7, machine.sc_number(tg, machine.SC_MMAP))
+    em.aw(A32_SVC)
+    a32_movimm(&em, 12, 4294963200)
+    a32_dp(&em, A32_CMP, 0, 0, 12)
+    em.tf_pos.push(em.here())
+    em.tf_lab.push(1)
+    em.tf_form.push(A32F_B24)
+    em.aw((A32_CS « 28) + (A32_B & 268435455))   // bhs failed
+    a32_dp(&em, A32_MOVR, 6, 0, 0)               // r6 = foot
+    a32_movimm(&em, 0, 0)
+    a32_dp(&em, A32_ADD, 0, 6, 0)                // pointless; overwrite below
+    a32_dp(&em, A32_MOVR, 1, 0, 6)               // r1 = foot
+    a32_movimm(&em, 12, guard_size)
+    a32_dp(&em, A32_ADD, 1, 1, 12)               // r1 = foot + guard
+    a32_movimm(&em, 0, machine.sc_number(tg, machine.SC_MPROT))
+    // mprotect(r0=addr, r1=len, r2=prot) — EABI: r0 addr, r1 len, r2 prot
+    a32_dp(&em, A32_MOVR, 0, 0, 1)
+    a32_movimm(&em, 1, stack_size)
+    a32_movimm(&em, 2, 3)
+    a32_movimm(&em, 7, machine.sc_number(tg, machine.SC_MPROT))
+    em.aw(A32_SVC)
+    a32_movimm(&em, 12, guard_size + stack_size)
+    a32_dp(&em, A32_ADD, 13, 6, 12)              // sp = foot + whole
+    a32g_jmp(&em, tg, 2)
+    em.set_label(1)
+    a32_movimm(&em, 7, machine.sc_number(tg, machine.SC_EXIT))
+    a32_movimm(&em, 0, 1)
+    em.aw(A32_SVC)
+    em.set_label(2)
+    a32_movimm(&em, 12, 256)
+    a32_dp(&em, A32_SUB, 13, 13, 12)             // room for outgoing args
+    // No handler here yet.  A handler is entered with the kernel's own
+    // calling convention, and this target takes a routine's arguments
+    // on the stack where the kernel puts them in registers, so what the
+    // handler would read is whatever the alternate stack happened to
+    // hold.  x86-64 and i386 pass on the stack and 64-bit machines pass
+    // one argument to a register, which is why the other four manage;
+    // these two want a trampoline of their own first.  Until then a
+    // stack that runs out here dies the way it always has, of a plain
+    // SIGSEGV.  See TODO-compiler.md.
+    if ginit >= 0:
+        a32_call(&em, ginit)
+    a32_call(&em, emit.RT_RELRO)
+    a32_call(&em, tdriver)
+    if start_fn >= 0:
+        a32_call(&em, start_fn)
+    if sret:
+        a32_dp(&em, A32_MOVR, 0, 0, 0)
+    else:
+        a32_zero9(&em, 0)
+    a32_movimm(&em, 7, machine.sc_number(tg, machine.SC_EXIT))
+    em.aw(A32_SVC)
+    a32g_resolve(&em, tg)

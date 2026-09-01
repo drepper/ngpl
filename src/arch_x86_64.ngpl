@@ -1,6 +1,6 @@
-let arch_a64 := @import("arch_a64")
 let elf := @import("elf")
 let emit := @import("emit")
+let machine := @import("machine")
 let ir_m := @import("ir")
 
 // ===========================================================================
@@ -844,7 +844,7 @@ fn emit_fn(em : &mut emit.Emit, ir : ir_m.IrFn, np : i64, strs : str[],
             let sargc : i64 = ir.extra[b × 1¤ptrdiff]
             foreach sk := 0…sargc:
                 em.load(sysarg_reg(sk), ir.extra[(b + 1 + sk) × 1¤ptrdiff])
-            em.movimm(emit.R_AX, arch_a64.sc_number(elf.targets()[elf.target_index("x86-64") × 1¤ptrdiff], a))
+            em.movimm(emit.R_AX, machine.sc_number(elf.targets()[elf.target_index("x86-64") × 1¤ptrdiff], a))
             em.b2(15, 5)                     // syscall
             if d ≠ ⁻1:
                 em.store(emit.R_AX, d)

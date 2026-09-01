@@ -1,0 +1,104 @@
+// ===========================================================================
+// The retargetable backend's abstract machine
+//
+// Three abstract 64-bit registers, RA, RB and RC -- and RG_T, which the
+// driver uses where it needs a fourth -- every IR value in an 8-byte
+// stack slot, and a small set of operations each target spells in its
+// own instructions.  The driver composes every IR op out of these; a
+// target teaches the machine its spelling and gets the whole language.
+// The x86-64 pioneer keeps its hand-tuned emitter; everything else
+// arrives through here.
+//
+// What is written here is what every target agrees on: the abstract
+// registers, the comparison conditions, the names the runtime calls
+// the kernel by, and the one way to read a word back out of emitted
+// code.  It lived at the head of arch_a64.ngpl, which made every
+// other target import the aarch64 emitter to reach it.
+// ===========================================================================
+
+let elf := @import("elf")
+let emit := @import("emit")
+
+@export
+let RG_A : i64 = 0
+@export
+let RG_B : i64 = 1
+@export
+let RG_C : i64 = 2
+
+// comparison conditions, signedness aside
+@export
+let CC_EQ : i64 = 0
+@export
+let CC_NE : i64 = 1
+@export
+let CC_LT : i64 = 2
+@export
+let CC_LE : i64 = 3
+@export
+let CC_GT : i64 = 4
+@export
+let CC_GE : i64 = 5
+
+// what the runtime asks of the kernel, named so the builders stay
+// architecture-blind; the target row resolves each to its number
+@export
+let SC_READ : i64 = 0
+@export
+let SC_WRITE : i64 = 1
+@export
+let SC_CLOSE : i64 = 2
+@export
+let SC_FSTAT : i64 = 3
+@export
+let SC_MMAP : i64 = 4
+@export
+let SC_MPROT : i64 = 5
+@export
+let SC_WRITEV : i64 = 6
+let SC_GETPID : i64 = 7
+let SC_KILL : i64 = 8
+@export
+let SC_EXIT : i64 = 9
+@export
+let SC_GETDENTS : i64 = 10
+@export
+let SC_OPENAT : i64 = 11
+@export
+let SC_STATX : i64 = 12
+@export
+let SC_RT_SIGACTION : i64 = 13
+@export
+let SC_SIGALTSTACK : i64 = 14
+
+@export
+fn sc_number(tg : elf.Target, id : i64) → i64:
+    if id = SC_READ: return tg.sc_read
+    if id = SC_WRITE: return tg.sc_write
+    if id = SC_CLOSE: return tg.sc_close
+    if id = SC_FSTAT: return tg.sc_fstat
+    if id = SC_MMAP: return tg.sc_mmap
+    if id = SC_MPROT: return tg.sc_mprotect
+    if id = SC_WRITEV: return tg.sc_writev
+    if id = SC_GETPID: return tg.sc_getpid
+    if id = SC_KILL: return tg.sc_kill
+    if id = SC_EXIT: return tg.sc_exit
+    if id = SC_GETDENTS: return tg.sc_getdents
+    if id = SC_OPENAT: return tg.sc_openat
+    if id = SC_RT_SIGACTION: return tg.sc_rt_sigaction
+    if id = SC_SIGALTSTACK: return tg.sc_sigaltstack
+    assert(id = SC_STATX, "a syscall the table knows")
+    tg.sc_statx
+
+@export
+let RG_T : i64 = 3
+
+// one little-endian word read back from the code, each byte widened
+// before it is shifted
+@export
+fn code_word(em : &emit.Emit, pos : i64) → i64:
+    let b0 : i64 = @dropunit(em.code[pos × 1¤byte])
+    let b1 : i64 = @dropunit(em.code[(pos + 1) × 1¤byte])
+    let b2 : i64 = @dropunit(em.code[(pos + 2) × 1¤byte])
+    let b3 : i64 = @dropunit(em.code[(pos + 3) × 1¤byte])
+    b0 + (b1 « 8) + (b2 « 16) + (b3 « 24)

@@ -1,7 +1,8 @@
-let arch_a64 := @import("arch_a64")
 let arch_rv64 := @import("arch_rv64")
 let elf := @import("elf")
 let emit := @import("emit")
+let lower := @import("lower")
+let machine := @import("machine")
 
 // ---------------------------------------------------------------------------
 // riscv32: the RV32IM pair layer
@@ -202,11 +203,11 @@ fn r32g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i6
 @export
 fn r32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     r32_binprep(&em, rx, ry)
-    if cond = arch_a64.CC_EQ or cond = arch_a64.CC_NE:
+    if cond = machine.CC_EQ or cond = machine.CC_NE:
         arch_rv64.rv_R(&em, 0, 12, 10, 4, 5, 51)          // xor t0, lo, lo'
         arch_rv64.rv_R(&em, 0, 13, 11, 4, 6, 51)          // xor t1, hi, hi'
         arch_rv64.rv_R(&em, 0, 6, 5, 6, 5, 51)            // or t0, t0, t1
-        if cond = arch_a64.CC_EQ:
+        if cond = machine.CC_EQ:
             arch_rv64.rv_I(&em, 1, 5, 3, 10, 19)          // sltiu a0, t0, 1
         else:
             arch_rv64.rv_R(&em, 0, 5, 0, 3, 10, 51)       // sltu a0, x0, t0
@@ -214,7 +215,7 @@ fn r32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64,
         return
     // the high halves decide unless equal; a signed test on the top,
     // an unsigned on the bottom
-    let flip : bool = cond = arch_a64.CC_GT or cond = arch_a64.CC_LE
+    let flip : bool = cond = machine.CC_GT or cond = machine.CC_LE
     let xl : i64 = if flip: 12 else: 10
     let xh : i64 = if flip: 13 else: 11
     let yl : i64 = if flip: 10 else: 12
@@ -232,7 +233,7 @@ fn r32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64,
     arch_rv64.rv_I(&em, ⁻1, arch_rv64.RV_S2, 4, arch_rv64.RV_S2, 19)
     arch_rv64.rv_R(&em, 0, arch_rv64.RV_S2, 7, 7, 7, 51)            // t2 &= ~mask
     arch_rv64.rv_R(&em, 0, 7, 5, 6, 10, 51)               // a0 = t0 | t2
-    if cond = arch_a64.CC_GE or cond = arch_a64.CC_LE:
+    if cond = machine.CC_GE or cond = machine.CC_LE:
         arch_rv64.rv_I(&em, 1, 10, 4, 10, 19)             // xori a0, a0, 1
     r32_finish(&em, rd)
 
@@ -275,13 +276,13 @@ fn r32_helper2(em : &mut emit.Emit, rd : i64, rx : i64, ry : i64, target : i64):
 // tested exactly as it was before there was another way.
 @export
 fn r32g_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    r32g_addov(&em, tg, rd, arch_a64.RG_C, rx, ry, sgn, bits)
-    r32g_jz(&em, tg, arch_a64.RG_C, lab)
+    r32g_addov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, tg, machine.RG_C, lab)
 
 @export
 fn r32g_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    r32g_subov(&em, tg, rd, arch_a64.RG_C, rx, ry, sgn, bits)
-    r32g_jz(&em, tg, arch_a64.RG_C, lab)
+    r32g_subov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, tg, machine.RG_C, lab)
 
 @export
 fn r32g_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
@@ -495,7 +496,7 @@ fn r32g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
     r32_ld(&em, 10 + k, r32_cello(r))
 @export
 fn r32g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    r32_movimm(&em, 17, arch_a64.sc_number(tg, scid))
+    r32_movimm(&em, 17, machine.sc_number(tg, scid))
     em.aw(115)
     // sign-extend the 32-bit answer into the high half of the cell
     arch_rv64.rv_I(&em, 31 + 1024, 10, 5, 11, 19)         // srai a1, a0, 31
@@ -556,3 +557,82 @@ fn r32g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
 @export
 fn r32g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
     arch_rv64.rvg_patch_call(&em, tg, pos, dest)
+
+// the door on RV32
+@export
+fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off : i64,
+               stack_size : i64, guard_size : i64, ginit : i64,
+               tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    let pos : i64 = em.here()
+    arch_rv64.rv_U(&em, 0, arch_rv64.RV_RB, 55)
+    arch_rv64.rv_I(&em, 0, arch_rv64.RV_RB, 0, arch_rv64.RV_RB, 19)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    arch_rv64.rv_I(&em, 0, 2, 2, arch_rv64.RV_RA, 3)                 // lw t0, 0(sp): argc
+    arch_rv64.rv_S(&em, 0, arch_rv64.RV_RA, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_S1, 0)                     // t5 = 0: the cells' high halves
+    arch_rv64.rv_S(&em, 4, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_I(&em, 4, 2, 0, arch_rv64.RV_RC, 19)                // argv = sp + 4
+    arch_rv64.rv_S(&em, 8, arch_rv64.RV_RC, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_S(&em, 12, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_I(&em, 2, arch_rv64.RV_RA, 1, arch_rv64.RV_T, 19)             // slli t3, argc, 2
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RC, arch_rv64.RV_T, 0, arch_rv64.RV_T, 51)
+    arch_rv64.rv_I(&em, 4, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)              // envp
+    arch_rv64.rv_S(&em, 16, arch_rv64.RV_T, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_S(&em, 20, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    em.set_label(0)
+    arch_rv64.rv_I(&em, 0, arch_rv64.RV_T, 2, arch_rv64.RV_S0, 3)              // lw t4, 0(t3)
+    arch_rv64.rv_I(&em, 4, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)
+    arch_rv64.rv_bshort(&em, 0, arch_rv64.RV_S0, 0, 8)
+    arch_rv64.rvg_jmp(&em, tg, 0)
+    arch_rv64.rv_S(&em, 24, arch_rv64.RV_T, arch_rv64.RV_RB, 2)                // auxv
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_S1, 0)
+    arch_rv64.rv_S(&em, 28, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
+    arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 11, guard_size + stack_size)
+    arch_rv64.rv_movimm(&em, 12, 0)
+    arch_rv64.rv_movimm(&em, 13, 147490)
+    arch_rv64.rv_movimm(&em, 14, ⁻1)
+    arch_rv64.rv_movimm(&em, 15, 0)
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MMAP))
+    em.aw(115)
+    arch_rv64.rv_movimm(&em, 5, ⁻4096)
+    arch_rv64.rv_R(&em, 0, 5, 10, 3, 6, 51)                // sltu t1, a0, -4096(unsigned): fits→1
+    arch_rv64.rv_bshort(&em, 1, 6, 0, 8)                   // bne t1, x0, +8 (ok)
+    arch_rv64.rvg_jmp(&em, tg, 1)
+    arch_rv64.rv_mv(&em, arch_rv64.RV_RB, 10)
+    arch_rv64.rv_movimm(&em, 10, guard_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, 10, 0, 10, 51)
+    arch_rv64.rv_movimm(&em, 11, stack_size)
+    arch_rv64.rv_movimm(&em, 12, 3)
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MPROT))
+    em.aw(115)
+    arch_rv64.rv_movimm(&em, arch_rv64.RV_RA, guard_size + stack_size)
+    arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RA, 0, 2, 51)
+    arch_rv64.rvg_jmp(&em, tg, 2)
+    em.set_label(1)
+    arch_rv64.rv_movimm(&em, 10, 1)
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    em.aw(115)
+    em.set_label(2)
+    // No handler here yet.  A handler is entered with the kernel's own
+    // calling convention, and this target takes a routine's arguments
+    // on the stack where the kernel puts them in registers, so what the
+    // handler would read is whatever the alternate stack happened to
+    // hold.  x86-64 and i386 pass on the stack and 64-bit machines pass
+    // one argument to a register, which is why the other four manage;
+    // these two want a trampoline of their own first.  Until then a
+    // stack that runs out here dies the way it always has, of a plain
+    // SIGSEGV.  See TODO-compiler.md.
+    if ginit >= 0:
+        r32_call(&em, ginit)
+    r32_call(&em, emit.RT_RELRO)
+    r32_call(&em, tdriver)
+    if start_fn >= 0:
+        r32_call(&em, start_fn)
+    if not sret:
+        arch_rv64.rv_movimm(&em, 10, 0)
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    em.aw(115)
+    arch_rv64.rvg_resolve(&em, tg)
