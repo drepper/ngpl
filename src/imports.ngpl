@@ -306,7 +306,15 @@ struct Reader:
     names : str[]
     offs : i64 ¤byte[]
     fmod : i64[]         // the module each file belongs to
-    done : str[]         // every file already read, as "module:path"
+    // Every file read, and what says which file it is.  A name is not
+    // an answer to that -- one file has as many names as something
+    // cares to give it -- so the device and the number on it are what
+    // is written down, and a file met a second time under any name is
+    // the one already here.
+    cdev : i64[]
+    cino : i64[]
+    cname : str[]        // the name it was first read under, for a message
+    cmod : i64[]         // the module it went into
     cur : i64            // the module being read into
     mroot : str[]        // the file each module is rooted in
     // bindings met while reading, waiting to be followed
@@ -319,6 +327,15 @@ struct Reader:
     bmod : i64[]
     bowner : i64[]
 
+impl Reader:
+    // Where this file stands in the list, or ⁻1 where it is new.
+    @post(r: r = ⁻1 or r >= 0)
+    fn seen_at(&self, dev : i64, ino : i64) → i64:
+        foreach i := 0¤ptrdiff…#self.cdev:
+            if self.cdev[i] = dev and self.cino[i] = ino:
+                return @dropunit(i)
+        ⁻1
+
 fn imp_holds(v : str[], want : str) → bool:
     foreach s := v:
         if s = want:
@@ -327,23 +344,35 @@ fn imp_holds(v : str[], want : str) → bool:
 
 impl Reader:
     // Read this file into the module in hand, writing down what it
-    // binds so that the modules those name are read after it.
-    // Anything that stops the reading is written down and it gives up:
-    // one reason is what a caller can act on, and the first is the one
-    // that explains the rest.
+    // binds so that the modules those name are read after it.  Answers
+    // the module the file is in, which is the one in hand where it was
+    // read here and the one it was read into where it was already
+    // known -- a file goes into one module however many names reach
+    // it.  Anything that stops the reading is written down and it
+    // gives up: one reason is what a caller can act on, and the first
+    // is the one that explains the rest.
     @impure
-    fn take(&mut self, path : str, asked : str):
+    fn take(&mut self, path : str, asked : str) → i64:
         if self.why ≠ "":
-            return
-        // a file named twice on one command line is read once
-        let mark : str = tokens.i64_str(self.cur) ⧺ ":" ⧺ path
-        if imp_holds(self.done, mark):
-            return
+            return ⁻1
         match std.fs.cwd().open_file(path):
             ⊨(file):
+                // which file this is, before it is read: a file
+                // already in the program is not read again, whatever
+                // this name for it is
+                let dev : i64 = file.device()
+                let ino : i64 = file.inode()
+                let known : i64 = self.seen_at(dev, ino)
+                if known ≠ ⁻1:
+                    file.close()
+                    return self.cmod[known × 1¤ptrdiff]
                 let alloc := std.arena.allocator()
                 let text : mut byte[] = file.read_file(alloc)
                 file.close()
+                self.cdev.push(dev)
+                self.cino.push(ino)
+                self.cname.push(path)
+                self.cmod.push(self.cur)
                 // a file ends its last line before the next one begins,
                 // or the two run together into a line spanning them
                 let n : i64 = @dropunit(#text)
@@ -366,7 +395,7 @@ impl Reader:
                             self.why ← path ⧺ ":" ⧺ tokens.i64_str(ln2) ⧺ """: @import takes one file name
                                         " in quotes and nothing else, as
                                         " @import(\"./tokens.ngpl\")"""
-                            return
+                            return ⁻1
                         self.pend_name.push(bn)
                         self.pend_file.push(bf)
                         self.pend_from.push(path)
@@ -375,10 +404,11 @@ impl Reader:
                     m2 ← hi2 + 1¤byte
                     ln2 ← ln2 + 1
                 self.src ← self.src ⧺ text
-                self.done.push(mark)
+                return self.cur
             ∅:
                 let where : str = if asked = "": "" else: asked ⧺ ": "
                 self.why ← where ⧺ "cannot open '" ⧺ path ⧺ "': no such file or it cannot be read"
+        ⁻1
 
 // The whole program, from the file it is rooted in.
 impl Reader:
@@ -386,18 +416,21 @@ impl Reader:
     // is, so that the name it was bound to can reach it.
     @impure
     fn take_module(&mut self, root : str, asked : str) → i64:
-        // a module is loaded once however many bindings name it, so
-        // that its types are one type and its globals one storage
-        foreach i := 0¤ptrdiff…#self.mroot:
-            if self.mroot[i] = root:
-                return @dropunit(i)
+        // A module is loaded once however many bindings name it, so
+        // that its types are one type and its globals one storage.
+        // Which file a name reaches is the file's to say, so the room
+        // for a module is made first and given back where the reading
+        // says the file was already in one.
         let me : i64 = @dropunit(#self.mroot)
         self.mroot.push(root)
         let outer : i64 = self.cur
         self.cur ← me
-        self.take(root, asked)
+        let landed : i64 = self.take(root, asked)
         self.cur ← outer
-        me
+        if landed = me:
+            return me
+        _ ← self.mroot.pop() ?? ""
+        landed
 
     // Every module the program is made of, the root one first.  A
     // binding met while reading is followed after the module holding
@@ -413,7 +446,7 @@ impl Reader:
         if #roots > 0¤ptrdiff:
             self.mroot.push(roots[0¤ptrdiff])
             foreach nm := roots:
-                self.take(nm, "")
+                _ ← self.take(nm, "")
                 if self.why ≠ "":
                     return
         let at : mut i64 ¤ptrdiff = 0¤ptrdiff
@@ -437,7 +470,8 @@ impl Reader:
 @impure
 fn read_program(roots : str[], paths : str[]) → Program:
     let r : mut Reader = (Reader{why: "", paths: paths, src: [], names: [],
-                                 offs: [], fmod: [], done: [],
+                                 offs: [], fmod: [], cdev: [], cino: [],
+                                 cname: [], cmod: [],
                                  cur: 0, mroot: [], pend_name: [],
                                  pend_file: [], pend_from: [], pend_line: [],
                                  pend_owner: [], bname: [], bmod: [],

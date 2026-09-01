@@ -1184,6 +1184,65 @@ fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, all
     em.jglobal(233, ⁻1, emit.RT_ABORT)
     em.resolve_locals()
 
+    // RT_FIDENT: rdi = a file's descriptor, rsi = which of the two
+    // numbers is wanted → rax = the device the file is on (0) or its
+    // number on that device (1).  statx rather than fstat: it lays out
+    // one answer for every machine, and it reports the device in two
+    // halves, which are put back together here the way every system
+    // that reports them apart does.
+    em.rt_begin(emit.RT_FIDENT)
+    em.begin_fn(1)
+    em.b3(73, 137, 244)             // mov r12, rsi: which
+    em.b3(72, 129, 236)
+    em.w32(288)                     // sub rsp, 288
+    em.b4(72, 199, 4, 36)
+    em.w32(0)                       // mov qword [rsp], 0: the empty path
+    em.b3(72, 137, 230)             // mov rsi, rsp
+    em.b4(76, 141, 68, 36)
+    em.b1(16)                       // lea r8, [rsp+16]: the answer's room
+    em.b1(186)
+    em.w32(4096)                    // mov edx, AT_EMPTY_PATH
+    em.b2(65, 186)
+    em.w32(2047)                    // mov r10d, STATX_BASIC_STATS
+    em.b1(184)
+    em.w32(tg.sc_statx)             // mov eax, statx
+    em.b2(15, 5)                    // syscall
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js Lbad
+    em.b4(72, 139, 68, 36)
+    em.b1(48)                       // mov rax, [rsp+48]: stx_ino
+    em.b3(139, 140, 36)
+    em.w32(152)                     // mov ecx, [rsp+152]: the major half
+    em.b3(139, 148, 36)
+    em.w32(156)                     // mov edx, [rsp+156]: the minor half
+    em.b3(72, 129, 196)
+    em.w32(288)                     // add rsp, 288
+    em.b3(65, 137, 201)             // mov r9d, ecx
+    em.b3(65, 129, 225)
+    em.w32(4095)                    // and r9d, 0xfff
+    em.b4(73, 193, 225, 8)          // shl r9, 8
+    em.b3(65, 137, 211)             // mov r11d, edx
+    em.b3(65, 129, 227)
+    em.w32(255)                     // and r11d, 0xff
+    em.b3(77, 9, 217)               // or r9, r11
+    em.b3(73, 137, 211)             // mov r11, rdx
+    em.b4(73, 193, 235, 8)          // shr r11, 8
+    em.b4(73, 193, 227, 20)         // shl r11, 20: the minor's high bits
+    em.b3(77, 9, 217)               // or r9, r11
+    em.b3(73, 137, 203)             // mov r11, rcx
+    em.b4(73, 193, 235, 12)         // shr r11, 12
+    em.b4(73, 193, 227, 44)         // shl r11, 44: the major's high bits
+    em.b3(77, 9, 217)               // or r9, r11
+    em.b3(77, 133, 228)             // test r12, r12
+    em.b4(73, 15, 68, 193)          // cmove rax, r9: which = 0 wants the device
+    em.b1(195)
+    em.set_label(0)                 // Lbad
+    let nid : i64 = lw.intern("ngplc: the file cannot be asked about itself\n")
+    em.sref(emit.R_SI, nid)
+    em.movimm(emit.R_DX, emit.str_len(lw.strs[nid × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, emit.RT_ABORT)
+    em.resolve_locals()
+
     // RT_FWRITE: rdi = a file's descriptor, rsi = a u8[]; the slots
     // narrow to bytes and one write loop puts them down
     em.rt_begin(emit.RT_FWRITE)

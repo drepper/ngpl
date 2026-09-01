@@ -9251,6 +9251,21 @@ error: close: file is closed
 
 The second `close` says the program has lost track of the descriptor's lifetime.  Scope-end release is not an error after an explicit `close`, however: the program said it was finished early, and the scope ending afterwards has nothing left to do.
 
+#### Which File This Is
+
+A name is not an answer to *which file* something opened: one file has as many names as anything cares to give it, and two names that look nothing alike may open the same one — a link, a path that walks out and back in, a directory reached two ways.  An open file answers the question itself:
+
+```
+let dev : i64 = file.device()
+let ino : i64 = file.inode()
+```
+
+`device()` is the device the file is on, as the system numbers it, and `inode()` is its number on that device.  **Two names opened the same file exactly when both answers agree.**  Neither is a number to print or to store: it means nothing on another machine, and nothing on this one after the file is replaced.  It is for telling one open file from another, which is what a program keeping a list of files it has read needs and what comparing names cannot do.
+
+Both are asked of an open file, so what is answered is the file the program has in hand rather than whatever a name might reach a moment later.  Both are impure, as reading is.
+
+The compiler uses this on its own sources: a file reached under two names is read once and is one module, so a struct it defines is one struct however the file was asked for.
+
 #### Temporaries
 
 A resource that is never assigned to anything has no binding to own it and no scope to end.  Such a temporary is released when the statement that produced it finishes:
@@ -9958,6 +9973,8 @@ What a module did not export is still its own: a file reaches everything it defi
 **A module is not a value.**  It is reached with `.` and is nothing else — it cannot be bound to another name, passed to a function, or answered by one.  There is no value there, only a way in.
 
 **Two imports of one file are two bindings of one module.**  The file is read once: its types are the same type, its globals the same storage, and its functions one copy in the binary, however many places bind it.  Binding the same file twice is never a mistake.
+
+**One file, not one name.**  Which file a name reaches is settled by what it opens — the device and the number on it, which [an open file answers](#which-file-this-is) — and not by how it is spelled.  A file bound as `./lib.ngpl` from one directory and as `../other/lib.ngpl` from another is one module, and so is one reached through a link.  Every file read is kept in one list, so a file met again under any name is the one already there and is not read a second time.
 
 **A ring of bound imports works.**  A binding does not ask that the file be read *ahead* of anything, only that it be there, so two files that bind one another are two modules and not a loop.  A file may even bind the one the program is rooted in.
 

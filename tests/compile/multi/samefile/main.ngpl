@@ -1,0 +1,13 @@
+// Three names for one file: what a name opens is what says which file
+// it is, and no amount of spelling makes it three.  One of them walks
+// out and back in, one is a link to the file, and one is the file --
+// so a struct made through the first is read through the others.
+let near := @import("./sub/lib.ngpl")
+let round := @import("./sub/../sub/lib.ngpl")
+let linked := @import("./sub/alias.ngpl")
+
+@start
+@impure
+fn main():
+    let p : near.Point = near.make(7)
+    std.println("{} {}", round.get(p), linked.get(p))

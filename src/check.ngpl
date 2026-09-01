@@ -54,6 +54,10 @@ let HOLD_NONE : i64 = 2
 let LU_SIZE : i64 = 8192
 @export
 let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handle
+@export
+let MID_FDEV : i64 = 16      // f.device(): which device the file is on
+@export
+let MID_FINO : i64 = 17      // f.inode(): its number on that device
 
 // an enum's own name, less the module it was written in
 fn enum_bare(whole : str) → str:
@@ -4206,6 +4210,17 @@ impl Checker:
                     self.derr(tok, "writev writes runs of bytes; std.iov makes one, and this is " ⧺ self.tn(self.ty_of(pe)))
             self.a.nc[id × 1¤ptrdiff] ← MID_WRITEV
             self.set_type(id, types.TY_UNIT)
+            return
+        if t = types.TY_FILE and (m = "device" or m = "inode"):
+            // Two files are the same file when both answers agree, and
+            // no name settles that: a file has as many names as
+            // something cares to give it.
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "asking about a file is impure; the function wants @impure")
+            if argc0 ≠ 0:
+                self.derr(tok, m ⧺ " takes nothing")
+            self.a.nc[id × 1¤ptrdiff] ← (if m = "device": MID_FDEV else: MID_FINO)
+            self.set_type(id, types.TY_I64)
             return
         if t = types.TY_FILE and (m = "read_file" or m = "write" or m = "close"):
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:

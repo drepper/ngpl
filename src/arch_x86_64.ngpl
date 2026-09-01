@@ -817,6 +817,11 @@ fn emit_fn(em : &mut emit.Emit, ir : ir_m.IrFn, np : i64, strs : str[],
             em.load(emit.R_DI, a)
             em.jglobal(232, ⁻1, emit.RT_FREAD)
             em.store(emit.R_AX, d)
+        elif o = ir_m.IR_FIDENT:
+            em.load(emit.R_DI, a)
+            em.load(emit.R_SI, b)
+            em.jglobal(232, ⁻1, emit.RT_FIDENT)
+            em.store(emit.R_AX, d)
         elif o = ir_m.IR_FWRITE:
             em.load(emit.R_DI, a)
             em.load(emit.R_SI, b)

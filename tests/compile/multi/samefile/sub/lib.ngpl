@@ -1,0 +1,14 @@
+// Bound twice under two spellings.  A file is one module however many
+// names reach it, so the struct below is one struct and the two
+// bindings are two names for the same thing.
+@export
+struct Point:
+    x : i64
+
+@export
+fn make(n : i64) → Point:
+    (Point{x: n})
+
+@export
+fn get(p : Point) → i64:
+    p.x

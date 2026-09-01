@@ -348,6 +348,28 @@ impl RtB:
     fn eprint_msg(&mut self, strid : i64):
         self.o(ir.IR_EPRINTS, strid, 0, 0, 0, 0)
 
+// What statx is asked and where it answers.  Unlike the older fstat,
+// whose struct every architecture shapes for itself, statx lays out one
+// struct for all of them, so these are numbers and not a table with a
+// row per machine.
+let STATX_BYTES : i64 = 256          // the struct is 256 bytes
+let AT_EMPTY_PATH : i64 = 4096       // ask about the descriptor itself
+let STATX_BASIC_STATS : i64 = 2047   // everything a stat would have said
+let STX_INO : i64 = 32               // where the file's number sits
+let STX_DEV_MAJOR : i64 = 136        // …and the two halves of the device
+let STX_DEV_MINOR : i64 = 140
+
+// The device number a major and a minor make, the way every system
+// that reports the two separately puts them back together.  Answering
+// the same number stat would have written down is what lets a program
+// compare this against a device number from anywhere else.
+fn rt_makedev(b : &mut RtB, maj : i64, mnr : i64) → i64:
+    let lo : i64 = b.bor(b.shl(b.band(maj, b.cst(4095)), b.cst(8)),
+                         b.band(mnr, b.cst(255)))
+    let hi : i64 = b.bor(b.shl(b.band(mnr, b.bnot(b.cst(255))), b.cst(12)),
+                         b.shl(b.band(maj, b.bnot(b.cst(4095))), b.cst(32)))
+    b.bor(lo, hi)
+
 @export
 fn rtb_fn(b : RtB) → ir.IrFn:
     (ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
@@ -1464,6 +1486,31 @@ fn rt_build3(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         b.jmp(lcp)
         b.lab(lcpe)
         b.ret(out)
+        return rtb_fn(b)
+    if id = emit.RT_FIDENT:
+        // (fd, which) → the device the file is on where which is 0, its
+        // number on that device where which is 1.  statx answers both
+        // on every machine and lays its answer out the same way on all
+        // of them, where the older fstat writes a struct each
+        // architecture shapes for itself.
+        let b : mut RtB = rtb(2)
+        let st : i64 = b.call1(emit.RT_ALLOC, b.cst(STATX_BYTES))
+        let z : i64 = b.cst(0)
+        // an empty path with AT_EMPTY_PATH means "the descriptor
+        // itself", so the file is asked about rather than a name for it
+        let empty : i64 = b.call1(emit.RT_ALLOC, b.cst(1))
+        b.stn(empty, 0, z, 1)
+        let r : i64 = b.sys5(arch_a64.SC_STATX, 0, empty, b.cst(AT_EMPTY_PATH),
+                             b.cst(STATX_BASIC_STATS), st)
+        let bad : i64 = b.clts(r, z)
+        let lok : i64 = b.l()
+        b.jz(bad, lok)
+        b.abort_msg(lw.intern("ngplc: the file cannot be asked about itself\n"))
+        b.lab(lok)
+        let ino : i64 = b.ldn(st, STX_INO, 8)
+        let maj : i64 = b.ldn(st, STX_DEV_MAJOR, 4)
+        let mnr : i64 = b.ldn(st, STX_DEV_MINOR, 4)
+        b.ret(b.sel(b.ceq(1, z), rt_makedev(&b, maj, mnr), ino))
         return rtb_fn(b)
     if id = emit.RT_TORAW:
         let b : mut RtB = rtb(1)

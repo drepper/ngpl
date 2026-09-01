@@ -517,6 +517,25 @@ class FileStream:
         self._check_open("fd")
         return self._fd
 
+    def device(self):
+        """The device this file is on, as the system numbers it.
+
+        Two names answer for one file exactly when the device and the
+        number on it both agree; no name settles it, since a file has
+        as many names as something cares to give it.
+        """
+        from interp.value import mk_int
+
+        self._check_open("device")
+        return mk_int(os.fstat(self._fd).st_dev, "i64")
+
+    def inode(self):
+        """This file's number on the device it is on."""
+        from interp.value import mk_int
+
+        self._check_open("inode")
+        return mk_int(os.fstat(self._fd).st_ino, "i64")
+
     def read_file(self, allocator):
         """Read the entire file content using the given allocator.
 

@@ -1162,6 +1162,12 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(ir.IR_CHARS, av, 0, 0, d, 0)
             return d
+        if mid = check.MID_FDEV or mid = check.MID_FINO:
+            let w : i64 = self.tmp()
+            self.ir(ir.IR_CONST, (if mid = check.MID_FDEV: 0 else: 1), 0, 0, w, 0)
+            let d : i64 = self.tmp()
+            self.ir(ir.IR_FIDENT, av, w, 0, d, 0)
+            return d
         if mid = check.MID_READF:
             _ ← self.lower_expr(self.a.extra[args_off + 1])
             let d : i64 = self.tmp()

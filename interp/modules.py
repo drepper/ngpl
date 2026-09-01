@@ -113,6 +113,22 @@ def file_at(m, line: int) -> tuple:
     return where, line - start + 1
 
 
+def file_id(path: str):
+    """What says which file this is: the device, and the number on it.
+
+    A name is not an answer to that -- one file has as many names as
+    something cares to give it -- so two names are compared by what
+    they open rather than by how they are spelled.  Answers None where
+    there is nothing there to ask, which the reader then reports in its
+    own words.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
 def module_of_path(mods, path: str):
     """The module rooted in this file, or None where none is."""
     real = os.path.realpath(path)
@@ -153,7 +169,7 @@ def load(roots, paths_asked, read_program, resolve, import_error,
 
     def take(root: str, asked: str | None, being: list[str]) -> int:
         """Load the module rooted in this file, answering its number."""
-        real = os.path.realpath(root)
+        real = file_id(root) or os.path.realpath(root)
         if real in by_path:
             return by_path[real]
         if real in being:

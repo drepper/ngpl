@@ -110,7 +110,7 @@ fn targets() → Target[]:
                   sc_read: 0, sc_write: 1, sc_close: 3, sc_fstat: 5,
                   sc_mmap: 9, sc_mprotect: 10, sc_writev: 20,
                   sc_getpid: 39, sc_kill: 62, sc_exit: 60,
-                  sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40, sc_rt_sigaction: 13, sc_sigaltstack: 131, sa_restorer_off: 16})
+                  sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536, sc_statx: 332, stx_size: 40, sc_rt_sigaction: 13, sc_sigaltstack: 131, sa_restorer_off: 16})
     t.push(Target{id: TGT_I386, name: "i386", machine: Em.i386, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,

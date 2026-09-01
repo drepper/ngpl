@@ -17,7 +17,8 @@ from interp.macros import (collect as macro_collect,
                            FUNCTIONS as MACRO_SEEN_FUNCTIONS)
 from interp.env import Env, Decl
 from interp.modules import (load as mod_load, prepare as mod_prepare,
-                            ModuleHandle, note_root_key)
+                            ModuleHandle, note_root_key,
+                            file_id as mod_file_id)
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
@@ -4051,7 +4052,8 @@ def _read_program(roots: list[str],
 
     def read(path: str, asked_from: str | None) -> None:
         nonlocal lines
-        real = os.path.realpath(path)
+        # what says which file this is, rather than how it is spelled
+        real = mod_file_id(path) or os.path.realpath(path)
         if real in done:
             return
         if not os.path.isfile(path):
