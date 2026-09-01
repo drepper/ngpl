@@ -16,23 +16,26 @@ let types := @import("types")
 
 
 
-let CL_INVALID : i64 = 0
-let CL_WS : i64 = 1
-let CL_NL : i64 = 2
-let CL_DIGIT : i64 = 3
-let CL_IDENT : i64 = 4
-let CL_QUOTE : i64 = 5
-let CL_SLASH : i64 = 6
-let CL_MB2 : i64 = 7         // two-byte glyph lead (C2, C3, CE)
-let CL_MB3 : i64 = 8         // three-byte glyph lead (E2)
-let CL_TAB : i64 = 9
-let CL_COLON : i64 = 10      // : or :=
-let CL_LT : i64 = 11         // < <= << <-
-let CL_GT : i64 = 12         // > >= >>
-let CL_DASH : i64 = 13       // - or ->
-let CL_QMARK : i64 = 14      // ??
-let CL_APOS : i64 = 15       // a character literal
-let CL_PUNCT : i64 = 16      // a byte that is a whole token by itself
+// What kind of byte begins a token, which is all the class table
+// says: which token a byte makes by itself is the table beside it.
+enum Cl : u8:
+    invalid = 0
+    ws = 1
+    nl = 2
+    digit = 3
+    ident = 4
+    quote = 5
+    slash = 6
+    mb2 = 7    // two-byte glyph lead (C2, C3, CE)
+    mb3 = 8    // three-byte glyph lead (E2)
+    tab = 9
+    colon = 10    // : or :=
+    lt = 11    // < <= << <-
+    gt = 12    // > >= >>
+    dash = 13    // - or ->
+    qmark = 14    // ??
+    apos = 15    // a character literal
+    punct = 16    // a byte that is a whole token by itself
 
 // Which token each byte makes where it makes one by itself, and
 // Tk.none for every byte that does not.  The kinds live here rather
@@ -72,41 +75,41 @@ fn mkpunct() → tokens.Tk[256]:
 // calls that used to fill it into one fill of the caller's own space.
 // Every self.cls[b] below then checks against a constant rather than
 // against a length it has to load first.
-fn mkcls() → i64[256]:
+fn mkcls() → Cl[256]:
     let p : tokens.Tk[256] = mkpunct()
-    let t : mut i64[256] = 256 ⍴ 0
+    let t : mut Cl[256] = 256 ⍴ Cl.invalid
     foreach b := 0¤ptrdiff…256:
         if p[b] ≠ tokens.Tk.none:
-            t[b] ← CL_PUNCT
-    t[32] ← CL_WS
-    t[10] ← CL_NL
-    t[9] ← CL_TAB
+            t[b] ← Cl.punct
+    t[32] ← Cl.ws
+    t[10] ← Cl.nl
+    t[9] ← Cl.tab
     foreach d := 48¤ptrdiff…58:
-        t[d] ← CL_DIGIT
+        t[d] ← Cl.digit
     foreach c := 97¤ptrdiff…123:
-        t[c] ← CL_IDENT
+        t[c] ← Cl.ident
     foreach c := 65¤ptrdiff…91:
-        t[c] ← CL_IDENT
-    t[95] ← CL_IDENT
-    t[34] ← CL_QUOTE
-    t[47] ← CL_SLASH
-    t[194] ← CL_MB2
-    t[195] ← CL_MB2
-    t[206] ← CL_MB2
-    t[226] ← CL_MB3
-    t[58] ← CL_COLON
-    t[60] ← CL_LT
-    t[62] ← CL_GT
-    t[45] ← CL_DASH
-    t[63] ← CL_QMARK
-    t[39] ← CL_APOS
+        t[c] ← Cl.ident
+    t[95] ← Cl.ident
+    t[34] ← Cl.quote
+    t[47] ← Cl.slash
+    t[194] ← Cl.mb2
+    t[195] ← Cl.mb2
+    t[206] ← Cl.mb2
+    t[226] ← Cl.mb3
+    t[58] ← Cl.colon
+    t[60] ← Cl.lt
+    t[62] ← Cl.gt
+    t[45] ← Cl.dash
+    t[63] ← Cl.qmark
+    t[39] ← Cl.apos
     t
 
-fn is_digit(b : i64) → bool:
+fn is_digit(b : i32) → bool:
     b >= 48 and b <= 57
 
 @post(r: r >= ⁻1 and r <= 15)
-fn hex_val(b : i64) → i64:
+fn hex_val(b : i32) → i32:
     if is_digit(b): return b - 48
     if b >= 97 and b <= 102: return b - 87
     if b >= 65 and b <= 70: return b - 55
@@ -127,7 +130,7 @@ struct Toks:
 struct Lexer:
     src : byte[]
     n : i64
-    cls : i64[256]
+    cls : Cl[256]
     punct : tokens.Tk[256]   // which token a byte makes by itself
     pos : i64
     line : i64 ¤"line"
@@ -145,7 +148,11 @@ struct Lexer:
     diags : diag.Diag[]
 
 impl Lexer:
-    fn peek(&self, ahead : i64) → i64:
+    // A byte, or ⁻1 past the end.  Answered as an i32 because that is
+    // what the lexer computes with: a byte, a packed run of two or
+    // three of them, and a code point all fit one, and UCS-4 has
+    // nothing that does not.
+    fn peek(&self, ahead : i64) → i32:
         if self.pos + ahead >= self.n: return ⁻1
         self.src[(self.pos + ahead) × 1¤byte]
 
@@ -178,23 +185,23 @@ impl Lexer:
 
     fn skip_gaps(&mut self) → bool:
         while true:
-            let b : i64 = self.peek(0)
+            let b : i32 = self.peek(0)
             if b = ⁻1 or b = 10:
                 return false
-            let c : i64 = self.cls[b × 1¤ptrdiff]
-            if c = CL_WS:
+            let c : Cl = self.cls[b × 1¤ptrdiff]
+            if c = Cl.ws:
                 self.adv()
-            elif c = CL_TAB:
+            elif c = Cl.tab:
                 self.err("tab in indentation or code; ngplc reads spaces only")
                 return false
-            elif c = CL_SLASH and self.peek(1) = 47:
+            elif c = Cl.slash and self.peek(1) = 47:
                 while self.peek(0) ≠ 10 and self.peek(0) ≠ ⁻1:
                     self.pos ← self.pos + 1
-            elif c = CL_SLASH and self.peek(1) = 42:
+            elif c = Cl.slash and self.peek(1) = 42:
                 self.adv()
                 self.adv()
                 while true:
-                    let d : i64 = self.peek(0)
+                    let d : i32 = self.peek(0)
                     if d = ⁻1:
                         self.err("unterminated block comment")
                         return false
@@ -265,7 +272,7 @@ impl Lexer:
         else:
             // …and the same for a decimal one
             while is_digit(self.peek(0)):
-                let d : i64 = self.peek(0) - 48
+                let d : i32 = self.peek(0) - 48
                 if self.too_big_dec(v, d):
                     self.err("integer literal does not fit u64, the widest core-1 has")
                     return
@@ -273,15 +280,15 @@ impl Lexer:
                 self.adv()
             if v < 0:
                 big ← 1
-        let nb : i64 = self.peek(0)
+        let nb : i32 = self.peek(0)
         let st : mut i64 = ⁻1
-        if nb ≠ ⁻1 and self.cls[nb × 1¤ptrdiff] = CL_IDENT:
+        if nb ≠ ⁻1 and self.cls[nb × 1¤ptrdiff] = Cl.ident:
             // i8…i64, u8…u64: the suffix says the literal's type, and
             // it rides in the big field as big + 2 × the type's code
             // the suffix is a run of the source, read where it stands
             // once its end is known
             let spos9 : i64 = self.pos
-            while self.peek(0) ≠ ⁻1 and (self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT or is_digit(self.peek(0))):
+            while self.peek(0) ≠ ⁻1 and (self.cls[self.peek(0) × 1¤ptrdiff] = Cl.ident or is_digit(self.peek(0))):
                 self.adv()
             let sfx : str = tokens.run_str(self.src, spos9, self.pos - spos9)
             st ← ast.TYNAMES[sfx] ?? ⁻1
@@ -303,7 +310,7 @@ impl Lexer:
             self.adv()
             self.adv()
             let upos9 : i64 = self.pos
-            while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
+            while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = Cl.ident:
                 self.adv()
             let usfx : str = tokens.run_str(self.src, upos9, self.pos - upos9)
             let names := types.unit_names()
@@ -328,8 +335,8 @@ impl Lexer:
         let spos : i64 = self.pos
         let scol : i64 ¤"col" = self.col
         self.adv()
-        let b : i64 = self.peek(0)
-        let code : mut i64 = 0
+        let b : i32 = self.peek(0)
+        let code : mut i32 = 0
         if b = ⁻1 or b = 10:
             self.err("a character literal ends on the line it starts")
             return
@@ -338,7 +345,7 @@ impl Lexer:
                       " of no characters is written \"\"""")
             return
         if b = 92:
-            let e : i64 = self.peek(1)
+            let e : i32 = self.peek(1)
             if e = 117:
                 self.adv()
                 self.adv()
@@ -430,7 +437,7 @@ impl Lexer:
             self.adv()
         let s : mut str = ""
         while true:
-            let b : i64 = self.peek(0)
+            let b : i32 = self.peek(0)
             if multi and b = 34 and self.peek(1) = 34 and self.peek(2) = 34:
                 self.advg(3)
                 break
@@ -459,7 +466,7 @@ impl Lexer:
                 self.adv()
                 break
             if b = 92:
-                let e : i64 = self.peek(1)
+                let e : i32 = self.peek(1)
                 if e = 110: s ← s ⧺ (10).chr()
                 elif e = 116: s ← s ⧺ (9).chr()
                 elif e = 114: s ← s ⧺ (13).chr()
@@ -487,10 +494,10 @@ impl Lexer:
         let spos : i64 = self.pos
         let scol : i64 ¤"col" = self.col
         while true:
-            let b : i64 = self.peek(0)
+            let b : i32 = self.peek(0)
             if b = ⁻1: break
-            let c : i64 = self.cls[b × 1¤ptrdiff]
-            if c ≠ CL_IDENT and c ≠ CL_DIGIT: break
+            let c : Cl = self.cls[b × 1¤ptrdiff]
+            if c ≠ Cl.ident and c ≠ Cl.digit: break
             self.adv()
         if self.peek(0) = 39:
             // F', T': the prime rides the name; it spells a type variable
@@ -499,18 +506,18 @@ impl Lexer:
         self.emit(tokens.KEYWORDS[text] ?? tokens.Tk.ident, spos, self.pos - spos, scol, 0, 0)
 
     // the two-character ASCII operators, reached through their class
-    fn read_op2(&mut self, c : i64):
+    fn read_op2(&mut self, c : Cl):
         let spos : i64 = self.pos
         let scol : i64 ¤"col" = self.col
         let b1 : i64 = self.peek(1)
         let k : mut tokens.Tk = tokens.Tk.none
         let w : mut i64 = 1
-        if c = CL_COLON:
+        if c = Cl.colon:
             k ← tokens.Tk.colon
             if b1 = 61:
                 k ← tokens.Tk.define
                 w ← 2
-        elif c = CL_LT:
+        elif c = Cl.lt:
             k ← tokens.Tk.lt
             if b1 = 61:
                 k ← tokens.Tk.le
@@ -521,7 +528,7 @@ impl Lexer:
             elif b1 = 45:
                 k ← tokens.Tk.assign
                 w ← 2
-        elif c = CL_GT:
+        elif c = Cl.gt:
             k ← tokens.Tk.gt
             if b1 = 61:
                 k ← tokens.Tk.ge
@@ -529,7 +536,7 @@ impl Lexer:
             elif b1 = 62:
                 k ← tokens.Tk.shr
                 w ← 2
-        elif c = CL_DASH:
+        elif c = Cl.dash:
             k ← tokens.Tk.minus
             if b1 = 62:
                 k ← tokens.Tk.arrow
@@ -543,11 +550,11 @@ impl Lexer:
             self.adv()
         self.emit(k, spos, w, scol, 0, 0)
 
-    fn read_glyph(&mut self, c : i64):
+    fn read_glyph(&mut self, c : Cl):
         let spos : i64 = self.pos
         let scol : i64 ¤"col" = self.col
-        if c = CL_MB2:
-            let key : i64 = self.peek(0) × 256 + self.peek(1)
+        if c = Cl.mb2:
+            let key : i32 = self.peek(0) × 256 + self.peek(1)
             let k : tokens.Tk = tokens.GLYPHS2[key] ?? tokens.Tk.none
             if k = tokens.Tk.none:
                 self.err("this character begins nothing core-1 knows")
@@ -555,7 +562,7 @@ impl Lexer:
             self.advg(2)
             self.emit(k, spos, 2, scol, 0, 0)
         else:
-            let key : i64 = self.peek(0) × 65536 + self.peek(1) × 256 + self.peek(2)
+            let key : i32 = self.peek(0) × 65536 + self.peek(1) × 256 + self.peek(2)
             let k : tokens.Tk = tokens.GLYPHS3[key] ?? tokens.Tk.none
             if k = tokens.Tk.none:
                 self.err("this character begins nothing core-1 knows")
@@ -592,32 +599,38 @@ fn lex(src : byte[]) → Toks:
             at_line_start ← false
             if #lx.diags > 0:
                 break
-        let b : i64 = lx.peek(0)
-        let c : i64 = lx.cls[b × 1¤ptrdiff]
-        if c = CL_PUNCT:
-            let k : tokens.Tk = lx.punct[b × 1¤ptrdiff]
-            if k = tokens.Tk.lpar or k = tokens.Tk.lbrack or k = tokens.Tk.lbrace:
-                lx.parens ← lx.parens + 1
-            if (k = tokens.Tk.rpar or k = tokens.Tk.rbrack or k = tokens.Tk.rbrace) and lx.parens > 0:
-                lx.parens ← lx.parens - 1
-            lx.emit(k, lx.pos, 1, lx.col, 0, 0)
-            lx.adv()
-        elif c = CL_DIGIT:
-            lx.read_number()
-        elif c = CL_IDENT:
-            lx.read_ident()
-        elif c = CL_QUOTE:
-            lx.read_string()
-        elif c = CL_APOS:
-            lx.read_char()
-        elif c = CL_MB2 or c = CL_MB3:
-            lx.read_glyph(c)
-        elif c >= CL_COLON and c <= CL_QMARK:
-            lx.read_op2(c)
-        elif c = CL_SLASH:
-            lx.err("'/' is not an operator; division is written ÷")
-        else:
-            lx.err("this byte begins nothing core-1 knows")
+        // The byte is what the two tables are indexed by, so it is
+        // measured as an index: every use of it below is one.
+        let b : i64 ¤ptrdiff = lx.peek(0) × 1¤ptrdiff
+        let c : Cl = lx.cls[b]
+        // One arm per class, which is what the table was built to
+        // allow: the class is read once and the arm is reached without
+        // walking a ladder of comparisons.
+        match c:
+            Cl.punct:
+                let k : tokens.Tk = lx.punct[b]
+                if k = tokens.Tk.lpar or k = tokens.Tk.lbrack or k = tokens.Tk.lbrace:
+                    lx.parens ← lx.parens + 1
+                if (k = tokens.Tk.rpar or k = tokens.Tk.rbrack or k = tokens.Tk.rbrace) and lx.parens > 0:
+                    lx.parens ← lx.parens - 1
+                lx.emit(k, lx.pos, 1, lx.col, 0, 0)
+                lx.adv()
+            Cl.digit:
+                lx.read_number()
+            Cl.ident:
+                lx.read_ident()
+            Cl.quote:
+                lx.read_string()
+            Cl.apos:
+                lx.read_char()
+            Cl.mb2, Cl.mb3:
+                lx.read_glyph(c)
+            Cl.colon, Cl.lt, Cl.gt, Cl.dash, Cl.qmark:
+                lx.read_op2(c)
+            Cl.slash:
+                lx.err("'/' is not an operator; division is written ÷")
+            _:
+                lx.err("this byte begins nothing core-1 knows")
     if not at_line_start and #lx.diags = 0:
         lx.emit(tokens.Tk.nl, lx.n, 0, lx.col, 0, 0)
     while #lx.indents > 1:

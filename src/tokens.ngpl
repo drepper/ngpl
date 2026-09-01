@@ -159,7 +159,7 @@ let KEYWORDS : std.dict(str, Tk) = (⸨
 // number: b0×256+b1 for two-byte glyphs, b0×65536+b1×256+b2 for three.
 // One hash probe per glyph instead of a branch tree over byte values.
 @export
-let GLYPHS2 : std.dict(i64, Tk) = (⸨
+let GLYPHS2 : std.dict(i32, Tk) = (⸨
     49835: Tk.shl,      // « shl
     49851: Tk.shr,      // » shr
     49836: Tk.lnot,      // ¬
@@ -169,7 +169,7 @@ let GLYPHS2 : std.dict(i64, Tk) = (⸨
     52923: Tk.lambda⸩)    // λ
 
 @export
-let GLYPHS3 : std.dict(i64, Tk) = (⸨
+let GLYPHS3 : std.dict(i32, Tk) = (⸨
     14847411: Tk.iota,   // ⍳
     14847412: Tk.reshape,   // ⍴
     14846622: Tk.satadd,   // ⊞
