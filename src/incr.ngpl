@@ -16,11 +16,11 @@
 // previous build said about itself, and which functions this one must
 // generate again.
 
-let ast := @import("./ast.ngpl")
-let emit := @import("./emit.ngpl")
-let lex := @import("./lex.ngpl")
-let sbom := @import("./sbom.ngpl")
-let tokens := @import("./tokens.ngpl")
+let ast := @import("ast")
+let emit := @import("emit")
+let lex := @import("lex")
+let sbom := @import("sbom")
+let tokens := @import("tokens")
 
 // How much room a function is given beyond what it takes.  Twenty per
 // cent: enough that an edit to a body usually still fits where the body

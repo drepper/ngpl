@@ -16,9 +16,9 @@
 // and nothing in between.
 // ---------------------------------------------------------------------------
 
-let sbom_m := @import("./sbom.ngpl")
-let sha256 := @import("./sha256.ngpl")
-let tokens := @import("./tokens.ngpl")
+let sbom_m := @import("sbom")
+let sha256 := @import("sha256")
+let tokens := @import("tokens")
 
 // the machines ELF names, with the format's own width
 

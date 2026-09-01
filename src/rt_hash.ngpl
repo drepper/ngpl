@@ -26,10 +26,10 @@
 // and the builder takes them as the plain numbers the instruction
 // encodes.
 
-let emit := @import("./emit.ngpl")
-let ir := @import("./ir.ngpl")
-let lower := @import("./lower.ngpl")
-let rt_portable := @import("./rt_portable.ngpl")
+let emit := @import("emit")
+let ir := @import("ir")
+let lower := @import("lower")
+let rt_portable := @import("rt_portable")
 
 // Where things sit in a handle.  The buffer is as wide as the widest
 // block any algorithm here absorbs, so the layout does not move when

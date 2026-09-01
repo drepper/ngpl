@@ -1,11 +1,11 @@
-let ast := @import("./ast.ngpl")
-let check := @import("./check.ngpl")
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
-let ir := @import("./ir.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
-let types := @import("./types.ngpl")
+let ast := @import("ast")
+let check := @import("check")
+let elf := @import("elf")
+let emit := @import("emit")
+let ir := @import("ir")
+let lex := @import("lex")
+let tokens := @import("tokens")
+let types := @import("types")
 
 // ===========================================================================
 // Lowering: Ast + Chk → IrFn per function

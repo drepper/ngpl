@@ -1,5 +1,5 @@
-let emit := @import("./emit.ngpl")
-let ir_m := @import("./ir.ngpl")
+let emit := @import("emit")
+let ir_m := @import("ir")
 
 // ===========================================================================
 // x86-64: the hand-tuned emitter

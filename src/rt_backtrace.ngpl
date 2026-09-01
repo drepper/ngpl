@@ -31,13 +31,13 @@
 // program computes with, so they carry no unit -- as everywhere the IR
 // is built.
 
-let ast := @import("./ast.ngpl")
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
-let ir := @import("./ir.ngpl")
-let lower := @import("./lower.ngpl")
-let rt_portable := @import("./rt_portable.ngpl")
-let tokens := @import("./tokens.ngpl")
+let ast := @import("ast")
+let elf := @import("elf")
+let emit := @import("emit")
+let ir := @import("ir")
+let lower := @import("lower")
+let rt_portable := @import("rt_portable")
+let tokens := @import("tokens")
 
 // How many frames are worth printing before the rest is repetition.
 

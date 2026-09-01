@@ -1,5 +1,5 @@
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
+let elf := @import("elf")
+let emit := @import("emit")
 
 // ===========================================================================
 // The retargetable backend's abstract machine

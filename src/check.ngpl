@@ -2,12 +2,12 @@
 // Checking: names, types, widths, units, mutability, purity, returns
 // ===========================================================================
 
-let ast := @import("./ast.ngpl")
-let diag := @import("./diag.ngpl")
-let elf := @import("./elf.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
-let types := @import("./types.ngpl")
+let ast := @import("ast")
+let diag := @import("diag")
+let elf := @import("elf")
+let lex := @import("lex")
+let tokens := @import("tokens")
+let types := @import("types")
 
 // method ids the checker writes into an MCALL's nc
 

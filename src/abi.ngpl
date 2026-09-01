@@ -1,6 +1,6 @@
-let ast := @import("./ast.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
+let ast := @import("ast")
+let lex := @import("lex")
+let tokens := @import("tokens")
 
 // ===========================================================================
 // The convention a function nobody outside can call may take

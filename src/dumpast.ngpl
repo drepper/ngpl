@@ -1,7 +1,7 @@
-let ast := @import("./ast.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
-let types := @import("./types.ngpl")
+let ast := @import("ast")
+let lex := @import("lex")
+let tokens := @import("tokens")
+let types := @import("types")
 
 // ===========================================================================
 // AST dump, one node a line

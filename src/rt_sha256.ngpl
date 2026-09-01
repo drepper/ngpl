@@ -30,11 +30,11 @@
 // measure nothing; they carry no unit, as everywhere else the IR is
 // built.
 
-let emit := @import("./emit.ngpl")
-let ir := @import("./ir.ngpl")
-let rt_hash := @import("./rt_hash.ngpl")
-let rt_portable := @import("./rt_portable.ngpl")
-let sha256 := @import("./sha256.ngpl")
+let emit := @import("emit")
+let ir := @import("ir")
+let rt_hash := @import("rt_hash")
+let rt_portable := @import("rt_portable")
+let sha256 := @import("sha256")
 
 // x turned right by n places, at thirty-two bits.  What falls off the
 // bottom comes back at the top, which a shift alone will not do.

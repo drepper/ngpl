@@ -24,13 +24,13 @@
 // the same reason -- aarch64's startup was lifted out of it into
 // a64_startup so that its arm has something to name.
 
-let arch_a64 := @import("./arch_a64.ngpl")
-let arch_arm := @import("./arch_arm.ngpl")
-let arch_i386 := @import("./arch_i386.ngpl")
-let arch_rv32 := @import("./arch_rv32.ngpl")
-let arch_rv64 := @import("./arch_rv64.ngpl")
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
+let arch_a64 := @import("arch_a64")
+let arch_arm := @import("arch_arm")
+let arch_i386 := @import("arch_i386")
+let arch_rv32 := @import("arch_rv32")
+let arch_rv64 := @import("arch_rv64")
+let elf := @import("elf")
+let emit := @import("emit")
 
 // The arm every dispatcher gives x86-64.  It has its own emitter in
 // x86.ngpl and never reaches these, so this is not a case to handle

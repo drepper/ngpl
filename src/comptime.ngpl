@@ -20,11 +20,11 @@
 // This is where the compiler's compile-time evaluation begins; @build
 // is its first customer.
 
-let ast := @import("./ast.ngpl")
-let diag := @import("./diag.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
-let types := @import("./types.ngpl")
+let ast := @import("ast")
+let diag := @import("diag")
+let lex := @import("lex")
+let tokens := @import("tokens")
+let types := @import("types")
 
 // what a recipe computed with
 

@@ -5,12 +5,12 @@
 // compositions are checked against.
 // ---------------------------------------------------------------------------
 
-let arch_a64 := @import("./arch_a64.ngpl")
-let arch_x86_64 := @import("./arch_x86_64.ngpl")
-let dispatch := @import("./dispatch.ngpl")
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
-let ir_m := @import("./ir.ngpl")
+let arch_a64 := @import("arch_a64")
+let arch_x86_64 := @import("arch_x86_64")
+let dispatch := @import("dispatch")
+let elf := @import("elf")
+let emit := @import("emit")
+let ir_m := @import("ir")
 
 // a value that must fit its width or leave for RT_OV, composed with
 // scratch labels the caller hands out

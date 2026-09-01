@@ -1,7 +1,7 @@
-let arch_a64 := @import("./arch_a64.ngpl")
-let arch_rv64 := @import("./arch_rv64.ngpl")
-let elf := @import("./elf.ngpl")
-let emit := @import("./emit.ngpl")
+let arch_a64 := @import("arch_a64")
+let arch_rv64 := @import("arch_rv64")
+let elf := @import("elf")
+let emit := @import("emit")
 
 // ---------------------------------------------------------------------------
 // riscv32: the RV32IM pair layer

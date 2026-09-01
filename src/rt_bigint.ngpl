@@ -1,6 +1,6 @@
-let emit := @import("./emit.ngpl")
-let ir := @import("./ir.ngpl")
-let rt_portable := @import("./rt_portable.ngpl")
+let emit := @import("emit")
+let ir := @import("ir")
+let rt_portable := @import("rt_portable")
 
 // ===========================================================================
 // int: the arbitrary-precision integer, at run time

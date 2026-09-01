@@ -10,10 +10,10 @@
 // is what a symbol table has to be able to say.
 // ---------------------------------------------------------------------------
 
-let ast := @import("./ast.ngpl")
-let lex := @import("./lex.ngpl")
-let tokens := @import("./tokens.ngpl")
-let types := @import("./types.ngpl")
+let ast := @import("ast")
+let lex := @import("lex")
+let tokens := @import("tokens")
+let types := @import("types")
 
 // FNV-1a over a string's bytes, which is what the hash of a definition
 // is derived from.  The multiply is meant to run off the end of the

@@ -2,7 +2,7 @@
 // The AST: flat parallel arrays indexed by node id
 // ===========================================================================
 
-let diag := @import("./diag.ngpl")
+let diag := @import("diag")
 
 // expressions
 
