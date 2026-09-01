@@ -159,13 +159,13 @@ impl Parser:
         let a : i64 = self.pos + 2
         if a >= n:
             return false
-        if self.toks.kind[a × 1¤ptrdiff] = tokens.TK_RBRACE:
+        if self.toks.kind[a × 1¤ptrdiff] = tokens.Tk.rbrace:
             return true
-        if self.toks.kind[a × 1¤ptrdiff] ≠ tokens.TK_IDENT:
+        if self.toks.kind[a × 1¤ptrdiff] ≠ tokens.Tk.ident:
             return false
         if a + 1 >= n:
             return false
-        self.toks.kind[(a + 1) × 1¤ptrdiff] = tokens.TK_COLON
+        self.toks.kind[(a + 1) × 1¤ptrdiff] = tokens.Tk.colon
 
     // A brace body ends at its '}' and the line ends after it, so an
     // `else` belonging to that if stands on the next line and the
@@ -175,12 +175,12 @@ impl Parser:
     // ends.
     fn skip_nl_before_else(&mut self):
         let n : i64 = @dropunit(#self.toks.kind)
-        if self.peek() ≠ tokens.TK_NL or self.pos + 1 >= n or self.pos = 0:
+        if self.peek() ≠ tokens.Tk.nl or self.pos + 1 >= n or self.pos = 0:
             return
-        if self.toks.kind[(self.pos - 1) × 1¤ptrdiff] ≠ tokens.TK_RBRACE:
+        if self.toks.kind[(self.pos - 1) × 1¤ptrdiff] ≠ tokens.Tk.rbrace:
             return
         let nx : i64 = self.toks.kind[(self.pos + 1) × 1¤ptrdiff]
-        if nx = tokens.TK_ELSE or nx = tokens.TK_ELIF:
+        if nx = tokens.Tk.kw_else or nx = tokens.Tk.kw_elif:
             self.pos ← self.pos + 1
 
     fn ttext(&self, at : i64) → str:
@@ -225,13 +225,15 @@ impl Parser:
         self.poisoned ← false
         while true:
             let k : i64 = self.peek()
-            if k = tokens.TK_EOF or k = tokens.TK_DEDENT:
+            if k = tokens.Tk.eof or k = tokens.Tk.dedent:
                 return
             self.pos ← self.pos + 1
-            if k = tokens.TK_NL:
+            if k = tokens.Tk.nl:
                 return
 
-    fn eat(&mut self, k : i64, what : str) → i64:
+    // The kind wanted arrives as what it is; the table it is compared
+    // against is one array of numbers, and a kind meets a number there.
+    fn eat(&mut self, k : tokens.Tk, what : str) → i64:
         let at : i64 = self.pos
         if self.peek() ≠ k:
             self.err("expected " ⧺ what)
@@ -242,10 +244,10 @@ impl Parser:
     // a name where the bootstrap's reserved words are refused by name
     fn eat_name(&mut self, what : str) → i64:
         let at : i64 = self.pos
-        if self.peek() = tokens.TK_RESERVED:
+        if self.peek() = tokens.Tk.reserved:
             self.err("'" ⧺ self.ttext(at) ⧺ "' is a word the language reserves")
             return at
-        if self.peek() ≠ tokens.TK_IDENT:
+        if self.peek() ≠ tokens.Tk.ident:
             self.err("expected " ⧺ what)
             return at
         self.pos ← self.pos + 1
@@ -258,15 +260,18 @@ impl Parser:
         // a member's or field's name may be any word, including one
         // the language keeps for itself elsewhere: 'type' names a type
         // at the top level and a directory entry's kind after a dot
-        if self.peek() ≠ tokens.TK_IDENT and self.peek() ≠ tokens.TK_RESERVED and self.peek() ≠ tokens.TK_TYPE and self.peek() ≠ tokens.TK_ENUM:
+        if self.peek() ≠ tokens.Tk.ident and self.peek() ≠ tokens.Tk.reserved and self.peek() ≠ tokens.Tk.kw_type and self.peek() ≠ tokens.Tk.kw_enum:
             self.err("expected " ⧺ what)
             return at
         self.pos ← self.pos + 1
         at
 
-    fn mknode(&mut self, k : i64, tok : i64, a : i64, b : i64, c : i64) → i64:
+    // The kind arrives as what it is and is written down as the number
+    // behind it: the tree is parallel arrays of numbers, which is what
+    // every walk over it indexes.
+    fn mknode(&mut self, k : ast.Nk, tok : i64, a : i64, b : i64, c : i64) → i64:
         let id : i64 = @dropunit(#self.nkind)
-        self.nkind.push(k)
+        self.nkind.push(k.ord())
         self.ntok.push(tok)
         self.na.push(a)
         self.nb.push(b)
@@ -292,16 +297,16 @@ impl Parser:
     // parameters and the caller of parse_type says whether they may be
     fn parse_type(&mut self, allow_ref : bool) → i64:
         let refk : mut i64 = 0
-        if self.peek() = tokens.TK_BAND:
+        if self.peek() = tokens.Tk.band:
             if not allow_ref:
                 self.err("a borrow is written on a parameter, not here")
                 return types.TY_I64
             self.pos ← self.pos + 1
             refk ← 1
-            if self.peek() = tokens.TK_MUT:
+            if self.peek() = tokens.Tk.kw_mut:
                 self.pos ← self.pos + 1
                 refk ← 2
-        if self.peek() = tokens.TK_LPAR:
+        if self.peek() = tokens.Tk.lpar:
             // (T1, T2, …): a tuple type
             self.pos ← self.pos + 1
             if refk ≠ 0:
@@ -317,24 +322,24 @@ impl Parser:
                 es.push(et)
                 if self.failed():
                     return types.TY_I64
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
                 else:
                     break
-            _ ← self.eat(tokens.TK_RPAR, "')' closing the tuple type")
+            _ ← self.eat(tokens.Tk.rpar, "')' closing the tuple type")
             if #es < 2:
                 self.err("a tuple type holds at least two elements; (T) is just T")
                 return types.TY_I64
-            if self.peek() = tokens.TK_QMARK:
+            if self.peek() = tokens.Tk.qmark:
                 // a tuple is a pointer to its elements, so an optional
                 // one is that pointer in a box, as any optional is
                 self.pos ← self.pos + 1
                 return types.mk_oty(types.mk_tty(self.tup_intern(es)))
-            if self.peek() = tokens.TK_LBRACK:
+            if self.peek() = tokens.Tk.lbrack:
                 self.err("an array of tuples is not core-2 yet")
                 return types.TY_I64
             return types.mk_tty(self.tup_intern(es))
-        if self.peek() = tokens.TK_INT:
+        if self.peek() = tokens.Tk.number:
             self.err("'" ⧺ self.ttext(self.pos) ⧺ """' does not name a type; a type is written by
                                                    " name, as i64""")
             return types.TY_I64
@@ -344,7 +349,7 @@ impl Parser:
         // `m.Name` where m is a bound import: a type of another module,
         // named through the only way into it.  Nothing else puts a dot
         // in a type, so the shape settles it.
-        if name ≠ "std" and self.peek() = tokens.TK_DOT and self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.TK_IDENT:
+        if name ≠ "std" and self.peek() = tokens.Tk.dot and self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.Tk.ident:
             let bm : str = self.bound_module(ntok)
             if bm ≠ "":
                 self.pos ← self.pos + 1
@@ -355,20 +360,24 @@ impl Parser:
                 self.hold_export(tn, bm, own)
         let stdbase : mut i64 = ⁻1
         if name = "std":
-            _ ← self.eat(tokens.TK_DOT, "'.' after std")
+            _ ← self.eat(tokens.Tk.dot, "'.' after std")
             let m := self.ttext(self.pos)
             _ ← self.eat_word("the std type's name")
             if m = "dict":
-                _ ← self.eat(tokens.TK_LPAR, "'(' after std.dict")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after std.dict")
                 let kt : i64 = self.parse_type(false)
-                _ ← self.eat(tokens.TK_COMMA, "',' between the key and value types")
+                _ ← self.eat(tokens.Tk.comma, "',' between the key and value types")
                 let vt : i64 = self.parse_type(false)
-                _ ← self.eat(tokens.TK_RPAR, "')' closing std.dict")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing std.dict")
                 if not ((types.ty_is_int(kt) and types.ty_unit(kt) = 0) or kt = types.TY_STR):
                     self.err("a core-2 dictionary key is a plain integer or a string")
                     return types.TY_I64
-                if not ((types.ty_is_int(vt) and types.ty_unit(vt) = 0) or vt = types.TY_BOOL or vt = types.TY_STR or types.ty_is_struct(vt)):
-                    self.err("a core-2 dictionary holds integers, truth values, strings or structs")
+                // An enum is a number underneath and travels as one, so
+                // a table may hold what it means rather than the number
+                // behind it.
+                if not ((types.ty_is_int(vt) and types.ty_unit(vt) = 0) or vt = types.TY_BOOL or vt = types.TY_STR or types.ty_is_struct(vt) or types.ty_is_enum(vt)):
+                    self.err("""a core-2 dictionary holds integers, truth values, strings, structs
+                              " or enumerations""")
                     return types.TY_I64
                 if refk ≠ 0:
                     return types.mk_hty(kt, vt) + 262144 × refk
@@ -419,7 +428,7 @@ impl Parser:
                     return types.TY_I64
                 tv ← 194048 + @dropunit(#self.tvn)
                 self.tvn.push(name)
-            if self.peek() = tokens.TK_LBRACK or self.peek() = tokens.TK_QMARK or self.peek() = tokens.TK_CURRENCY:
+            if self.peek() = tokens.Tk.lbrack or self.peek() = tokens.Tk.qmark or self.peek() = tokens.Tk.currency:
                 self.err("a type variable stands alone; it carries no suffix")
                 return types.TY_I64
             if refk ≠ 0:
@@ -431,14 +440,14 @@ impl Parser:
             self.err("'" ⧺ name ⧺ "' is not a core-2 type")
             return types.TY_I64
         let base : mut i64 = base0
-        if self.peek() = tokens.TK_CURRENCY:
+        if self.peek() = tokens.Tk.currency:
             self.pos ← self.pos + 1
             // ¤name for a measure the language knows and ¤"name" for
             // one the file defined, the same two spellings a binding
             // takes -- a return type and a field are written the way a
             // parameter is or they are not written the same language
             let uname : mut str = ""
-            if self.peek() = tokens.TK_STR:
+            if self.peek() = tokens.Tk.string:
                 uname ← self.toks.strs[self.toks.val[self.pos × 1¤ptrdiff] × 1¤ptrdiff]
                 self.pos ← self.pos + 1
             else:
@@ -452,21 +461,21 @@ impl Parser:
                     base ← types.ty_with_unit(base, uix)
                 else:
                     self.err("'¤" ⧺ uname ⧺ "' is no measure this file knows")
-        if self.peek() = tokens.TK_LBRACK:
+        if self.peek() = tokens.Tk.lbrack:
             self.pos ← self.pos + 1
             if not types.ty_is_int(base) and not types.ty_is_struct(base) and not types.ty_is_enum(base) and base ≠ types.TY_CHAR and base ≠ types.TY_STR and base ≠ types.TY_BOOL and base ≠ types.TY_IOVEC:
                 self.err("""a core-2 array holds plain integers, truth values, characters, strings
                           " or structs""")
                 return types.TY_I64
             let d0 : mut i64 = ⁻1
-            if self.peek() = tokens.TK_INT:
+            if self.peek() = tokens.Tk.number:
                 // T[n]: the size is part of the type
                 if self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
                     self.err("a sized array states its size as a plain number")
                     return types.TY_I64
                 d0 ← self.toks.val[self.pos × 1¤ptrdiff]
                 self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_COMMA:
+            if self.peek() = tokens.Tk.comma:
                 // T[,] and its sized kin: a matrix, its rows one type
                 self.pos ← self.pos + 1
                 if types.ty_is_struct(base):
@@ -474,38 +483,38 @@ impl Parser:
                               " strings""")
                     return types.TY_I64
                 let d1 : mut i64 = ⁻1
-                if self.peek() = tokens.TK_INT:
+                if self.peek() = tokens.Tk.number:
                     if self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
                         self.err("a matrix states its extents as plain numbers")
                         return types.TY_I64
                     d1 ← self.toks.val[self.pos × 1¤ptrdiff]
                     self.pos ← self.pos + 1
                 let d2 : mut i64 = ⁻2
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     // T[,,]: a cube, its planes one matrix type
                     self.pos ← self.pos + 1
                     d2 ← ⁻1
-                    if self.peek() = tokens.TK_INT:
+                    if self.peek() = tokens.Tk.number:
                         if self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
                             self.err("a matrix states its extents as plain numbers")
                             return types.TY_I64
                         d2 ← self.toks.val[self.pos × 1¤ptrdiff]
                         self.pos ← self.pos + 1
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         self.err("a rank-4 array is not core-2 yet")
                         return types.TY_I64
-                _ ← self.eat(tokens.TK_RBRACK, "']' closing the matrix type")
+                _ ← self.eat(tokens.Tk.rbrack, "']' closing the matrix type")
                 if d0 = 0 or d1 = 0 or d2 = 0:
                     self.err("a matrix has at least one row and one column")
                     return types.TY_I64
                 base ← types.mk_mty(self.mat_intern(base, d0, d1, d2))
             elif d0 ≠ ⁻1:
-                _ ← self.eat(tokens.TK_RBRACK, "']' closing the sized array type")
+                _ ← self.eat(tokens.Tk.rbrack, "']' closing the sized array type")
                 base ← types.mk_fty(self.farr_intern(base, d0))
             else:
-                _ ← self.eat(tokens.TK_RBRACK, "']' closing the array type")
+                _ ← self.eat(tokens.Tk.rbrack, "']' closing the array type")
                 base ← types.mk_aty(base)
-        if self.peek() = tokens.TK_QMARK or self.peek() = tokens.TK_BANG:
+        if self.peek() = tokens.Tk.qmark or self.peek() = tokens.Tk.bang:
             // T? and T!: the expected rides the optional's box; what an
             // error carries beyond absence is not core-2 yet
             self.pos ← self.pos + 1
@@ -715,13 +724,13 @@ impl Parser:
         types.ty_with_unit(ty, u)
 
     fn parse_name_unit(&mut self) → i64:
-        if self.peek() ≠ tokens.TK_CURRENCY:
+        if self.peek() ≠ tokens.Tk.currency:
             return types.UNIT_NONE
         self.pos ← self.pos + 1
         // ¤name for one the language knows, ¤"name" for one the file
         // defined, as the specification writes them
         let uname : mut str = ""
-        if self.peek() = tokens.TK_STR:
+        if self.peek() = tokens.Tk.string:
             uname ← self.toks.strs[self.toks.val[self.pos × 1¤ptrdiff] × 1¤ptrdiff]
             self.pos ← self.pos + 1
         else:
@@ -738,31 +747,31 @@ impl Parser:
     // ------------------------------------------------------------------
 
     fn parse_args(&mut self) → i64:
-        _ ← self.eat(tokens.TK_LPAR, "'('")
+        _ ← self.eat(tokens.Tk.lpar, "'('")
         let args : mut i64[] = []
-        if self.peek() ≠ tokens.TK_RPAR:
+        if self.peek() ≠ tokens.Tk.rpar:
             while true:
-                if self.peek() = tokens.TK_BAND:
+                if self.peek() = tokens.Tk.band:
                     // &x hands the callee the array itself; whether it
                     // may write is the parameter's declaration
                     let at : i64 = self.pos
                     self.pos ← self.pos + 1
-                    if self.peek() = tokens.TK_MUT:
+                    if self.peek() = tokens.Tk.kw_mut:
                         self.err("""a borrow at a call is written &name; &mut is the parameter's
                                   " side""")
                         return ⁻1
                     let vtok : i64 = self.pos
                     _ ← self.eat_name("the borrowed name")
-                    let v : i64 = self.mknode(ast.NK_VAR, vtok, 0, 0, 0)
-                    args.push(self.mknode(ast.NK_REF, at, v, 1, 0))
+                    let v : i64 = self.mknode(ast.Nk.var, vtok, 0, 0, 0)
+                    args.push(self.mknode(ast.Nk.ref, at, v, 1, 0))
                 else:
                     args.push(self.parse_expr())
                 if self.failed(): return ⁻1
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
                 else:
                     break
-        _ ← self.eat(tokens.TK_RPAR, "')' after the arguments")
+        _ ← self.eat(tokens.Tk.rpar, "')' after the arguments")
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#args))
         foreach a := args:
@@ -782,7 +791,7 @@ impl Parser:
         while true:
             let ptok : i64 = self.pos
             _ ← self.eat_name("the parameter's name")
-            if self.peek() ≠ tokens.TK_COLON:
+            if self.peek() ≠ tokens.Tk.colon:
                 bad ← 2
                 ptoks.push(ptok)
                 pts.push(types.TY_I64)
@@ -796,38 +805,38 @@ impl Parser:
                 let pt : i64 = self.parse_type(false)
                 if not (types.ty_is_int(pt) or pt = types.TY_BOOL or pt = types.TY_CHAR or pt = types.TY_STR):
                     self.err("a core-2 lambda takes integers, truth values, characters and strings")
-                    return self.mknode(ast.NK_INT, at, 0, 0, 0)
+                    return self.mknode(ast.Nk.lit_int, at, 0, 0, 0)
                 ptoks.push(ptok)
                 pts.push(pt)
             if self.failed():
-                return self.mknode(ast.NK_INT, at, 0, 0, 0)
-            if self.peek() = tokens.TK_COMMA:
+                return self.mknode(ast.Nk.lit_int, at, 0, 0, 0)
+            if self.peek() = tokens.Tk.comma:
                 self.pos ← self.pos + 1
             else:
                 break
         if #pts > 5:
             self.err("a core-2 lambda takes at most five parameters")
-            return self.mknode(ast.NK_INT, at, 0, 0, 0)
+            return self.mknode(ast.Nk.lit_int, at, 0, 0, 0)
         let caps : mut i64[] = []
-        if self.peek() = tokens.TK_BOR:
+        if self.peek() = tokens.Tk.bor:
             self.pos ← self.pos + 1
-            while self.peek() ≠ tokens.TK_BOR and not self.failed():
+            while self.peek() ≠ tokens.Tk.bor and not self.failed():
                 let ctok : i64 = self.pos
                 _ ← self.eat_name("the captured name")
                 caps.push(ctok)
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
-            _ ← self.eat(tokens.TK_BOR, "'|' closing the capture list")
+            _ ← self.eat(tokens.Tk.bor, "'|' closing the capture list")
             if #caps = 0 and bad = 0:
                 bad ← 1
         let ret : mut i64 = types.TY_UNIT
-        if self.peek() ≠ tokens.TK_ARROW:
+        if self.peek() ≠ tokens.Tk.arrow:
             if bad = 0:
                 bad ← 3
             ret ← types.TY_I64
         else:
             self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_EMPTY:
+            if self.peek() = tokens.Tk.empty:
                 // parsed so an @expect may hold it; the checker refuses it
                 self.pos ← self.pos + 1
             else:
@@ -836,22 +845,22 @@ impl Parser:
                 if not ((types.ty_is_int(rb) and types.ty_unit(rb) = 0) or rb = types.TY_BOOL or rb = types.TY_CHAR or rb = types.TY_STR):
                     self.err("""a core-2 lambda answers a plain integer, a truth value, a character
                               " or a string""")
-                    return self.mknode(ast.NK_INT, at, 0, 0, 0)
+                    return self.mknode(ast.Nk.lit_int, at, 0, 0, 0)
         let body : mut i64 = ⁻1
-        if self.peek() = tokens.TK_LBRACE:
+        if self.peek() = tokens.Tk.lbrace:
             // written in braces, as any other block may be
             body ← self.parse_brace_block()
-        elif self.peek() = tokens.TK_COLON and self.peek2() = tokens.TK_NL:
+        elif self.peek() = tokens.Tk.colon and self.peek2() = tokens.Tk.nl:
             // a layout block, statement by statement, as a function's
             body ← self.parse_block()
-        elif self.peek() = tokens.TK_COLON and self.peek2() = tokens.TK_LBRACE:
+        elif self.peek() = tokens.Tk.colon and self.peek2() = tokens.Tk.lbrace:
             self.err(both_openers())
-            return self.mknode(ast.NK_INT, at, 0, 0, 0)
+            return self.mknode(ast.Nk.lit_int, at, 0, 0, 0)
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' and the lambda's body")
+            _ ← self.eat(tokens.Tk.colon, "':' or '{' and the lambda's body")
             body ← self.parse_expr()
         if bad ≠ 0:
-            return self.mknode(ast.NK_BADLAM, at, bad, 0, 0)
+            return self.mknode(ast.Nk.badlam, at, bad, 0, 0)
         let li : i64 = self.lam_intern(pts, ret, lstb)
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#pts))
@@ -863,128 +872,128 @@ impl Parser:
             foreach i := 0…#caps:
                 self.extra.push(caps[i])
         self.extra.push(ret)
-        self.mknode(ast.NK_LAMBDA, at, off, body, li)
+        self.mknode(ast.Nk.lambda, at, off, body, li)
 
     // { s; s; e }: the braces hold statements where layout cannot go,
     // inside parentheses; ';' separates them and the last is the value
     fn parse_brace_block(&mut self) → i64:
-        _ ← self.eat(tokens.TK_LBRACE, "'{' opening the block")
+        _ ← self.eat(tokens.Tk.lbrace, "'{' opening the block")
         self.braces ← self.braces + 1
         let stmts : mut i64[] = []
-        while self.peek() ≠ tokens.TK_RBRACE and not self.failed():
+        while self.peek() ≠ tokens.Tk.rbrace and not self.failed():
             stmts.push(self.parse_stmt())
             // A statement that is itself a block -- an if, a while, a
             // walk -- ends at its own '}' and has no terminator of its
             // own to eat, where a plain one has already eaten the ';'
             // in end_stmt.  So the separator is taken here if it is
             // still there, which serves both.
-            if self.peek() = tokens.TK_SEMI:
+            if self.peek() = tokens.Tk.semi:
                 self.pos ← self.pos + 1
         self.braces ← self.braces - 1
-        _ ← self.eat(tokens.TK_RBRACE, "'}' closing the block")
+        _ ← self.eat(tokens.Tk.rbrace, "'}' closing the block")
         let off : i64 = @dropunit(self.push_list(stmts))
-        self.mknode(ast.NK_BLOCK, 0, off, 0, 0)
+        self.mknode(ast.Nk.block, 0, off, 0, 0)
 
     fn parse_postfix(&mut self, base0 : i64) → i64:
         let e : mut i64 = base0
         while not self.failed():
-            if self.peek() = tokens.TK_LBRACK:
+            if self.peek() = tokens.Tk.lbrack:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let idx : i64 = self.parse_expr()
-                if self.nkind[idx × 1¤ptrdiff] = ast.NK_RANGEV:
+                if self.nkind[idx × 1¤ptrdiff] = ast.Nk.rangev:
                     // v[a…b]: both ends included, a fresh array answers
                     if self.nc[idx × 1¤ptrdiff] ≠ ⁻1:
                         self.err("a stepped slice is not core-2 yet")
                         return e
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         // m[rows, cols] and m[rows, i]: a range of rows
                         // cut down the other way.  Neither can hand back
                         // rows the matrix already holds, so both build
                         // what they answer.
                         self.pos ← self.pos + 1
                         let cidx : i64 = self.parse_expr()
-                        if self.peek() = tokens.TK_COMMA:
+                        if self.peek() = tokens.Tk.comma:
                             self.err("a rank-3 subscript is not core-2 yet")
                             return e
-                        _ ← self.eat(tokens.TK_RBRACK, "']' closing the subscript")
+                        _ ← self.eat(tokens.Tk.rbrack, "']' closing the subscript")
                         let moff : i64 = @dropunit(#self.extra)
                         self.extra.push(self.na[idx × 1¤ptrdiff])
                         self.extra.push(self.nb[idx × 1¤ptrdiff])
-                        if self.nkind[cidx × 1¤ptrdiff] = ast.NK_RANGEV:
+                        if self.nkind[cidx × 1¤ptrdiff] = ast.Nk.rangev:
                             if self.nc[cidx × 1¤ptrdiff] ≠ ⁻1:
                                 self.err("a stepped slice is not core-2 yet")
                                 return e
                             self.extra.push(self.na[cidx × 1¤ptrdiff])
                             self.extra.push(self.nb[cidx × 1¤ptrdiff])
-                            e ← self.mknode(ast.NK_MSLICE, at, e, moff, 0)
+                            e ← self.mknode(ast.Nk.mslice, at, e, moff, 0)
                         else:
                             // one column: an element from each row, so
                             // what answers is an array and not a matrix
                             self.extra.push(cidx)
                             self.extra.push(⁻1)
-                            e ← self.mknode(ast.NK_MSLICE, at, e, moff, 1)
+                            e ← self.mknode(ast.Nk.mslice, at, e, moff, 1)
                         continue
-                    _ ← self.eat(tokens.TK_RBRACK, "']' closing the slice")
-                    e ← self.mknode(ast.NK_SLICE, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
-                elif self.peek() = tokens.TK_COMMA:
+                    _ ← self.eat(tokens.Tk.rbrack, "']' closing the slice")
+                    e ← self.mknode(ast.Nk.slice, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
+                elif self.peek() = tokens.Tk.comma:
                     // m[i, j] and m[i, a…b] reach the row and ask it,
                     // so the pair is the chain m[i][j] written short
                     self.pos ← self.pos + 1
-                    e ← self.mknode(ast.NK_INDEX, at, e, idx, 0)
+                    e ← self.mknode(ast.Nk.index, at, e, idx, 0)
                     let jdx : i64 = self.parse_expr()
-                    if self.peek() = tokens.TK_COMMA and self.nkind[jdx × 1¤ptrdiff] ≠ ast.NK_RANGEV:
+                    if self.peek() = tokens.Tk.comma and self.nkind[jdx × 1¤ptrdiff] ≠ ast.Nk.rangev:
                         // c[i, j, k]: one step further in, one more link
                         self.pos ← self.pos + 1
-                        e ← self.mknode(ast.NK_INDEX, at, e, jdx, 0)
+                        e ← self.mknode(ast.Nk.index, at, e, jdx, 0)
                         let kdx : i64 = self.parse_expr()
-                        if self.peek() = tokens.TK_COMMA:
+                        if self.peek() = tokens.Tk.comma:
                             self.err("a rank-4 subscript is not core-2 yet")
                             return e
-                        if self.nkind[kdx × 1¤ptrdiff] = ast.NK_RANGEV:
+                        if self.nkind[kdx × 1¤ptrdiff] = ast.Nk.rangev:
                             if self.nc[kdx × 1¤ptrdiff] ≠ ⁻1:
                                 self.err("a stepped slice is not core-2 yet")
                                 return e
-                            _ ← self.eat(tokens.TK_RBRACK, "']' closing the slice")
-                            e ← self.mknode(ast.NK_SLICE, at, e, self.na[kdx × 1¤ptrdiff], self.nb[kdx × 1¤ptrdiff])
+                            _ ← self.eat(tokens.Tk.rbrack, "']' closing the slice")
+                            e ← self.mknode(ast.Nk.slice, at, e, self.na[kdx × 1¤ptrdiff], self.nb[kdx × 1¤ptrdiff])
                         else:
-                            _ ← self.eat(tokens.TK_RBRACK, "']' closing the subscript")
-                            e ← self.mknode(ast.NK_INDEX, at, e, kdx, 0)
+                            _ ← self.eat(tokens.Tk.rbrack, "']' closing the subscript")
+                            e ← self.mknode(ast.Nk.index, at, e, kdx, 0)
                         continue
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         self.err("a rank-3 subscript is not core-2 yet")
                         return e
-                    if self.nkind[jdx × 1¤ptrdiff] = ast.NK_RANGEV:
+                    if self.nkind[jdx × 1¤ptrdiff] = ast.Nk.rangev:
                         if self.nc[jdx × 1¤ptrdiff] ≠ ⁻1:
                             self.err("a stepped slice is not core-2 yet")
                             return e
-                        _ ← self.eat(tokens.TK_RBRACK, "']' closing the slice")
-                        e ← self.mknode(ast.NK_SLICE, at, e, self.na[jdx × 1¤ptrdiff], self.nb[jdx × 1¤ptrdiff])
+                        _ ← self.eat(tokens.Tk.rbrack, "']' closing the slice")
+                        e ← self.mknode(ast.Nk.slice, at, e, self.na[jdx × 1¤ptrdiff], self.nb[jdx × 1¤ptrdiff])
                     else:
-                        _ ← self.eat(tokens.TK_RBRACK, "']' closing the subscript")
-                        e ← self.mknode(ast.NK_INDEX, at, e, jdx, 0)
+                        _ ← self.eat(tokens.Tk.rbrack, "']' closing the subscript")
+                        e ← self.mknode(ast.Nk.index, at, e, jdx, 0)
                 else:
-                    _ ← self.eat(tokens.TK_RBRACK, "']' closing the subscript")
-                    e ← self.mknode(ast.NK_INDEX, at, e, idx, 0)
-            elif self.peek() = tokens.TK_LPAR:
+                    _ ← self.eat(tokens.Tk.rbrack, "']' closing the subscript")
+                    e ← self.mknode(ast.Nk.index, at, e, idx, 0)
+            elif self.peek() = tokens.Tk.lpar:
                 // (…) after a value: the value is applied
                 let at : i64 = self.pos
                 let coff : i64 = self.parse_args()
-                e ← self.mknode(ast.NK_CALLV, at, e, coff, 0)
-            elif self.peek() = tokens.TK_QMARK:
+                e ← self.mknode(ast.Nk.callv, at, e, coff, 0)
+            elif self.peek() = tokens.Tk.qmark:
                 // e?: absence answers the function early
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
-                e ← self.mknode(ast.NK_TRY, at, e, 0, 0)
-            elif self.peek() = tokens.TK_DOT:
+                e ← self.mknode(ast.Nk.try, at, e, 0, 0)
+            elif self.peek() = tokens.Tk.dot:
                 self.pos ← self.pos + 1
                 let mtok : i64 = self.pos
                 _ ← self.eat_word("the member's name")
-                if self.peek() = tokens.TK_LPAR:
+                if self.peek() = tokens.Tk.lpar:
                     let off : i64 = self.parse_args()
-                    e ← self.mknode(ast.NK_MCALL, mtok, e, off, 0)
+                    e ← self.mknode(ast.Nk.mcall, mtok, e, off, 0)
                 else:
-                    e ← self.mknode(ast.NK_FIELD, mtok, e, 0, 0)
+                    e ← self.mknode(ast.Nk.field, mtok, e, 0, 0)
             else:
                 break
         e
@@ -992,39 +1001,39 @@ impl Parser:
     fn parse_primary(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
-        if k = tokens.TK_LAMBDA:
+        if k = tokens.Tk.lambda:
             return self.parse_lambda(at, 0)
-        if k = tokens.TK_INT:
+        if k = tokens.Tk.number:
             self.pos ← self.pos + 1
             // A measure the file declared reaches the literal here
             // rather than in the lexer, which settled the built-in ones
             // and left this one as a ¤ and a name of its own.
             let big0 : i64 = self.toks.big[at × 1¤ptrdiff]
             let big : mut i64 = big0
-            if self.peek() = tokens.TK_CURRENCY:
+            if self.peek() = tokens.Tk.currency:
                 let u : i64 = self.parse_name_unit()
                 let st : i64 = big0 » 1
                 if not types.ty_is_int(if st ≠ 0: st else: types.TY_I64):
                     self.err("only an integer carries a unit")
                 else:
                     big ← (big0 & 1) + types.ty_with_unit(if st ≠ 0: st else: types.TY_I64, u) × 2
-            let lit : i64 = self.mknode(ast.NK_INT, at, self.toks.val[at × 1¤ptrdiff],
+            let lit : i64 = self.mknode(ast.Nk.lit_int, at, self.toks.val[at × 1¤ptrdiff],
                                         big, 0)
             // 'a'.ord() reads on; a number's method wants parentheses,
             // as the bootstrap has it
             if big » 1 = types.TY_CHAR:
                 return self.parse_postfix(lit)
             return lit
-        if k = tokens.TK_TRUE or k = tokens.TK_FALSE:
+        if k = tokens.Tk.kw_true or k = tokens.Tk.kw_false:
             self.pos ← self.pos + 1
-            return self.mknode(ast.NK_BOOL, at, if k = tokens.TK_TRUE: 1 else: 0, 0, 0)
-        if k = tokens.TK_STR:
+            return self.mknode(ast.Nk.lit_bool, at, if k = tokens.Tk.kw_true: 1 else: 0, 0, 0)
+        if k = tokens.Tk.string:
             self.pos ← self.pos + 1
-            return self.parse_postfix(self.mknode(ast.NK_STR, at, self.toks.val[at × 1¤ptrdiff], 0, 0))
-        if k = tokens.TK_NEG:
+            return self.parse_postfix(self.mknode(ast.Nk.lit_str, at, self.toks.val[at × 1¤ptrdiff], 0, 0))
+        if k = tokens.Tk.neg:
             self.pos ← self.pos + 1
             // ⁻ against a literal is part of it, as the language says
-            if self.peek() = tokens.TK_INT:
+            if self.peek() = tokens.Tk.number:
                 let vt : i64 = self.pos
                 self.pos ← self.pos + 1
                 if self.toks.big[vt × 1¤ptrdiff] & 1 = 1:
@@ -1037,116 +1046,116 @@ impl Parser:
                 // nothing wraps today; the annotation is what makes
                 // that still true if ⁻9223372036854775808 is ever
                 // admitted, which is the one value that would
-                return self.mknode(ast.NK_INT, vt,
+                return self.mknode(ast.Nk.lit_int, vt,
                                    @wrap(0 - self.toks.val[vt × 1¤ptrdiff]),
                                    self.toks.big[vt × 1¤ptrdiff], 0)
             let e : i64 = self.parse_unary_operand()
-            return self.mknode(ast.NK_NEG, at, e, 0, 0)
-        if k = tokens.TK_BNOT:
+            return self.mknode(ast.Nk.neg, at, e, 0, 0)
+        if k = tokens.Tk.bnot:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
-            return self.mknode(ast.NK_BNOT, at, e, 0, 0)
-        if k = tokens.TK_NOT or k = tokens.TK_LNOT:
+            return self.mknode(ast.Nk.bnot, at, e, 0, 0)
+        if k = tokens.Tk.kw_not or k = tokens.Tk.lnot:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
-            return self.mknode(ast.NK_NOT, at, e, 0, 0)
-        if k = tokens.TK_SOME:
+            return self.mknode(ast.Nk.op_not, at, e, 0, 0)
+        if k = tokens.Tk.kw_some:
             self.pos ← self.pos + 1
-            _ ← self.eat(tokens.TK_LPAR, "'(' after ⊨")
+            _ ← self.eat(tokens.Tk.lpar, "'(' after ⊨")
             let e : i64 = self.parse_expr()
-            _ ← self.eat(tokens.TK_RPAR, "')' closing ⊨")
-            return self.mknode(ast.NK_SOME, at, e, 0, 0)
-        if k = tokens.TK_EMPTY:
+            _ ← self.eat(tokens.Tk.rpar, "')' closing ⊨")
+            return self.mknode(ast.Nk.op_some, at, e, 0, 0)
+        if k = tokens.Tk.empty:
             self.pos ← self.pos + 1
-            return self.mknode(ast.NK_EMPTYV, at, 0, 0, 0)
-        if k = tokens.TK_LHASH:
+            return self.mknode(ast.Nk.emptyv, at, 0, 0, 0)
+        if k = tokens.Tk.lhash:
             self.pos ← self.pos + 1
             let items : mut i64[] = []
-            if self.peek() ≠ tokens.TK_RHASH:
+            if self.peek() ≠ tokens.Tk.rhash:
                 while true:
                     items.push(self.parse_expr())
                     if self.failed(): return 0
-                    if self.peek() ≠ tokens.TK_COLON:
+                    if self.peek() ≠ tokens.Tk.colon:
                         self.err("a set is not core-2 yet; a dictionary writes key: value")
                         return 0
                     self.pos ← self.pos + 1
                     items.push(self.parse_expr())
                     if self.failed(): return 0
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         self.pos ← self.pos + 1
                     else:
                         break
-            _ ← self.eat(tokens.TK_RHASH, "'⸩' closing the dictionary literal")
+            _ ← self.eat(tokens.Tk.rhash, "'⸩' closing the dictionary literal")
             let off : i64 = @dropunit(#self.extra)
             self.extra.push((@dropunit(#items) ÷ 2) ?? 0)
             foreach it := items:
                 self.extra.push(it)
-            return self.mknode(ast.NK_HLIT, at, off, 0, 0)
-        if k = tokens.TK_HASH:
+            return self.mknode(ast.Nk.hlit, at, off, 0, 0)
+        if k = tokens.Tk.hash:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
-            return self.mknode(ast.NK_LEN, at, e, 0, 0)
-        if k = tokens.TK_LPAR:
+            return self.mknode(ast.Nk.len, at, e, 0, 0)
+        if k = tokens.Tk.lpar:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_expr()
-            if self.peek() = tokens.TK_COMMA:
+            if self.peek() = tokens.Tk.comma:
                 // (a, b, …): a tuple literal
                 let elems : mut i64[] = [e]
-                while self.peek() = tokens.TK_COMMA:
+                while self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
                     elems.push(self.parse_expr())
                     if self.failed(): return 0
-                _ ← self.eat(tokens.TK_RPAR, "')' closing the tuple")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing the tuple")
                 let toff : i64 = @dropunit(self.push_list(elems))
-                return self.mknode(ast.NK_TUPLE, at, toff, 0, 0)
-            _ ← self.eat(tokens.TK_RPAR, "')' closing the parenthesis")
+                return self.mknode(ast.Nk.tuple, at, toff, 0, 0)
+            _ ← self.eat(tokens.Tk.rpar, "')' closing the parenthesis")
             return self.parse_postfix(e)
-        if k = tokens.TK_LBRACK:
+        if k = tokens.Tk.lbrack:
             self.pos ← self.pos + 1
             let elems : mut i64[] = []
-            if self.peek() ≠ tokens.TK_RBRACK:
+            if self.peek() ≠ tokens.Tk.rbrack:
                 while true:
                     elems.push(self.parse_expr())
                     if self.failed(): return 0
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         self.pos ← self.pos + 1
-                        if self.peek() = tokens.TK_RBRACK:
+                        if self.peek() = tokens.Tk.rbrack:
                             break
                     else:
                         break
-            _ ← self.eat(tokens.TK_RBRACK, "']' closing the array literal")
+            _ ← self.eat(tokens.Tk.rbrack, "']' closing the array literal")
             let off : i64 = @dropunit(self.push_list(elems))
-            return self.mknode(ast.NK_ARRLIT, at, off, 0, 0)
-        if k = tokens.TK_AT:
+            return self.mknode(ast.Nk.arrlit, at, off, 0, 0)
+        if k = tokens.Tk.at:
             self.pos ← self.pos + 1
             let name := self.ttext(self.pos)
             if name = "typeof":
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @typeof")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @typeof")
                 let te : i64 = self.parse_expr()
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @typeof")
-                return self.mknode(ast.NK_TYPEOF, at, te, 0, 0)
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @typeof")
+                return self.mknode(ast.Nk.typeof, at, te, 0, 0)
             if name = "sizeof":
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @sizeof")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @sizeof")
                 let se : i64 = self.parse_expr()
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @sizeof")
-                return self.mknode(ast.NK_SIZEOF, at, se, 0, 0)
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @sizeof")
+                return self.mknode(ast.Nk.sizeof, at, se, 0, 0)
             if name = "dropunit":
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @dropunit")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @dropunit")
                 let e0 : i64 = self.parse_expr()
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @dropunit")
-                return self.mknode(ast.NK_DROPU, at, e0, 0, 0)
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @dropunit")
+                return self.mknode(ast.Nk.dropu, at, e0, 0, 0)
             if name = "old":
                 // What a value was when the call began.  Read once,
                 // before a statement of the body runs, and only a
                 // postcondition is in a position to ask.
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @old")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @old")
                 let oe : i64 = self.parse_expr()
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @old")
-                let on : i64 = self.mknode(ast.NK_OLD, at, oe, @dropunit(#self.olds), 0)
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @old")
+                let on : i64 = self.mknode(ast.Nk.old, at, oe, @dropunit(#self.olds), 0)
                 self.olds.push(on)
                 return on
             if name = "listable":
@@ -1154,7 +1163,7 @@ impl Parser:
                 // same way; the annotation goes in front of the λ,
                 // which is the only place it could go.
                 self.pos ← self.pos + 1
-                if self.peek() ≠ tokens.TK_LAMBDA:
+                if self.peek() ≠ tokens.Tk.lambda:
                     self.err("""@listable in front of a value marks a lambda as one that threads, so
                               " a λ follows it""")
                     return 0
@@ -1164,38 +1173,38 @@ impl Parser:
                                         " @old are the expression annotations""")
                 return 0
             self.pos ← self.pos + 1
-            _ ← self.eat(tokens.TK_LPAR, "'(' after @wrap")
+            _ ← self.eat(tokens.Tk.lpar, "'(' after @wrap")
             let e : i64 = self.parse_expr()
-            _ ← self.eat(tokens.TK_RPAR, "')' closing @wrap")
-            return self.mknode(ast.NK_WRAP, at, e, 0, 0)
-        if k = tokens.TK_IDENT:
+            _ ← self.eat(tokens.Tk.rpar, "')' closing @wrap")
+            return self.mknode(ast.Nk.op_wrap, at, e, 0, 0)
+        if k = tokens.Tk.ident:
             let name := self.ttext(at)
             // `m.f(…)` where m is a bound import: the name reaches one
             // module and the call is asked of that one.
-            if self.toks.kind[(at + 1) × 1¤ptrdiff] = tokens.TK_DOT:
+            if self.toks.kind[(at + 1) × 1¤ptrdiff] = tokens.Tk.dot:
                 let bm : str = self.bound_module(at)
                 if bm ≠ "":
                     return self.parse_bound(at, bm)
             if name = "std":
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_DOT, "'.' after std")
+                _ ← self.eat(tokens.Tk.dot, "'.' after std")
                 let mtok : i64 = self.pos
                 let m := self.ttext(mtok)
                 _ ← self.eat_word("the std member's name")
                 if m = "implementation":
                     return self.parse_implementation(at)
                 if m = "args":
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.args")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.args")
                     if self.ttext(self.pos) ≠ "all":
                         self.err("'std.args." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; all() is")
                         return 0
                     self.pos ← self.pos + 1
                     let aoff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, ast.SB_ARGS, aoff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.SB_ARGS, aoff, 0)
                 if m = "process":
                     return self.parse_process(at)
                 if m = "env":
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.env")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.env")
                     let em0 := self.ttext(self.pos)
                     let esb : mut i64 = ⁻1
                     if em0 = "names": esb ← ast.SB_ENVN
@@ -1207,72 +1216,72 @@ impl Parser:
                         return 0
                     self.pos ← self.pos + 1
                     let eoff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, esb, eoff, 0)
+                    return self.mknode(ast.Nk.scall, at, esb, eoff, 0)
                 if m = "Build":
                     // std.Build.Executable{…}: the one struct the build
                     // system defines rather than the program.  Its
                     // fields are read as any struct literal's are, and
                     // nb is how the node says which it is.
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.Build")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.Build")
                     let bt := self.ttext(self.pos)
                     if bt ≠ "Executable":
                         self.err("'std.Build." ⧺ bt ⧺ """' is not a type the build system defines;
                                   " std.Build.Executable is""")
                         return 0
                     self.pos ← self.pos + 1
-                    _ ← self.eat(tokens.TK_LBRACE, "'{' after std.Build.Executable")
+                    _ ← self.eat(tokens.Tk.lbrace, "'{' after std.Build.Executable")
                     let bitems : mut i64[] = []
-                    if self.peek() ≠ tokens.TK_RBRACE:
+                    if self.peek() ≠ tokens.Tk.rbrace:
                         while true:
                             bitems.push(self.pos)
                             _ ← self.eat_name("a field's name")
-                            _ ← self.eat(tokens.TK_COLON, "':' after the field's name")
+                            _ ← self.eat(tokens.Tk.colon, "':' after the field's name")
                             bitems.push(self.parse_expr())
                             if self.failed(): return 0
-                            if self.peek() = tokens.TK_COMMA:
+                            if self.peek() = tokens.Tk.comma:
                                 self.pos ← self.pos + 1
                             else:
                                 break
-                    _ ← self.eat(tokens.TK_RBRACE, "'}' closing std.Build.Executable")
+                    _ ← self.eat(tokens.Tk.rbrace, "'}' closing std.Build.Executable")
                     let boff : i64 = @dropunit(#self.extra)
                     self.extra.push(@dropunit(#bitems) ÷ 2 ?? 0)
                     foreach it := bitems:
                         self.extra.push(it)
-                    return self.mknode(ast.NK_SLIT, at, boff, ast.SLIT_EXE, 0)
+                    return self.mknode(ast.Nk.slit, at, boff, ast.SLIT_EXE, 0)
                 if m = "arena":
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.arena")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.arena")
                     if self.ttext(self.pos) ≠ "allocator":
                         self.err("'std.arena." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; allocator() is")
                         return 0
                     self.pos ← self.pos + 1
                     let loff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, ast.SB_ALLOCATOR, loff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.SB_ALLOCATOR, loff, 0)
                 if m = "fs":
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.fs")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.fs")
                     if self.ttext(self.pos) ≠ "cwd":
                         self.err("'std.fs." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; cwd() is")
                         return 0
                     self.pos ← self.pos + 1
-                    _ ← self.eat(tokens.TK_LPAR, "'(' after cwd")
-                    _ ← self.eat(tokens.TK_RPAR, "')' after cwd(")
-                    if self.peek() ≠ tokens.TK_DOT:
+                    _ ← self.eat(tokens.Tk.lpar, "'(' after cwd")
+                    _ ← self.eat(tokens.Tk.rpar, "')' after cwd(")
+                    if self.peek() ≠ tokens.Tk.dot:
                         // the directory itself, a value to iterate
                         let coff0 : i64 = @dropunit(#self.extra)
                         self.extra.push(0)
-                        return self.mknode(ast.NK_SCALL, at, ast.SB_CWD, coff0, 0)
-                    _ ← self.eat(tokens.TK_DOT, "'.' and what cwd() is asked")
+                        return self.mknode(ast.Nk.scall, at, ast.SB_CWD, coff0, 0)
+                    _ ← self.eat(tokens.Tk.dot, "'.' and what cwd() is asked")
                     let fm := self.ttext(self.pos)
                     self.pos ← self.pos + 1
                     if fm = "open_file":
                         let ooff : i64 = self.parse_args()
-                        return self.mknode(ast.NK_SCALL, at, ast.SB_OPEN, ooff, 0)
+                        return self.mknode(ast.Nk.scall, at, ast.SB_OPEN, ooff, 0)
                     if fm = "create_file":
                         let coff : i64 = self.parse_args()
-                        return self.mknode(ast.NK_SCALL, at, ast.SB_CREATE, coff, 0)
+                        return self.mknode(ast.Nk.scall, at, ast.SB_CREATE, coff, 0)
                     self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
                     return 0
                 if m = "filetype":
-                    _ ← self.eat(tokens.TK_DOT, "'.' after std.filetype")
+                    _ ← self.eat(tokens.Tk.dot, "'.' after std.filetype")
                     let fname := self.ttext(self.pos)
                     self.pos ← self.pos + 1
                     // the enumerator's own value, from the builtin
@@ -1288,19 +1297,19 @@ impl Parser:
                         return 0
                     // an enumerator is a value like any other, so what
                     // may follow one may follow this: .ord() above all
-                    return self.parse_postfix(self.mknode(ast.NK_INT, at, fv, types.mk_ety(types.EI_FILETYPE) × 2, 0))
+                    return self.parse_postfix(self.mknode(ast.Nk.lit_int, at, fv, types.mk_ety(types.EI_FILETYPE) × 2, 0))
                 if m = "bytes":
                     let boff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, ast.SB_BYTES, boff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.SB_BYTES, boff, 0)
                 if m = "iov":
                     let ioff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, ast.SB_IOV, ioff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.SB_IOV, ioff, 0)
                 if m = "hash":
                     // std.hash.<alg>.<member>: the algorithm names a
                     // namespace, so another algorithm is another
                     // namespace beside this one rather than two more
                     // names inside std.hash
-                    _ ← self.eat(tokens.TK_DOT, "'.' and which algorithm")
+                    _ ← self.eat(tokens.Tk.dot, "'.' and which algorithm")
                     let aname := self.ttext(self.pos)
                     let algs := ast.hash_algs()
                     let alg : mut i64 = ⁻1
@@ -1311,7 +1320,7 @@ impl Parser:
                         self.err("'std.hash." ⧺ aname ⧺ "' names no algorithm; " ⧺ ast.hash_algs_named() ⧺ " does")
                         return 0
                     self.pos ← self.pos + 1
-                    _ ← self.eat(tokens.TK_DOT, "'.' and what the algorithm is asked")
+                    _ ← self.eat(tokens.Tk.dot, "'.' and what the algorithm is asked")
                     let hm := self.ttext(self.pos)
                     let hsb : mut i64 = ⁻1
                     if hm = "digest": hsb ← ast.SB_HDIGEST
@@ -1328,7 +1337,7 @@ impl Parser:
                     // and the checker only reads what it finds.
                     self.intern_digest_types()
                     let hoff : i64 = self.parse_args()
-                    return self.mknode(ast.NK_SCALL, at, hsb, hoff, alg)
+                    return self.mknode(ast.Nk.scall, at, hsb, hoff, alg)
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← ast.SB_PRINTLN
                 elif m = "print": sb ← ast.SB_PRINT
@@ -1339,19 +1348,19 @@ impl Parser:
                                             " implementation are""")
                     return 0
                 let off : i64 = self.parse_args()
-                return self.mknode(ast.NK_SCALL, at, sb, off, 0)
-            if self.peek2() = tokens.TK_LPAR:
+                return self.mknode(ast.Nk.scall, at, sb, off, 0)
+            if self.peek2() = tokens.Tk.lpar:
                 self.pos ← self.pos + 1
                 let off : i64 = self.parse_args()
-                return self.parse_postfix(self.mknode(ast.NK_CALL, at, off, 0, 0))
-            if self.peek2() = tokens.TK_LBRACE and self.slit_ahead():
+                return self.parse_postfix(self.mknode(ast.Nk.call, at, off, 0, 0))
+            if self.peek2() = tokens.Tk.lbrace and self.slit_ahead():
                 self.pos ← self.pos + 1
                 let off : i64 = self.parse_slit_fields()
                 if self.failed(): return 0
-                return self.parse_postfix(self.mknode(ast.NK_SLIT, at, off, ast.SLIT_PLAIN, 0))
+                return self.parse_postfix(self.mknode(ast.Nk.slit, at, off, ast.SLIT_PLAIN, 0))
             self.pos ← self.pos + 1
-            return self.parse_postfix(self.mknode(ast.NK_VAR, at, 0, 0, 0))
-        if k = tokens.TK_RESERVED:
+            return self.parse_postfix(self.mknode(ast.Nk.var, at, 0, 0, 0))
+        if k = tokens.Tk.reserved:
             self.err("'" ⧺ self.ttext(at) ⧺ "' is a word the language reserves")
             return 0
         self.err("this token begins no core-2 expression")
@@ -1375,7 +1384,7 @@ impl Parser:
     // std.process.<member>: what the kernel recorded at exec, read as a
     // member rather than called, since none of it can change
     fn parse_process(&mut self, at : i64) → i64:
-        _ ← self.eat(tokens.TK_DOT, "'.' after std.process")
+        _ ← self.eat(tokens.Tk.dot, "'.' after std.process")
         let mtok : i64 = self.pos
         let m := self.ttext(mtok)
         _ ← self.eat_word("the member's name")
@@ -1391,21 +1400,21 @@ impl Parser:
             self.err("'std.process." ⧺ m ⧺ """' is not a member; pagesize, uid, euid, gid, egid,
                                             " secure and exec_filename are""")
             return 0
-        self.mknode(ast.NK_SCALL, at, ast.SB_PROC, idx, 0)
+        self.mknode(ast.Nk.scall, at, ast.SB_PROC, idx, 0)
 
     fn parse_implementation(&mut self, at : i64) → i64:
-        _ ← self.eat(tokens.TK_DOT, "'.' after std.implementation")
+        _ ← self.eat(tokens.Tk.dot, "'.' after std.implementation")
         let mtok : i64 = self.pos
         let m := self.ttext(mtok)
         _ ← self.eat_word("the member's name")
         if m = "interpreter":
-            return self.mknode(ast.NK_BOOL, at, 0, 0, 0)
+            return self.mknode(ast.Nk.lit_bool, at, 0, 0, 0)
         if m = "compiled":
-            return self.mknode(ast.NK_BOOL, at, 1, 0, 0)
+            return self.mknode(ast.Nk.lit_bool, at, 1, 0, 0)
         if m = "name":
-            return self.mknode(ast.NK_STR, at, self.impl_str("ngplc"), 0, 0)
+            return self.mknode(ast.Nk.lit_str, at, self.impl_str("ngplc"), 0, 0)
         if m = "language":
-            return self.mknode(ast.NK_STR, at, self.impl_str("core-1"), 0, 0)
+            return self.mknode(ast.Nk.lit_str, at, self.impl_str("core-1"), 0, 0)
         self.err("'std.implementation." ⧺ m ⧺ """' is not a member; name, language, interpreter and
                                                " compiled are""")
         0
@@ -1413,83 +1422,83 @@ impl Parser:
     // binding power of a binary operator token; ⁻1 when it is none.
     // The numbers follow the bootstrap parser's ladder.
     fn bin_bp(&self, k : i64) → i64:
-        if k = tokens.TK_OR or k = tokens.TK_COALESCE: return 2
-        if k = tokens.TK_AND: return 3
-        if k = tokens.TK_LOR: return 4
-        if k = tokens.TK_LAND: return 6
-        if k = tokens.TK_LXOR or k = tokens.TK_LNAND or k = tokens.TK_LNOR: return 5
-        if k = tokens.TK_EQ or k = tokens.TK_NE or k = tokens.TK_LT or k = tokens.TK_GT or k = tokens.TK_LE or k = tokens.TK_GE: return 7
+        if k = tokens.Tk.kw_or or k = tokens.Tk.coalesce: return 2
+        if k = tokens.Tk.kw_and: return 3
+        if k = tokens.Tk.lor: return 4
+        if k = tokens.Tk.land: return 6
+        if k = tokens.Tk.lxor or k = tokens.Tk.lnand or k = tokens.Tk.lnor: return 5
+        if k = tokens.Tk.eq or k = tokens.Tk.ne or k = tokens.Tk.lt or k = tokens.Tk.gt or k = tokens.Tk.le or k = tokens.Tk.ge: return 7
         // a relational test between two sequences, where the other
         // relational tests are
-        if k = tokens.TK_PREFIX or k = tokens.TK_SUFFIX: return 7
-        if k = tokens.TK_MAX or k = tokens.TK_MIN or k = tokens.TK_ELEM or k = tokens.TK_IOTA: return 9
-        if k = tokens.TK_SHL or k = tokens.TK_SHR: return 10
-        if k = tokens.TK_BOR: return 11
-        if k = tokens.TK_BXOR: return 12
-        if k = tokens.TK_BAND: return 13
-        if k = tokens.TK_PLUS or k = tokens.TK_MINUS or k = tokens.TK_SATADD or k = tokens.TK_SATSUB: return 14
-        if k = tokens.TK_CONCAT: return 15
-        if k = tokens.TK_MULT or k = tokens.TK_DIVIDE or k = tokens.TK_MOD or k = tokens.TK_SATMUL: return 16
-        if k = tokens.TK_RESHAPE: return 17
+        if k = tokens.Tk.prefix or k = tokens.Tk.suffix: return 7
+        if k = tokens.Tk.max or k = tokens.Tk.min or k = tokens.Tk.elem or k = tokens.Tk.iota: return 9
+        if k = tokens.Tk.shl or k = tokens.Tk.shr: return 10
+        if k = tokens.Tk.bor: return 11
+        if k = tokens.Tk.bxor: return 12
+        if k = tokens.Tk.band: return 13
+        if k = tokens.Tk.plus or k = tokens.Tk.minus or k = tokens.Tk.satadd or k = tokens.Tk.satsub: return 14
+        if k = tokens.Tk.concat: return 15
+        if k = tokens.Tk.mult or k = tokens.Tk.divide or k = tokens.Tk.mod or k = tokens.Tk.satmul: return 16
+        if k = tokens.Tk.reshape: return 17
         ⁻1
 
-    fn bin_nk(&self, k : i64) → i64:
-        if k = tokens.TK_PREFIX: return ast.NK_RUN
-        if k = tokens.TK_SUFFIX: return ast.NK_RUN
-        if k = tokens.TK_OR: return ast.NK_OR
-        if k = tokens.TK_COALESCE: return ast.NK_DEFAULT
-        if k = tokens.TK_AND: return ast.NK_AND
-        if k = tokens.TK_LOR: return ast.NK_LOR
-        if k = tokens.TK_LAND: return ast.NK_LAND
-        if k = tokens.TK_EQ: return ast.NK_EQ
-        if k = tokens.TK_NE: return ast.NK_NE
-        if k = tokens.TK_LT: return ast.NK_LT
-        if k = tokens.TK_GT: return ast.NK_GT
-        if k = tokens.TK_LE: return ast.NK_LE
-        if k = tokens.TK_GE: return ast.NK_GE
-        if k = tokens.TK_MAX: return ast.NK_MAXOP
-        if k = tokens.TK_MIN: return ast.NK_MINOP
-        if k = tokens.TK_ELEM: return ast.NK_ELEMOF
-        if k = tokens.TK_IOTA: return ast.NK_IOTA
-        if k = tokens.TK_SATADD: return ast.NK_SATADD
-        if k = tokens.TK_SATSUB: return ast.NK_SATSUB
-        if k = tokens.TK_SATMUL: return ast.NK_SATMUL
-        if k = tokens.TK_LXOR: return ast.NK_LXOR
-        if k = tokens.TK_LNAND: return ast.NK_LNAND
-        if k = tokens.TK_LNOR: return ast.NK_LNOR
-        if k = tokens.TK_RESHAPE: return ast.NK_RESHAPE
-        if k = tokens.TK_SHL: return ast.NK_SHL
-        if k = tokens.TK_SHR: return ast.NK_SHR
-        if k = tokens.TK_BOR: return ast.NK_BOR
-        if k = tokens.TK_BXOR: return ast.NK_BXOR
-        if k = tokens.TK_BAND: return ast.NK_BAND
-        if k = tokens.TK_PLUS: return ast.NK_ADD
-        if k = tokens.TK_MINUS: return ast.NK_SUB
-        if k = tokens.TK_CONCAT: return ast.NK_CCAT
-        if k = tokens.TK_MULT: return ast.NK_MUL
-        if k = tokens.TK_DIVIDE: return ast.NK_DIV
-        if k = tokens.TK_MOD: return ast.NK_MOD
-        0
+    fn bin_nk(&self, k : i64) → ast.Nk:
+        if k = tokens.Tk.prefix: return ast.Nk.run
+        if k = tokens.Tk.suffix: return ast.Nk.run
+        if k = tokens.Tk.kw_or: return ast.Nk.op_or
+        if k = tokens.Tk.coalesce: return ast.Nk.default
+        if k = tokens.Tk.kw_and: return ast.Nk.op_and
+        if k = tokens.Tk.lor: return ast.Nk.lor
+        if k = tokens.Tk.land: return ast.Nk.land
+        if k = tokens.Tk.eq: return ast.Nk.eq
+        if k = tokens.Tk.ne: return ast.Nk.ne
+        if k = tokens.Tk.lt: return ast.Nk.lt
+        if k = tokens.Tk.gt: return ast.Nk.gt
+        if k = tokens.Tk.le: return ast.Nk.le
+        if k = tokens.Tk.ge: return ast.Nk.ge
+        if k = tokens.Tk.max: return ast.Nk.maxop
+        if k = tokens.Tk.min: return ast.Nk.minop
+        if k = tokens.Tk.elem: return ast.Nk.elemof
+        if k = tokens.Tk.iota: return ast.Nk.iota
+        if k = tokens.Tk.satadd: return ast.Nk.satadd
+        if k = tokens.Tk.satsub: return ast.Nk.satsub
+        if k = tokens.Tk.satmul: return ast.Nk.satmul
+        if k = tokens.Tk.lxor: return ast.Nk.lxor
+        if k = tokens.Tk.lnand: return ast.Nk.lnand
+        if k = tokens.Tk.lnor: return ast.Nk.lnor
+        if k = tokens.Tk.reshape: return ast.Nk.reshape
+        if k = tokens.Tk.shl: return ast.Nk.shl
+        if k = tokens.Tk.shr: return ast.Nk.shr
+        if k = tokens.Tk.bor: return ast.Nk.bor
+        if k = tokens.Tk.bxor: return ast.Nk.bxor
+        if k = tokens.Tk.band: return ast.Nk.band
+        if k = tokens.Tk.plus: return ast.Nk.add
+        if k = tokens.Tk.minus: return ast.Nk.sub
+        if k = tokens.Tk.concat: return ast.Nk.ccat
+        if k = tokens.Tk.mult: return ast.Nk.mul
+        if k = tokens.Tk.divide: return ast.Nk.div
+        if k = tokens.Tk.mod: return ast.Nk.mod
+        ast.Nk.none
 
     fn parse_bin(&mut self, min_bp : i64) → i64:
         let lhs : mut i64 = self.parse_primary()
         while not self.failed():
             let k : i64 = self.peek()
-            if k = tokens.TK_ELLIPSIS and min_bp <= 8:
+            if k = tokens.Tk.ellipsis and min_bp <= 8:
                 // a…b, and a…step…b when a second … follows: the range
                 // binds tighter than comparison, looser than arithmetic
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let rhs : i64 = self.parse_bin(9)
-                if self.nkind[lhs × 1¤ptrdiff] = ast.NK_RANGEV:
+                if self.nkind[lhs × 1¤ptrdiff] = ast.Nk.rangev:
                     if self.nc[lhs × 1¤ptrdiff] ≠ ⁻1:
                         self.err("a range is lo…hi or lo…step…hi; a fourth part names nothing")
                         return lhs
                     // what stood as the end steps aside to be the step
-                    lhs ← self.mknode(ast.NK_RANGEV, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
+                    lhs ← self.mknode(ast.Nk.rangev, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
                 else:
-                    lhs ← self.mknode(ast.NK_RANGEV, at, lhs, rhs, ⁻1)
-            elif (k = tokens.TK_FORALL or k = tokens.TK_EXISTS or k = tokens.TK_NOTEX) and min_bp <= 17:
+                    lhs ← self.mknode(ast.Nk.rangev, at, lhs, rhs, ⁻1)
+            elif (k = tokens.Tk.forall or k = tokens.Tk.exists or k = tokens.Tk.notex) and min_bp <= 17:
                 // f ∀ v, f ∃ v and f ∄ v.  The right operand is read at
                 // the range's level, so `f ∀ 1…5` needs no parentheses
                 // and `f ∀ v ⧺ w` asks about the join, while a
@@ -1499,8 +1508,8 @@ impl Parser:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let rhs : i64 = self.parse_bin(8)
-                let q : i64 = if k = tokens.TK_EXISTS: 1 else: (if k = tokens.TK_NOTEX: 2 else: 0)
-                lhs ← self.mknode(ast.NK_QUANT, at, lhs, rhs, q)
+                let q : i64 = if k = tokens.Tk.exists: 1 else: (if k = tokens.Tk.notex: 2 else: 0)
+                lhs ← self.mknode(ast.Nk.quant, at, lhs, rhs, q)
             else:
                 let bp : i64 = self.bin_bp(k)
                 if bp = ⁻1 or bp < min_bp:
@@ -1508,7 +1517,7 @@ impl Parser:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let rhs : i64 = self.parse_bin(bp + 1)
-                lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, if k = tokens.TK_SUFFIX: 1 else: 0)
+                lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, if k = tokens.Tk.suffix: 1 else: 0)
         lhs
 
     fn parse_expr(&mut self) → i64:
@@ -1517,7 +1526,7 @@ impl Parser:
         // is the value of whichever block runs.  Nothing else begins
         // an expression with `if`, the statement level having taken
         // its own already, so the two never have to be told apart.
-        if self.peek() = tokens.TK_IF:
+        if self.peek() = tokens.Tk.kw_if:
             let owed : i64 = self.ifexpr
             self.ifexpr ← 1
             let e : i64 = self.parse_if_node()
@@ -1526,11 +1535,11 @@ impl Parser:
         // A match here is the statement form standing where a value is
         // wanted, as an if is.  Its arms are their own block each, and
         // the value is the value of whichever arm runs.
-        if self.peek() = tokens.TK_MATCH:
+        if self.peek() = tokens.Tk.kw_match:
             return self.parse_match_node()
         let v : i64 = self.parse_bin(2)
         if self.failed(): return v
-        if self.peek() ≠ tokens.TK_IF:
+        if self.peek() ≠ tokens.Tk.kw_if:
             return v
         // `v if cond else w` was how a value was chosen once.  An if
         // hands back the value of the branch that runs, which says the
@@ -1553,14 +1562,14 @@ impl Parser:
         //
         // The colon says the block is laid out and the brace says it is
         // delimited, so one or the other opens it and never both.
-        if self.peek() = tokens.TK_LBRACE:
+        if self.peek() = tokens.Tk.lbrace:
             return self.parse_brace_block()
-        _ ← self.eat(tokens.TK_COLON, "':' or '{' beginning the block")
-        if self.peek() = tokens.TK_LBRACE:
+        _ ← self.eat(tokens.Tk.colon, "':' or '{' beginning the block")
+        if self.peek() = tokens.Tk.lbrace:
             self.err(both_openers())
             return 0
         let stmts : mut i64[] = []
-        if self.peek() ≠ tokens.TK_NL:
+        if self.peek() ≠ tokens.Tk.nl:
             // The sole statement of a one-line block ends where the
             // block ends, and the block is what is inside braces, not
             // this: `{ if x > 10: return x - 10; y }` puts the ';'
@@ -1581,9 +1590,9 @@ impl Parser:
             self.lent ← owed
         else:
             self.pos ← self.pos + 1
-            _ ← self.eat(tokens.TK_INDENT, "an indented block")
-            while self.peek() ≠ tokens.TK_DEDENT and self.peek() ≠ tokens.TK_EOF:
-                if self.peek() = tokens.TK_NL:
+            _ ← self.eat(tokens.Tk.indent, "an indented block")
+            while self.peek() ≠ tokens.Tk.dedent and self.peek() ≠ tokens.Tk.eof:
+                if self.peek() = tokens.Tk.nl:
                     // a statement whose body was in braces ends at its
                     // '}' and leaves the line's end behind it
                     self.pos ← self.pos + 1
@@ -1593,21 +1602,21 @@ impl Parser:
                     // this statement is lost; the next line starts over
                     _ ← stmts.pop() ?? 0
                     self.sync()
-                    if self.peek() = tokens.TK_INDENT:
+                    if self.peek() = tokens.Tk.indent:
                         // a block hangs off the broken statement;
                         // nothing owns it now, so it is skipped whole
                         self.skip_block()
-            _ ← self.eat(tokens.TK_DEDENT, "the end of the block")
+            _ ← self.eat(tokens.Tk.dedent, "the end of the block")
         let off : i64 = @dropunit(self.push_list(stmts))
-        self.mknode(ast.NK_BLOCK, 0, off, 0, 0)
+        self.mknode(ast.Nk.block, 0, off, 0, 0)
 
     // step over a balanced INDENT…DEDENT run
     fn skip_block(&mut self):
         let depth : mut i64 = 0
-        while self.peek() ≠ tokens.TK_EOF:
-            if self.peek() = tokens.TK_INDENT:
+        while self.peek() ≠ tokens.Tk.eof:
+            if self.peek() = tokens.Tk.indent:
                 depth ← depth + 1
-            elif self.peek() = tokens.TK_DEDENT:
+            elif self.peek() = tokens.Tk.dedent:
                 depth ← depth - 1
                 if depth = 0:
                     self.pos ← self.pos + 1
@@ -1619,9 +1628,9 @@ impl Parser:
         // comes first; only where none does is the terminator lent.
         if self.braces > 0:
             // inside { }: ';' separates, and '}' closes the last
-            if self.peek() = tokens.TK_SEMI:
+            if self.peek() = tokens.Tk.semi:
                 self.pos ← self.pos + 1
-            elif self.peek() ≠ tokens.TK_RBRACE:
+            elif self.peek() ≠ tokens.Tk.rbrace:
                 self.err("';' separates the statements of a brace block")
             return
         if self.lent ≠ 0:
@@ -1629,22 +1638,22 @@ impl Parser:
         // A ';' ends a statement where a line would have, and is
         // written down: laid out, the semicolon is how a statement says
         // its value is dropped rather than handed back.
-        if self.peek() = tokens.TK_SEMI:
+        if self.peek() = tokens.Tk.semi:
             self.pos ← self.pos + 1
             self.semi_end ← true
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
             return
-        if self.peek() = tokens.TK_NL:
+        if self.peek() = tokens.Tk.nl:
             self.pos ← self.pos + 1
-        elif self.peek() = tokens.TK_DEDENT or self.peek() = tokens.TK_EOF:
+        elif self.peek() = tokens.Tk.dedent or self.peek() = tokens.Tk.eof:
             let _nothing_to_do : i64 = 0
-        elif self.peek() = tokens.TK_ELSE or self.peek() = tokens.TK_ELIF:
+        elif self.peek() = tokens.Tk.kw_else or self.peek() = tokens.Tk.kw_elif:
             // `if c: a else: b` -- the one statement of a one-line
             // block ends where the next clause begins, and the clause
             // is the if's to take
             let _nothing_to_do : i64 = 0
-        elif self.pos > 0 and self.toks.kind[(self.pos - 1) × 1¤ptrdiff] = tokens.TK_DEDENT:
+        elif self.pos > 0 and self.toks.kind[(self.pos - 1) × 1¤ptrdiff] = tokens.Tk.dedent:
             // a lambda's layout body closed the line already
             let _nothing_to_do : i64 = 0
         else:
@@ -1652,18 +1661,18 @@ impl Parser:
 
     fn parse_let(&mut self) → i64:
         self.pos ← self.pos + 1
-        if self.peek() = tokens.TK_LPAR:
+        if self.peek() = tokens.Tk.lpar:
             return self.parse_let_tuple()
         let name_tok : i64 = self.pos
         _ ← self.eat_name("the name the let binds")
         // A measure belongs to the type and is written there.  This
         // is the place it used to be written, kept only to say so.
-        if self.peek() = tokens.TK_CURRENCY:
+        if self.peek() = tokens.Tk.currency:
             self.err("""a measure is written against the type, as 'let x : i64 ¤meter = …' -- or
                       " against nothing, as 'let x : ¤meter = …', where the right side says the type""")
             return 0
         let u : i64 = types.UNIT_NONE
-        if self.peek() = tokens.TK_DEFINE:
+        if self.peek() = tokens.Tk.define:
             // := takes the type from the right side, which must state it
             if u ≠ types.UNIT_NONE:
                 self.err("a unit measures a stated type; write 'let x : i64 ¤ptrdiff = …'")
@@ -1671,13 +1680,13 @@ impl Parser:
             self.pos ← self.pos + 1
             let init0 : i64 = self.parse_expr()
             self.end_stmt()
-            return self.mknode(ast.NK_LET, name_tok, init0, 0, ⁻1)
-        _ ← self.eat(tokens.TK_COLON, "':' and the type of the binding")
+            return self.mknode(ast.Nk.st_let, name_tok, init0, 0, ⁻1)
+        _ ← self.eat(tokens.Tk.colon, "':' and the type of the binding")
         let is_mut : mut i64 = 0
-        if self.peek() = tokens.TK_MUT:
+        if self.peek() = tokens.Tk.kw_mut:
             is_mut ← 1
             self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_EQ:
+            if self.peek() = tokens.Tk.eq:
                 // let x : mut = e -- mut, the type still inferred
                 if u ≠ types.UNIT_NONE:
                     self.err("a unit measures a stated type; write 'let x : mut i64 ¤ptrdiff = …'")
@@ -1685,33 +1694,33 @@ impl Parser:
                 self.pos ← self.pos + 1
                 let init1 : i64 = self.parse_expr()
                 self.end_stmt()
-                return self.mknode(ast.NK_LET, name_tok, init1, 1, ⁻1)
+                return self.mknode(ast.Nk.st_let, name_tok, init1, 1, ⁻1)
         // `let m : ¤meter = e` -- the measure with no type, which the
         // right side settles.  A measure belongs to a type, and where
         // the type is the initializer's there is nothing to write it
         // against, so the colon carries the measure alone.  nc holds
         // ⁻2 - u to say so, ⁻1 already meaning no type at all.
-        if self.peek() = tokens.TK_CURRENCY:
+        if self.peek() = tokens.Tk.currency:
             if u ≠ types.UNIT_NONE:
                 self.err("the name and the type say different units")
                 return 0
             let mu : i64 = self.parse_name_unit()
-            _ ← self.eat(tokens.TK_EQ, "'=' and the initial value")
+            _ ← self.eat(tokens.Tk.eq, "'=' and the initial value")
             let init2 : i64 = self.parse_expr()
             self.end_stmt()
-            return self.mknode(ast.NK_LET, name_tok, init2, is_mut, ⁻2 - mu)
+            return self.mknode(ast.Nk.st_let, name_tok, init2, is_mut, ⁻2 - mu)
         // `let v : &T = …` binds a borrow, and says so
-        let is_blet : bool = self.peek() = tokens.TK_BAND
+        let is_blet : bool = self.peek() = tokens.Tk.band
         if is_blet:
             self.pos ← self.pos + 1
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ types.UNIT_NONE:
             ty ← self.unit_on_type(ty, u, "")
-        _ ← self.eat(tokens.TK_EQ, "'=' and the initial value")
+        _ ← self.eat(tokens.Tk.eq, "'=' and the initial value")
         let init : i64 = self.parse_expr()
         self.end_stmt()
-        let lid : i64 = self.mknode(ast.NK_LET, name_tok, init, is_mut, ty)
+        let lid : i64 = self.mknode(ast.Nk.st_let, name_tok, init, is_mut, ty)
         if is_blet:
             self.blets.push(lid)
         lid
@@ -1727,28 +1736,28 @@ impl Parser:
             _ ← self.eat_name("a name the let binds")
             if self.failed():
                 return 0
-            if self.peek() = tokens.TK_COMMA:
+            if self.peek() = tokens.Tk.comma:
                 self.pos ← self.pos + 1
             else:
                 break
-        _ ← self.eat(tokens.TK_RPAR, "')' closing the names")
+        _ ← self.eat(tokens.Tk.rpar, "')' closing the names")
         if #ntoks < 2:
             self.err("a destructuring let takes at least two names")
             return 0
         let is_mut : mut i64 = 0
         let ty : mut i64 = ⁻1
-        if self.peek() = tokens.TK_COLON:
+        if self.peek() = tokens.Tk.colon:
             self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_MUT:
+            if self.peek() = tokens.Tk.kw_mut:
                 is_mut ← 1
                 self.pos ← self.pos + 1
             ty ← self.parse_type(false)
             if not types.ty_is_tup(ty):
                 self.err("the names take a tuple apart; the stated type is not a tuple")
                 return 0
-            _ ← self.eat(tokens.TK_EQ, "'=' and the initial value")
+            _ ← self.eat(tokens.Tk.eq, "'=' and the initial value")
         else:
-            _ ← self.eat(tokens.TK_DEFINE, "':=' (or ': (…) =') and the tuple taken apart")
+            _ ← self.eat(tokens.Tk.define, "':=' (or ': (…) =') and the tuple taken apart")
         let init : i64 = self.parse_expr()
         self.end_stmt()
         let toff : i64 = @dropunit(#self.extra)
@@ -1756,7 +1765,7 @@ impl Parser:
         self.extra.push(ty)
         foreach t2 := ntoks:
             self.extra.push(t2)
-        self.mknode(ast.NK_LETT, name_tok, init, is_mut, toff)
+        self.mknode(ast.Nk.st_lett, name_tok, init, is_mut, toff)
 
     // match over an enumeration.  The arms name values of it, one
     // apiece, and `_` stands for the rest; the indent has been taken
@@ -1776,25 +1785,25 @@ impl Parser:
         let subject : i64 = self.parse_expr()
         // laid out under a colon, or written in braces, as every other
         // body is; a ';' after an arm is what a line would have said
-        let braced : bool = self.peek() = tokens.TK_LBRACE
+        let braced : bool = self.peek() = tokens.Tk.lbrace
         if braced:
-            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the arms")
+            _ ← self.eat(tokens.Tk.lbrace, "'{' opening the arms")
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the subject")
-            if self.peek() = tokens.TK_LBRACE:
+            _ ← self.eat(tokens.Tk.colon, "':' or '{' after the subject")
+            if self.peek() = tokens.Tk.lbrace:
                 self.err(both_openers())
                 return 0
-            _ ← self.eat(tokens.TK_NL, "the arms on their own lines")
-            _ ← self.eat(tokens.TK_INDENT, "an indented arm list")
-        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
+            _ ← self.eat(tokens.Tk.nl, "the arms on their own lines")
+            _ ← self.eat(tokens.Tk.indent, "an indented arm list")
+        let ender : tokens.Tk = if braced: tokens.Tk.rbrace else: tokens.Tk.dedent
         // An identifier where a pattern goes says this match is
         // over an enumeration: the arms name its values, and there
         // is no ⊨ or ∅ about it.
         let mut_pos : i64 = self.pos
         let is_enum : mut bool = false
-        while self.peek() = tokens.TK_NL:
+        while self.peek() = tokens.Tk.nl:
             self.pos ← self.pos + 1
-        if self.peek() = tokens.TK_IDENT:
+        if self.peek() = tokens.Tk.ident:
             is_enum ← true
         self.pos ← mut_pos
         if is_enum:
@@ -1803,23 +1812,23 @@ impl Parser:
         let empty_blk : mut i64 = ⁻1
         let bind_tok : mut i64 = ⁻1
         while self.peek() ≠ ender and not self.failed():
-            if self.peek() = tokens.TK_SOME:
+            if self.peek() = tokens.Tk.kw_some:
                 if some_blk ≠ ⁻1:
                     self.err("match repeats the ⊨ pattern")
                     return 0
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_LPAR, "'(' after ⊨")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after ⊨")
                 bind_tok ← self.pos
                 _ ← self.eat_name("the name ⊨ binds")
-                _ ← self.eat(tokens.TK_RPAR, "')' closing the pattern")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing the pattern")
                 some_blk ← self.parse_block()
-            elif self.peek() = tokens.TK_EMPTY:
+            elif self.peek() = tokens.Tk.empty:
                 if empty_blk ≠ ⁻1:
                     self.err("match repeats the ∅ pattern")
                     return 0
                 self.pos ← self.pos + 1
                 empty_blk ← self.parse_block()
-            elif self.peek() = tokens.TK_NL or self.peek() = tokens.TK_SEMI:
+            elif self.peek() = tokens.Tk.nl or self.peek() = tokens.Tk.semi:
                 self.pos ← self.pos + 1
             else:
                 self.err("a core-2 match arm is ⊨(name) or ∅")
@@ -1834,38 +1843,38 @@ impl Parser:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(some_blk)
         self.extra.push(empty_blk)
-        return self.mknode(ast.NK_MATCH, bind_tok, subject, off, 0)
-    fn parse_match_enum(&mut self, at : i64, subject : i64, ender : i64, braced : bool) → i64:
+        return self.mknode(ast.Nk.st_match, bind_tok, subject, off, 0)
+    fn parse_match_enum(&mut self, at : i64, subject : i64, ender : tokens.Tk, braced : bool) → i64:
         let arms : mut i64[] = []
         let default_blk : mut i64 = ⁻1
         while self.peek() ≠ ender and not self.failed():
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
-            elif self.peek() = tokens.TK_IDENT and self.ttext(self.pos) = "_":
+            elif self.peek() = tokens.Tk.ident and self.ttext(self.pos) = "_":
                 if default_blk ≠ ⁻1:
                     self.err("match repeats the _ arm")
                     return 0
                 self.pos ← self.pos + 1
                 default_blk ← self.parse_block()
-            elif self.peek() = tokens.TK_IDENT:
+            elif self.peek() = tokens.Tk.ident:
                 // `m.Enum.value` where m is a bound import: which
                 // module the enum is of is settled by what is being
                 // matched, so the binding is read past here and the
                 // arm names the enum as the subject knows it.
-                if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.TK_DOT and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = tokens.TK_IDENT and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = tokens.TK_DOT and self.bound_module(self.pos) ≠ "":
+                if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.Tk.dot and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = tokens.Tk.ident and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = tokens.Tk.dot and self.bound_module(self.pos) ≠ "":
                     let bm2 : str = self.bound_module(self.pos)
                     self.hold_export(self.pos + 2, bm2, self.ttext(self.pos + 2))
                     self.pos ← self.pos + 2
                 let etok : i64 = self.pos
                 self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_DOT, "'.' and the value's name")
+                _ ← self.eat(tokens.Tk.dot, "'.' and the value's name")
                 let mtok : i64 = self.pos
                 _ ← self.eat_name("the value's name")
                 let blk : i64 = self.parse_block()
                 arms.push(etok)
                 arms.push(mtok)
                 arms.push(blk)
-                if self.peek() = tokens.TK_SEMI:
+                if self.peek() = tokens.Tk.semi:
                     self.pos ← self.pos + 1
             else:
                 self.err("a match arm over an enumeration is Name.value or _")
@@ -1879,40 +1888,40 @@ impl Parser:
         self.extra.push(default_blk)
         foreach v := arms:
             self.extra.push(v)
-        self.mknode(ast.NK_MATCHE, at, subject, off, ⁻1)
+        self.mknode(ast.Nk.matche, at, subject, off, ⁻1)
 
     fn parse_stmt(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
-        if k = tokens.TK_AT and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
+        if k = tokens.Tk.at and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
             // @likely and @unlikely say which way a condition is
             // expected to go.  They belong to the if that follows and
             // to nothing else, and they never change what is computed
             // -- only where the compiler puts the code.
             let hname := self.ttext(self.pos + 1)
             self.pos ← self.pos + 2
-            while self.peek() = tokens.TK_NL:
+            while self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_AT and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
+            if self.peek() = tokens.Tk.at and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
                 let second := self.ttext(self.pos + 1)
                 if second = hname:
                     self.err("@" ⧺ hname ⧺ " is given twice on the same condition")
                 else:
                     self.err("@" ⧺ second ⧺ " contradicts @" ⧺ hname ⧺ " on the same condition")
                 return 0
-            if self.peek() ≠ tokens.TK_IF:
+            if self.peek() ≠ tokens.Tk.kw_if:
                 self.err("@" ⧺ hname ⧺ " applies to an if statement, but none follows")
                 return 0
             let inner : i64 = self.parse_stmt()
-            return self.mknode(ast.NK_HINTED, at, inner, if hname = "unlikely": 1 else: 0, 0)
-        if k = tokens.TK_AT and self.ttext(self.pos + 1) = "expect":
+            return self.mknode(ast.Nk.hinted, at, inner, if hname = "unlikely": 1 else: 0, 0)
+        if k = tokens.Tk.at and self.ttext(self.pos + 1) = "expect":
             // @expect level "pattern" over the one statement that
             // follows: what it says is expected to be drawn, so what
             // it draws is caught and kept from the report.  Which
             // diagnostic it was is the interpreter's to check, as it
             // is for a definition marked the same way.
             let wants_err : mut i64 = 0
-            while self.peek() = tokens.TK_AT and self.ttext(self.pos + 1) = "expect" and not self.failed():
+            while self.peek() = tokens.Tk.at and self.ttext(self.pos + 1) = "expect" and not self.failed():
                 self.pos ← self.pos + 2
                 let lvl := self.ttext(self.pos)
                 if lvl ≠ "error" and lvl ≠ "warning":
@@ -1926,130 +1935,130 @@ impl Parser:
                 // interpreter's to check, so both shapes are read and
                 // dropped here; what this needs to know is only that
                 // the definition is expected to draw one.
-                if self.peek() = tokens.TK_INT:
+                if self.peek() = tokens.Tk.number:
                     self.pos ← self.pos + 1
-                    if self.peek() = tokens.TK_STR:
+                    if self.peek() = tokens.Tk.string:
                         self.pos ← self.pos + 1
-                elif self.peek() = tokens.TK_STR:
+                elif self.peek() = tokens.Tk.string:
                     self.pos ← self.pos + 1
                 else:
                     self.err("""@expect states the code it expects, and may state the message beside
                               " it; the older form states the message alone""")
                     return 0
-                while self.peek() = tokens.TK_NL:
+                while self.peek() = tokens.Tk.nl:
                     self.pos ← self.pos + 1
             let inner : i64 = self.parse_stmt()
-            return self.mknode(ast.NK_EXPECTS, at, inner, wants_err, 0)
-        if k = tokens.TK_LET:
+            return self.mknode(ast.Nk.expects, at, inner, wants_err, 0)
+        if k = tokens.Tk.kw_let:
             return self.parse_let()
-        if k = tokens.TK_IF:
+        if k = tokens.Tk.kw_if:
             return self.parse_if_node()
-        if k = tokens.TK_WHILE:
+        if k = tokens.Tk.kw_while:
             self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_IDENT and (self.peek2() = tokens.TK_DEFINE or (self.peek2() = tokens.TK_COLON and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ tokens.TK_NL)):
+            if self.peek() = tokens.Tk.ident and (self.peek2() = tokens.Tk.define or (self.peek2() = tokens.Tk.colon and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ tokens.Tk.nl)):
                 // while x := e, while x : mut = e, while x : T = e --
                 // the loop runs while e answers a value, x naming it
                 let wname_tok : i64 = self.pos
                 let wmut : mut i64 = 0
                 let wty : mut i64 = ⁻1
-                if self.peek2() = tokens.TK_DEFINE:
+                if self.peek2() = tokens.Tk.define:
                     self.pos ← self.pos + 2
                 else:
                     self.pos ← self.pos + 2
-                    if self.peek() = tokens.TK_MUT:
+                    if self.peek() = tokens.Tk.kw_mut:
                         wmut ← 1
                         self.pos ← self.pos + 1
-                    if self.peek() ≠ tokens.TK_EQ:
+                    if self.peek() ≠ tokens.Tk.eq:
                         wty ← self.parse_type(false)
-                    _ ← self.eat(tokens.TK_EQ, "'=' and what the loop asks")
+                    _ ← self.eat(tokens.Tk.eq, "'=' and what the loop asks")
                 let wcond : i64 = self.parse_expr()
                 let wbody : i64 = self.parse_block()
                 let woff : i64 = @dropunit(#self.extra)
                 self.extra.push(wmut)
                 self.extra.push(wty)
-                return self.mknode(ast.NK_WHILEB, wname_tok, wcond, wbody, woff)
+                return self.mknode(ast.Nk.whileb, wname_tok, wcond, wbody, woff)
             let cond : i64 = self.parse_expr()
             let body : i64 = self.parse_block()
-            return self.mknode(ast.NK_WHILE, at, cond, body, 0)
-        if k = tokens.TK_FOREACH:
+            return self.mknode(ast.Nk.st_while, at, cond, body, 0)
+        if k = tokens.Tk.kw_foreach:
             self.pos ← self.pos + 1
             let name_tok : i64 = self.pos
-            if self.peek() = tokens.TK_IDENT or self.peek() = tokens.TK_RESERVED:
+            if self.peek() = tokens.Tk.ident or self.peek() = tokens.Tk.reserved:
                 _ ← self.eat_name("the loop variable")
             else:
                 self.err("expected the loop variable")
                 return 0
-            _ ← self.eat(tokens.TK_DEFINE, "':=' before what the loop walks")
-            if self.peek() = tokens.TK_BAND:
+            _ ← self.eat(tokens.Tk.define, "':=' before what the loop walks")
+            if self.peek() = tokens.Tk.band:
                 // foreach x := &v / &mut v: the elements are lent
                 self.pos ← self.pos + 1
                 let brk : mut i64 = 1
-                if self.peek() = tokens.TK_MUT:
+                if self.peek() = tokens.Tk.kw_mut:
                     brk ← 2
                     self.pos ← self.pos + 1
                 let btok : i64 = self.pos
                 _ ← self.eat_name("the borrowed array's name")
-                let bvar : i64 = self.mknode(ast.NK_VAR, btok, 0, 0, 0)
-                let bref : i64 = self.mknode(ast.NK_REF, btok, bvar, brk, 0)
+                let bvar : i64 = self.mknode(ast.Nk.var, btok, 0, 0, 0)
+                let bref : i64 = self.mknode(ast.Nk.ref, btok, bvar, brk, 0)
                 let bbody : i64 = self.parse_block()
-                return self.mknode(ast.NK_FOREACHA, name_tok, bref, bbody, 0)
+                return self.mknode(ast.Nk.foreacha, name_tok, bref, bbody, 0)
             let e1 : i64 = self.parse_bin(2)
-            if self.nkind[e1 × 1¤ptrdiff] ≠ ast.NK_RANGEV:
+            if self.nkind[e1 × 1¤ptrdiff] ≠ ast.Nk.rangev:
                 // walking a container's elements, or a range that
                 // arrives as a value
                 let body : i64 = self.parse_block()
-                return self.mknode(ast.NK_FOREACHA, name_tok, e1, body, 0)
+                return self.mknode(ast.Nk.foreacha, name_tok, e1, body, 0)
             let body : i64 = self.parse_block()
             let off : i64 = @dropunit(#self.extra)
             self.extra.push(self.na[e1 × 1¤ptrdiff])
             self.extra.push(self.nc[e1 × 1¤ptrdiff])
             self.extra.push(self.nb[e1 × 1¤ptrdiff])
-            return self.mknode(ast.NK_FOREACH, name_tok, off, body, 0)
-        if k = tokens.TK_MATCH:
+            return self.mknode(ast.Nk.st_foreach, name_tok, off, body, 0)
+        if k = tokens.Tk.kw_match:
             return self.parse_match_node()
-        if k = tokens.TK_RETURN:
+        if k = tokens.Tk.kw_return:
             self.pos ← self.pos + 1
             let v : mut i64 = ⁻1
-            if self.peek() ≠ tokens.TK_NL and self.peek() ≠ tokens.TK_DEDENT:
+            if self.peek() ≠ tokens.Tk.nl and self.peek() ≠ tokens.Tk.dedent:
                 v ← self.parse_expr()
             self.end_stmt()
-            return self.mknode(ast.NK_RETURN, at, v, 0, 0)
-        if k = tokens.TK_BREAK:
+            return self.mknode(ast.Nk.st_return, at, v, 0, 0)
+        if k = tokens.Tk.kw_break:
             self.pos ← self.pos + 1
             self.end_stmt()
-            return self.mknode(ast.NK_BREAK, at, 0, 0, 0)
-        if k = tokens.TK_CONTINUE:
+            return self.mknode(ast.Nk.st_break, at, 0, 0, 0)
+        if k = tokens.Tk.kw_continue:
             self.pos ← self.pos + 1
             self.end_stmt()
-            return self.mknode(ast.NK_CONTINUE, at, 0, 0, 0)
-        if k = tokens.TK_IDENT and self.peek2() = tokens.TK_ASSIGN:
+            return self.mknode(ast.Nk.st_continue, at, 0, 0, 0)
+        if k = tokens.Tk.ident and self.peek2() = tokens.Tk.assign:
             let name := self.ttext(at)
             self.pos ← self.pos + 2
             let v : i64 = self.parse_expr()
             self.end_stmt()
             if name = "_":
-                return self.mknode(ast.NK_DISCARD, at, v, 0, 0)
-            return self.mknode(ast.NK_ASSIGN, at, v, 0, 0)
+                return self.mknode(ast.Nk.discard, at, v, 0, 0)
+            return self.mknode(ast.Nk.assign, at, v, 0, 0)
         // any postfix path may be a store target: the expression is
         // parsed first, and a following ← turns it into the store its
         // shape names -- a field, an element, or nothing storable
         let e : i64 = self.parse_expr()
-        if self.peek() = tokens.TK_ASSIGN:
+        if self.peek() = tokens.Tk.assign:
             self.pos ← self.pos + 1
             let v : i64 = self.parse_expr()
             self.end_stmt()
             let ek : i64 = self.nkind[e × 1¤ptrdiff]
-            if ek = ast.NK_FIELD:
-                return self.mknode(ast.NK_STOREFLD, self.ntok[e × 1¤ptrdiff],
+            if ek = ast.Nk.field:
+                return self.mknode(ast.Nk.storefld, self.ntok[e × 1¤ptrdiff],
                                    self.na[e × 1¤ptrdiff], v, 0)
-            if ek = ast.NK_INDEX:
-                return self.mknode(ast.NK_STOREIDXP, at, self.na[e × 1¤ptrdiff],
+            if ek = ast.Nk.index:
+                return self.mknode(ast.Nk.storeidxp, at, self.na[e × 1¤ptrdiff],
                                    self.nb[e × 1¤ptrdiff], v)
             self.err("this is not a place a value can be stored into")
             return 0
         self.semi_end ← false
         self.end_stmt()
-        self.mknode(ast.NK_EXPRSTMT, at, e, if self.semi_end: 1 else: 0, 0)
+        self.mknode(ast.Nk.exprstmt, at, e, if self.semi_end: 1 else: 0, 0)
 
     // if cond block (elif cond block)* (else block)? -- one shape,
     // whether the if stands as a statement or where a value is
@@ -2061,7 +2070,7 @@ impl Parser:
     // opens every arm the way it opened its first, so the first arm's
     // answer is what the rest are held to.
     fn arm_braced(&self) → bool:
-        self.peek() = tokens.TK_LBRACE
+        self.peek() = tokens.Tk.lbrace
 
     // The arm here is opened the way the if's first arm was, or it is
     // refused: an if half laid out and half in braces is two ways of
@@ -2082,14 +2091,14 @@ impl Parser:
         let then_blk : i64 = self.parse_block()
         let else_blk : mut i64 = ⁻1
         self.skip_nl_before_else()
-        if self.peek() = tokens.TK_ELIF:
+        if self.peek() = tokens.Tk.kw_elif:
             else_blk ← self.parse_elif_chain(braced)
-        elif self.peek() = tokens.TK_ELSE:
+        elif self.peek() = tokens.Tk.kw_else:
             self.pos ← self.pos + 1
             if not self.arm_alike(braced):
                 return 0
             else_blk ← self.parse_block()
-        self.mknode(ast.NK_IF, at, cond, then_blk, else_blk)
+        self.mknode(ast.Nk.st_if, at, cond, then_blk, else_blk)
 
     fn parse_elif_chain(&mut self, braced : bool) → i64:
         let at : i64 = self.pos
@@ -2100,18 +2109,18 @@ impl Parser:
         let then_blk : i64 = self.parse_block()
         let else_blk : mut i64 = ⁻1
         self.skip_nl_before_else()
-        if self.peek() = tokens.TK_ELIF:
+        if self.peek() = tokens.Tk.kw_elif:
             else_blk ← self.parse_elif_chain(braced)
-        elif self.peek() = tokens.TK_ELSE:
+        elif self.peek() = tokens.Tk.kw_else:
             self.pos ← self.pos + 1
             if not self.arm_alike(braced):
                 return 0
             else_blk ← self.parse_block()
-        let ifn : i64 = self.mknode(ast.NK_IF, at, cond, then_blk, else_blk)
+        let ifn : i64 = self.mknode(ast.Nk.st_if, at, cond, then_blk, else_blk)
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(1)
         self.extra.push(ifn)
-        self.mknode(ast.NK_BLOCK, 0, off, 0, 0)
+        self.mknode(ast.Nk.block, 0, off, 0, 0)
 
     // ------------------------------------------------------------------
     // Definitions
@@ -2124,19 +2133,19 @@ impl Parser:
                 is_test : bool, mods : i64, ignored : bool,
                 pres : i64[], post_toks : i64[], posts : i64[],
                 prefix : str, self_sty : i64):
-        _ ← self.eat(tokens.TK_FN, "'fn'")
+        _ ← self.eat(tokens.Tk.kw_fn, "'fn'")
         let name_tok : i64 = self.pos
         let name0 := self.ttext(name_tok)
         let name : str = if prefix = "": name0 else: prefix ⧺ "." ⧺ name0
         _ ← self.eat_name("the function's name")
-        _ ← self.eat(tokens.TK_LPAR, "'(' and the parameters")
+        _ ← self.eat(tokens.Tk.lpar, "'(' and the parameters")
         let ptoks : mut i64[] = []
         let ptypes : mut i64[] = []
-        if self_sty ≠ 0 and self.peek() = tokens.TK_BAND:
+        if self_sty ≠ 0 and self.peek() = tokens.Tk.band:
             // the receiver: &self reads, &mut self changes
             self.pos ← self.pos + 1
             let srk : mut i64 = 1
-            if self.peek() = tokens.TK_MUT:
+            if self.peek() = tokens.Tk.kw_mut:
                 self.pos ← self.pos + 1
                 srk ← 2
             let stok : i64 = self.pos
@@ -2146,19 +2155,19 @@ impl Parser:
             self.pos ← self.pos + 1
             ptoks.push(stok)
             ptypes.push(self_sty + 262144 × srk)
-            if self.peek() = tokens.TK_COMMA:
+            if self.peek() = tokens.Tk.comma:
                 self.pos ← self.pos + 1
-        if self.peek() ≠ tokens.TK_RPAR:
+        if self.peek() ≠ tokens.Tk.rpar:
             while true:
                 ptoks.push(self.pos)
                 _ ← self.eat_name("a parameter name")
-                if self.peek() = tokens.TK_CURRENCY:
+                if self.peek() = tokens.Tk.currency:
                     self.err("a measure is written against the type, as 'a : i64 ¤meter'")
                     return
                 let u : i64 = types.UNIT_NONE
-                _ ← self.eat(tokens.TK_COLON, "':' and the parameter's type")
+                _ ← self.eat(tokens.Tk.colon, "':' and the parameter's type")
                 let pmut : mut i64 = 0
-                if self.peek() = tokens.TK_MUT:
+                if self.peek() = tokens.Tk.kw_mut:
                     self.pos ← self.pos + 1
                     pmut ← 1
                 let ty0a : i64 = self.parse_type(true)
@@ -2179,11 +2188,11 @@ impl Parser:
                               " parameter""")
                 ptypes.push(ty)
                 if self.failed(): return
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
                 else:
                     break
-        _ ← self.eat(tokens.TK_RPAR, "')' after the parameters")
+        _ ← self.eat(tokens.Tk.rpar, "')' after the parameters")
         let ret : mut i64 = types.TY_UNIT
         // `→ &T |p, q|`: the answer is a borrow, and reaches into the
         // parameters named after it -- the capture list's notation,
@@ -2192,20 +2201,20 @@ impl Parser:
         let ret_ref : mut i64 = 0
         let origins : mut i64[] = []
         let wrote_origins : mut bool = false
-        if self.peek() = tokens.TK_ARROW:
+        if self.peek() = tokens.Tk.arrow:
             self.pos ← self.pos + 1
             let ref_tok : i64 = self.pos
-            if self.peek() = tokens.TK_BAND:
+            if self.peek() = tokens.Tk.band:
                 self.pos ← self.pos + 1
                 ret_ref ← 1
-                if self.peek() = tokens.TK_MUT:
+                if self.peek() = tokens.Tk.kw_mut:
                     self.pos ← self.pos + 1
                     ret_ref ← 2
             ret ← self.parse_type(false)
-            if self.peek() = tokens.TK_BOR:
+            if self.peek() = tokens.Tk.bor:
                 self.pos ← self.pos + 1
                 wrote_origins ← true
-                while self.peek() = tokens.TK_IDENT:
+                while self.peek() = tokens.Tk.ident:
                     let otok : i64 = self.pos
                     self.pos ← self.pos + 1
                     let oi : i64 = self.param_index(ptoks, self.ttext(otok))
@@ -2213,9 +2222,9 @@ impl Parser:
                         self.errc_at(otok, 2434, "'" ⧺ name ⧺ "' answers a borrow of '" ⧺ self.ttext(otok) ⧺ "', which is not a borrowed parameter")
                         return
                     origins.push(oi)
-                    if self.peek() = tokens.TK_COMMA:
+                    if self.peek() = tokens.Tk.comma:
                         self.pos ← self.pos + 1
-                _ ← self.eat(tokens.TK_BOR, "'|' closing what the answer reaches into")
+                _ ← self.eat(tokens.Tk.bor, "'|' closing what the answer reaches into")
             if ret_ref ≠ 0:
                 if not wrote_origins:
                     foreach i := 0…#ptypes:
@@ -2235,7 +2244,7 @@ impl Parser:
                 self.errc_at(ref_tok, 2434, "'" ⧺ name ⧺ "' names what its answer reaches into, but answers no borrow; write '→ &…'")
                 return
         let body : i64 = self.parse_block()
-        if self.peek() = tokens.TK_NL:
+        if self.peek() = tokens.Tk.nl:
             self.pos ← self.pos + 1
         let params_off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ptoks))
@@ -2360,35 +2369,41 @@ impl Parser:
             self.err("'" ⧺ name ⧺ "' already names a type")
             return
         self.edecl.push(self.qual_type(name, name_tok))
-        let w : mut i64 = types.TY_I64
+        // u64 where the enum names no type of its own, as the
+        // specification says: the widest unsigned covers every
+        // auto-numbered and every @flag member, and a negative one is
+        // then refused until a signed type is named.
+        let w : mut i64 = types.TY_U64
+        let named : mut bool = false
         // `enum E : u8:` says what the values are held in.  A brace
         // after the colon is not that; it is the other opener, which
         // the check below has words for.
-        if self.peek() = tokens.TK_COLON and self.peek2() ≠ tokens.TK_NL and self.peek2() ≠ tokens.TK_LBRACE:
+        if self.peek() = tokens.Tk.colon and self.peek2() ≠ tokens.Tk.nl and self.peek2() ≠ tokens.Tk.lbrace:
             self.pos ← self.pos + 1
             w ← self.parse_type(false)
+            named ← true
             if not (types.ty_is_int(w) and types.ty_unit(w) = 0):
                 self.err("an enum's values are held in a plain integer type")
                 return
         // laid out under a colon, or written in braces, as a struct's
         // fields and a block's statements are
-        let braced : bool = self.peek() = tokens.TK_LBRACE
+        let braced : bool = self.peek() = tokens.Tk.lbrace
         if braced:
-            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the enumerators")
+            _ ← self.eat(tokens.Tk.lbrace, "'{' opening the enumerators")
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' beginning the enumerators")
-            if self.peek() = tokens.TK_LBRACE:
+            _ ← self.eat(tokens.Tk.colon, "':' or '{' beginning the enumerators")
+            if self.peek() = tokens.Tk.lbrace:
                 self.err(both_openers())
                 return
-            _ ← self.eat(tokens.TK_NL, "the enumerators on their own lines")
-            _ ← self.eat(tokens.TK_INDENT, "an indented list of enumerators")
-        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
+            _ ← self.eat(tokens.Tk.nl, "the enumerators on their own lines")
+            _ ← self.eat(tokens.Tk.indent, "an indented list of enumerators")
+        let ender : tokens.Tk = if braced: tokens.Tk.rbrace else: tokens.Tk.dedent
         let first : i64 ¤ptrdiff = #self.emembers
         // a flag's members are bits, so the automatic values double
         // where an ordinary enum's count on
         let next_val : mut i64 = if is_flag: 1 else: 0
-        while self.peek() ≠ ender and self.peek() ≠ tokens.TK_EOF and not self.failed():
-            if self.peek() = tokens.TK_NL:
+        while self.peek() ≠ ender and self.peek() ≠ tokens.Tk.eof and not self.failed():
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
                 continue
             let mname := self.ttext(self.pos)
@@ -2403,13 +2418,13 @@ impl Parser:
             // what the next enumerator would have counted on to, kept
             // because an alias is a nickname and does not count
             let keep : i64 = next_val
-            if self.peek() = tokens.TK_EQ:
+            if self.peek() = tokens.Tk.eq:
                 self.pos ← self.pos + 1
                 let neg : mut i64 = 1
-                if self.peek() = tokens.TK_NEG:
+                if self.peek() = tokens.Tk.neg:
                     self.pos ← self.pos + 1
                     neg ← ⁻1
-                if self.peek() = tokens.TK_IDENT and neg = 1:
+                if self.peek() = tokens.Tk.ident and neg = 1:
                     // An enumerator standing for one this enum already
                     // names is another name for it, and says so.  That
                     // is the only way two names share a value, because
@@ -2431,7 +2446,7 @@ impl Parser:
                     next_val ← av
                     alias ← true
                 else:
-                    if self.peek() ≠ tokens.TK_INT or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
+                    if self.peek() ≠ tokens.Tk.number or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
                         self.err("""an enumerator stands for a written-out number, or for one this
                                   " enum named above it""")
                         return
@@ -2450,9 +2465,9 @@ impl Parser:
                 next_val ← if next_val ≠ 0: @wrap(next_val « 1) else: 1
             else:
                 next_val ← next_val + 1
-            if self.peek() = tokens.TK_SEMI:
+            if self.peek() = tokens.Tk.semi:
                 self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
         _ ← self.eat(ender, if braced: "'}' closing the enumerators" else: "the end of the enumerators")
         if is_flag:
@@ -2475,7 +2490,9 @@ impl Parser:
             // top of the range is written out where it would be needed
             let hi : i64 = if bits - sgn >= 63: 9223372036854775807 else: (1 « (bits - sgn)) - 1
             if v < lo or (bits - sgn < 64 and v > hi):
-                self.err("enumerator '" ⧺ self.emembers[f] ⧺ "' is " ⧺ tokens.i64_str(v) ⧺ ", which does not fit " ⧺ types.type_name_m(w, self.umarks, self.snames, self.enames) ⧺ ", the type the values are stored in")
+                let advice : str = if named: "" else: """ when none is named; a negative member wants a
+                                                       " signed underlying type, as 'enum """ ⧺ name ⧺ " : i64:'"
+                self.err("enum '" ⧺ name ⧺ "': member '" ⧺ self.emembers[f] ⧺ "' is " ⧺ tokens.i64_str(v) ⧺ ", which does not fit " ⧺ types.type_name_m(w, self.umarks, self.snames, self.enames) ⧺ ", the type the values are stored in" ⧺ advice)
                 return
         let n : i64 ¤ptrdiff = #self.emembers - first
         if n = 0:
@@ -2546,20 +2563,20 @@ impl Parser:
     // The `{field: value, …}` of a struct literal, the name having
     // been read already.  Answers where the fields were written down.
     fn parse_slit_fields(&mut self) → i64:
-        _ ← self.eat(tokens.TK_LBRACE, "'{' opening the struct literal")
+        _ ← self.eat(tokens.Tk.lbrace, "'{' opening the struct literal")
         let items : mut i64[] = []
-        if self.peek() ≠ tokens.TK_RBRACE:
+        if self.peek() ≠ tokens.Tk.rbrace:
             while true:
                 items.push(self.pos)
                 _ ← self.eat_name("a field's name")
-                _ ← self.eat(tokens.TK_COLON, "':' after the field's name")
+                _ ← self.eat(tokens.Tk.colon, "':' after the field's name")
                 items.push(self.parse_expr())
                 if self.failed(): return 0
-                if self.peek() = tokens.TK_COMMA:
+                if self.peek() = tokens.Tk.comma:
                     self.pos ← self.pos + 1
                 else:
                     break
-        _ ← self.eat(tokens.TK_RBRACE, "'}' closing the struct literal")
+        _ ← self.eat(tokens.Tk.rbrace, "'}' closing the struct literal")
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#items) ÷ 2 ?? 0)
         foreach it := items:
@@ -2568,20 +2585,20 @@ impl Parser:
 
     fn parse_bound(&mut self, at : i64, path : str) → i64:
         self.pos ← at + 1
-        _ ← self.eat(tokens.TK_DOT, "'.' and the name asked of the module")
+        _ ← self.eat(tokens.Tk.dot, "'.' and the name asked of the module")
         let ntok : i64 = self.pos
         _ ← self.eat_name("the name asked of the module")
         // `m.Name{…}`: a struct of another module, made through the
         // only way into it.  The whole name rides with the node, since
         // the token spells only what was written after the dot.
-        if self.peek() = tokens.TK_LBRACE:
+        if self.peek() = tokens.Tk.lbrace:
             self.hold_export(ntok, path, self.ttext(ntok))
             self.qmods.push(path)
             let qm : i64 = @dropunit(#self.qmods)
             let off : i64 = self.parse_slit_fields()
             if self.failed(): return 0
-            return self.parse_postfix(self.mknode(ast.NK_SLIT, ntok, off, ast.SLIT_PLAIN, qm))
-        if self.peek() ≠ tokens.TK_LPAR:
+            return self.parse_postfix(self.mknode(ast.Nk.slit, ntok, off, ast.SLIT_PLAIN, qm))
+        if self.peek() ≠ tokens.Tk.lpar:
             // A name asked of a module that is not called: a global it
             // holds, or an enum of its whose member follows.  The whole
             // name rides with the node, since the token spells only
@@ -2591,12 +2608,12 @@ impl Parser:
             self.hold_export(ntok, path, self.ttext(ntok))
             self.qmods.push(path)
             let qv : i64 = @dropunit(#self.qmods)
-            return self.parse_postfix(self.mknode(ast.NK_VAR, ntok, 0, 0, qv))
+            return self.parse_postfix(self.mknode(ast.Nk.var, ntok, 0, 0, qv))
         let aoff : i64 = self.parse_args()
         self.qmods.push(path)
         // what a call answers may be indexed, sliced or reached into,
         // as what any other call answers may be
-        self.parse_postfix(self.mknode(ast.NK_CALL, ntok, aoff, @dropunit(#self.qmods), 0))
+        self.parse_postfix(self.mknode(ast.Nk.call, ntok, aoff, @dropunit(#self.qmods), 0))
 
     fn parse_unit_def(&mut self):
         self.pos ← self.pos + 1
@@ -2616,7 +2633,7 @@ impl Parser:
         if ui = ⁻1:
             self.err("this file names more than 125 measures")
             return
-        if self.peek() = tokens.TK_EQ:
+        if self.peek() = tokens.Tk.eq:
             self.err("a measure derived from others is not core-2 yet; 'unit " ⧺ name ⧺ "' names one of its own")
             return
         // `unit tok → ptrdiff` says a token index may go wherever a
@@ -2630,7 +2647,7 @@ impl Parser:
         // named before it is declared.
         let dname : mut str = ""
         let dtok : mut i64 = 0
-        if self.peek() = tokens.TK_ARROW:
+        if self.peek() = tokens.Tk.arrow:
             self.pos ← self.pos + 1
             dtok ← self.pos
             dname ← self.ttext(dtok)
@@ -2653,7 +2670,7 @@ impl Parser:
         if self.sindex_ty(name) ≠ ⁻1:
             self.err("'" ⧺ name ⧺ "' already stands for something")
             return
-        _ ← self.eat(tokens.TK_EQ, "'=' and the type the name stands for")
+        _ ← self.eat(tokens.Tk.eq, "'=' and the type the name stands for")
         let t : i64 = self.parse_type(false)
         if self.failed(): return
         self.tanames.push(name)
@@ -2661,7 +2678,7 @@ impl Parser:
         self.end_stmt()
 
     fn parse_struct(&mut self, repr_c : bool, invs : i64[]):
-        _ ← self.eat(tokens.TK_STRUCT, "'struct'")
+        _ ← self.eat(tokens.Tk.kw_struct, "'struct'")
         let name_tok : i64 = self.pos
         let name := self.ttext(name_tok)
         _ ← self.eat_name("the struct's name")
@@ -2670,17 +2687,17 @@ impl Parser:
         // nothing -- the lexer stops counting them there, which is
         // what lets a struct literal be spread out -- so ';' separates
         // the fields and the next field's name will do on its own.
-        let braced : bool = self.peek() = tokens.TK_LBRACE
+        let braced : bool = self.peek() = tokens.Tk.lbrace
         if braced:
-            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the fields")
+            _ ← self.eat(tokens.Tk.lbrace, "'{' opening the fields")
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the struct's name")
-            if self.peek() = tokens.TK_LBRACE:
+            _ ← self.eat(tokens.Tk.colon, "':' or '{' after the struct's name")
+            if self.peek() = tokens.Tk.lbrace:
                 self.err(both_openers())
                 return
-            _ ← self.eat(tokens.TK_NL, "the fields on their own lines")
-            _ ← self.eat(tokens.TK_INDENT, "an indented field list")
-        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
+            _ ← self.eat(tokens.Tk.nl, "the fields on their own lines")
+            _ ← self.eat(tokens.Tk.indent, "an indented field list")
+        let ender : tokens.Tk = if braced: tokens.Tk.rbrace else: tokens.Tk.dedent
         let ftoks : mut i64[] = []
         let ftypes : mut i64[] = []
         while self.peek() ≠ ender and not self.failed():
@@ -2688,23 +2705,23 @@ impl Parser:
             _ ← self.eat_name("a field's name")
             // a field may state a unit the way a binding does:
             // name : type ¤unit
-            if self.peek() = tokens.TK_CURRENCY:
+            if self.peek() = tokens.Tk.currency:
                 self.err("a measure is written against the type, as 'f : i64 ¤meter'")
                 return
             let fu : i64 = types.UNIT_NONE
-            _ ← self.eat(tokens.TK_COLON, "':' and the field's type")
+            _ ← self.eat(tokens.Tk.colon, "':' and the field's type")
             let ty : mut i64 = self.parse_type(false)
             if fu ≠ 0:
                 ty ← self.unit_on_type(ty, fu, " field")
             if types.ty_is_tup(ty):
                 self.err("a tuple inside a struct is not core-2 yet")
             ftypes.push(ty)
-            if self.peek() = tokens.TK_SEMI:
+            if self.peek() = tokens.Tk.semi:
                 self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
         _ ← self.eat(ender, if braced: "'}' closing the fields" else: "the end of the struct")
-        if self.peek() = tokens.TK_NL:
+        if self.peek() = tokens.Tk.nl:
             self.pos ← self.pos + 1
         let off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ftoks))
@@ -2721,7 +2738,7 @@ impl Parser:
                                is_repr_c: repr_c, inv_off: inv_off})
 
     fn parse_impl(&mut self):
-        _ ← self.eat(tokens.TK_IMPL, "'impl'")
+        _ ← self.eat(tokens.Tk.kw_impl, "'impl'")
         let name_tok : i64 = self.pos
         let name0 := self.ttext(name_tok)
         _ ← self.eat_name("the struct's name")
@@ -2740,19 +2757,19 @@ impl Parser:
         let name : str = if types.ty_is_struct(sty): parse_bare(self.snames[types.ty_sidx(sty) × 1¤ptrdiff]) else: name0
         // laid out under a colon, or written in braces, as a struct's
         // fields and a block's statements are
-        let braced : bool = self.peek() = tokens.TK_LBRACE
+        let braced : bool = self.peek() = tokens.Tk.lbrace
         if braced:
-            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the methods")
+            _ ← self.eat(tokens.Tk.lbrace, "'{' opening the methods")
         else:
-            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the name")
-            if self.peek() = tokens.TK_LBRACE:
+            _ ← self.eat(tokens.Tk.colon, "':' or '{' after the name")
+            if self.peek() = tokens.Tk.lbrace:
                 self.err(both_openers())
                 return
-            _ ← self.eat(tokens.TK_NL, "the methods on their own lines")
-            _ ← self.eat(tokens.TK_INDENT, "an indented method list")
-        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
+            _ ← self.eat(tokens.Tk.nl, "the methods on their own lines")
+            _ ← self.eat(tokens.Tk.indent, "an indented method list")
+        let ender : tokens.Tk = if braced: tokens.Tk.rbrace else: tokens.Tk.dedent
         while self.peek() ≠ ender and not self.failed():
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
                 continue
             // where this method begins, which is its first annotation
@@ -2768,7 +2785,7 @@ impl Parser:
             let pres : mut i64[] = []
             let post_toks : mut i64[] = []
             let posts : mut i64[] = []
-            while self.peek() = tokens.TK_AT and not self.failed():
+            while self.peek() = tokens.Tk.at and not self.failed():
                 self.pos ← self.pos + 1
                 let aname := self.ttext(self.pos)
                 _ ← self.eat_word("the annotation's name")
@@ -2777,16 +2794,16 @@ impl Parser:
                 elif aname = "noreturn":
                     is_noreturn ← true
                 elif aname = "pre":
-                    _ ← self.eat(tokens.TK_LPAR, "'(' after @pre")
+                    _ ← self.eat(tokens.Tk.lpar, "'(' after @pre")
                     pres.push(self.parse_expr())
-                    _ ← self.eat(tokens.TK_RPAR, "')' closing @pre")
+                    _ ← self.eat(tokens.Tk.rpar, "')' closing @pre")
                 elif aname = "post":
-                    _ ← self.eat(tokens.TK_LPAR, "'(' after @post")
+                    _ ← self.eat(tokens.Tk.lpar, "'(' after @post")
                     post_toks.push(self.pos)
                     _ ← self.eat_name("the name @post gives the result")
-                    _ ← self.eat(tokens.TK_COLON, "':' after the result's name")
+                    _ ← self.eat(tokens.Tk.colon, "':' after the result's name")
                     posts.push(self.parse_expr())
-                    _ ← self.eat(tokens.TK_RPAR, "')' closing @post")
+                    _ ← self.eat(tokens.Tk.rpar, "')' closing @post")
                 elif aname = "hot" or aname = "cold":
                     // how often a method is expected to run: noted, as
                     // the interpreter notes it
@@ -2795,15 +2812,15 @@ impl Parser:
                 else:
                     self.err("'@" ⧺ aname ⧺ "' is not core-2 on a method")
                     return
-                if self.peek() = tokens.TK_NL:
+                if self.peek() = tokens.Tk.nl:
                     self.pos ← self.pos + 1
-            if self.peek() = tokens.TK_FN:
+            if self.peek() = tokens.Tk.kw_fn:
                 self.parse_fn(imp, false, is_noreturn, false, 0, false,
                               pres, post_toks, posts, name, sty)
             else:
                 self.err("an impl block holds methods and nothing else")
         _ ← self.eat(ender, if braced: "'}' closing the impl block" else: "the end of the impl block")
-        if self.peek() = tokens.TK_NL:
+        if self.peek() = tokens.Tk.nl:
             self.pos ← self.pos + 1
 
     fn parse_global(&mut self, ignored : bool):
@@ -2817,12 +2834,12 @@ impl Parser:
         if self.is_bound_import():
             self.pos ← self.pos + 1
             _ ← self.eat_name("the name the module is bound to")
-            _ ← self.eat(tokens.TK_DEFINE, "':=' before the module")
-            _ ← self.eat(tokens.TK_AT, "'@import'")
+            _ ← self.eat(tokens.Tk.define, "':=' before the module")
+            _ ← self.eat(tokens.Tk.at, "'@import'")
             _ ← self.eat_word("'import'")
-            _ ← self.eat(tokens.TK_LPAR, "'(' after @import")
-            _ ← self.eat(tokens.TK_STR, "the file's name, in quotes")
-            _ ← self.eat(tokens.TK_RPAR, "')' closing @import")
+            _ ← self.eat(tokens.Tk.lpar, "'(' after @import")
+            _ ← self.eat(tokens.Tk.string, "the file's name, in quotes")
+            _ ← self.eat(tokens.Tk.rpar, "')' closing @import")
             self.end_stmt()
             return
         // a top-level let: the same shape a local has
@@ -2841,13 +2858,13 @@ impl Parser:
 
     // whether what is here is `let name := @import(`
     fn is_bound_import(&self) → bool:
-        if self.peek() ≠ tokens.TK_LET:
+        if self.peek() ≠ tokens.Tk.kw_let:
             return false
-        if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] ≠ tokens.TK_IDENT:
+        if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] ≠ tokens.Tk.ident:
             return false
-        if self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ tokens.TK_DEFINE:
+        if self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ tokens.Tk.define:
             return false
-        if self.toks.kind[(self.pos + 3) × 1¤ptrdiff] ≠ tokens.TK_AT:
+        if self.toks.kind[(self.pos + 3) × 1¤ptrdiff] ≠ tokens.Tk.at:
             return false
         self.ttext(self.pos + 4) = "import"
 
@@ -2876,7 +2893,7 @@ impl Parser:
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
         let posts : mut i64[] = []
-        while self.peek() = tokens.TK_AT and not self.failed():
+        while self.peek() = tokens.Tk.at and not self.failed():
             let atok : i64 = self.pos
             self.pos ← self.pos + 1
             let name := self.ttext(self.pos)
@@ -2906,9 +2923,9 @@ impl Parser:
             elif name = "invariant":
                 // what is always true of one of a type, rather than of
                 // a call: the condition names the fields
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @invariant")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @invariant")
                 invs.push(self.parse_expr())
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @invariant")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @invariant")
             elif name = "import":
                 // A bound @import is read where a global binding is,
                 // further up.  Reaching here means the answer was
@@ -2931,14 +2948,14 @@ impl Parser:
                 // is refused rather than ignored, since accepting it
                 // and laying the struct out some other way is the one
                 // behaviour guaranteed to corrupt data.
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @repr")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @repr")
                 let kind := self.ttext(self.pos)
                 _ ← self.eat_word("the layout's name")
                 if kind ≠ "C":
                     self.err("'@repr(" ⧺ kind ⧺ """)' is not a layout core-2 defines; C is the one
                                                  " there is""")
                     return
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @repr")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @repr")
                 is_repr ← true
             elif name = "expect":
                 // @expect level "pattern": the definition is expected
@@ -2952,13 +2969,13 @@ impl Parser:
                 self.pos ← self.pos + 1
                 // @expect <level> <code> ["message"], or the older
                 // <level> "message"
-                if self.peek() = tokens.TK_INT:
+                if self.peek() = tokens.Tk.number:
                     exp_lvl.push(if lvl = "warning": diag.DIAG_WARNING else: diag.DIAG_ERROR)
                     exp_code.push(self.toks.val[self.pos × 1¤ptrdiff])
                     self.pos ← self.pos + 1
-                    if self.peek() = tokens.TK_STR:
+                    if self.peek() = tokens.Tk.string:
                         self.pos ← self.pos + 1
-                elif self.peek() = tokens.TK_STR:
+                elif self.peek() = tokens.Tk.string:
                     // the older form names no number, so there is
                     // nothing here to match on; the interpreter matches
                     // it by its words
@@ -2969,28 +2986,28 @@ impl Parser:
                     return
                 expects ← expects + 1
             elif name = "pre":
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @pre")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @pre")
                 pres.push(self.parse_expr())
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @pre")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @pre")
             elif name = "post":
-                _ ← self.eat(tokens.TK_LPAR, "'(' after @post")
+                _ ← self.eat(tokens.Tk.lpar, "'(' after @post")
                 post_toks.push(self.pos)
                 _ ← self.eat_name("the name @post gives the result")
-                _ ← self.eat(tokens.TK_COLON, "':' after the result's name")
+                _ ← self.eat(tokens.Tk.colon, "':' after the result's name")
                 posts.push(self.parse_expr())
-                _ ← self.eat(tokens.TK_RPAR, "')' closing @post")
+                _ ← self.eat(tokens.Tk.rpar, "')' closing @post")
             else:
                 self.err("'@" ⧺ name ⧺ "' is not core-2")
                 return
-            if self.peek() = tokens.TK_NL:
+            if self.peek() = tokens.Tk.nl:
                 self.pos ← self.pos + 1
-        if is_repr and self.peek() ≠ tokens.TK_STRUCT:
+        if is_repr and self.peek() ≠ tokens.Tk.kw_struct:
             self.err("@repr gives a struct its layout; nothing else has one")
             return
-        if is_fl and self.peek() ≠ tokens.TK_ENUM:
+        if is_fl and self.peek() ≠ tokens.Tk.kw_enum:
             self.err("@flag makes an enum a bit set; nothing else combines")
             return
-        if is_build and self.peek() ≠ tokens.TK_FN:
+        if is_build and self.peek() ≠ tokens.Tk.kw_fn:
             self.err("@build heads the build recipe, which is a function")
             return
         // @start, @test, @export, @replaceable and @impure are all wrong
@@ -3000,7 +3017,7 @@ impl Parser:
             self.err("""the @build function carries no other annotation; it is read at compile time
                       " and no code for it is written""")
             return
-        if self.peek() = tokens.TK_FN:
+        if self.peek() = tokens.Tk.kw_fn:
             // A signature is held to twelve parameters here, so what
             // the @expect lines said travels on the parser rather than
             // as a thirteenth.
@@ -3018,11 +3035,11 @@ impl Parser:
                               + (if is_ignb: 16 else: 0),
                           expects > 0,
                           pres, post_toks, posts, "", 0)
-        elif is_exp and not (self.peek() = tokens.TK_STRUCT or self.peek() = tokens.TK_ENUM or self.peek() = tokens.TK_LET or self.peek() = tokens.TK_TYPE):
+        elif is_exp and not (self.peek() = tokens.Tk.kw_struct or self.peek() = tokens.Tk.kw_enum or self.peek() = tokens.Tk.kw_let or self.peek() = tokens.Tk.kw_type):
             self.err("""@export says what a module lets others name, and this is not something a
                       " module holds""")
             return
-        elif self.peek() = tokens.TK_STRUCT or self.peek() = tokens.TK_IMPL:
+        elif self.peek() = tokens.Tk.kw_struct or self.peek() = tokens.Tk.kw_impl:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a struct carries no annotations")
             elif expects > 0:
@@ -3030,17 +3047,17 @@ impl Parser:
                 // single pass can both report and ignore
                 self.err("""@expect covers functions and globals in core-2; an expected-error struct
                           " stays in the bootstrap suite""")
-            elif self.peek() = tokens.TK_STRUCT:
+            elif self.peek() = tokens.Tk.kw_struct:
                 self.parse_struct(is_repr, invs)
             else:
                 self.parse_impl()
-        elif self.peek() = tokens.TK_UNIT:
+        elif self.peek() = tokens.Tk.kw_unit:
             self.parse_unit_def()
-        elif self.peek() = tokens.TK_TYPE:
+        elif self.peek() = tokens.Tk.kw_type:
             self.parse_type_alias()
-        elif self.peek() = tokens.TK_ENUM:
+        elif self.peek() = tokens.Tk.kw_enum:
             self.parse_enum(is_fl)
-        elif self.peek() = tokens.TK_LET:
+        elif self.peek() = tokens.Tk.kw_let:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a global binding carries no annotations")
             else:
@@ -3120,7 +3137,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         while mut_fi + 1¤ptrdiff < #mods.offs and mods.offs[mut_fi + 1¤ptrdiff] <= toks.off[i × 1¤ptrdiff] × 1¤byte:
             mut_fi ← mut_fi + 1¤ptrdiff
         let fmod : str = mods.names[mods.fmod[mut_fi] × 1¤ptrdiff]
-        if toks.kind[i × 1¤ptrdiff] = tokens.TK_STRUCT and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.TK_IDENT:
+        if toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_struct and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.Tk.ident:
             let sn : str = tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                    toks.len[(i + 1) × 1¤ptrdiff])
             p.snames.push(if fmod = "": sn else: fmod ⧺ "." ⧺ sn)
@@ -3135,7 +3152,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         // is: it may be named from a module that is read before the
         // one declaring it, and what its members are is filled in when
         // the declaration itself is read.
-        if toks.kind[i × 1¤ptrdiff] = tokens.TK_ENUM and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.TK_IDENT:
+        if toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_enum and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.Tk.ident:
             let en : str = tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                    toks.len[(i + 1) × 1¤ptrdiff])
             let ewhole : str = if fmod = "": en else: fmod ⧺ "." ⧺ en
@@ -3146,7 +3163,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
                 p.estart.push(0)
                 p.ecount.push(0)
                 p.eflag.push(0)
-        if toks.kind[i × 1¤ptrdiff] = tokens.TK_UNIT and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.TK_IDENT:
+        if toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_unit and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.Tk.ident:
             let un : str = tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                    toks.len[(i + 1) × 1¤ptrdiff])
             if p.unit_index(un) = ⁻1 and @dropunit(#p.unames) < 125:
@@ -3158,13 +3175,13 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         // An annotation stands over the definition after it and no
         // further, so what opens it is the word and what closes it is
         // whatever it was written for.
-        if toks.kind[i × 1¤ptrdiff] = tokens.TK_AT and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.TK_IDENT and tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff], toks.len[(i + 1) × 1¤ptrdiff]) = "export":
+        if toks.kind[i × 1¤ptrdiff] = tokens.Tk.at and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.Tk.ident and tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff], toks.len[(i + 1) × 1¤ptrdiff]) = "export":
             exp_open ← 1
-        elif toks.kind[i × 1¤ptrdiff] = tokens.TK_STRUCT or toks.kind[i × 1¤ptrdiff] = tokens.TK_ENUM or toks.kind[i × 1¤ptrdiff] = tokens.TK_FN or toks.kind[i × 1¤ptrdiff] = tokens.TK_LET or toks.kind[i × 1¤ptrdiff] = tokens.TK_IMPL or toks.kind[i × 1¤ptrdiff] = tokens.TK_TYPE or toks.kind[i × 1¤ptrdiff] = tokens.TK_UNIT:
+        elif toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_struct or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_enum or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_fn or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_let or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_impl or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_type or toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_unit:
             exp_open ← 0
         i ← i + 1
-    while p.peek() ≠ tokens.TK_EOF:
-        if p.peek() = tokens.TK_NL:
+    while p.peek() ≠ tokens.Tk.eof:
+        if p.peek() = tokens.Tk.nl:
             p.pos ← p.pos + 1
         else:
             let d0 : i64 = @dropunit(#p.diags)
@@ -3184,11 +3201,11 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
             if p.poisoned:
                 p.poisoned ← false
                 // hunt for the next definition at the left margin
-                while p.peek() ≠ tokens.TK_EOF:
+                while p.peek() ≠ tokens.Tk.eof:
                     let k2 : i64 = p.peek()
-                    if k2 = tokens.TK_INDENT:
+                    if k2 = tokens.Tk.indent:
                         p.skip_block()
-                    elif k2 = tokens.TK_FN or k2 = tokens.TK_STRUCT or k2 = tokens.TK_IMPL or k2 = tokens.TK_LET or k2 = tokens.TK_AT:
+                    elif k2 = tokens.Tk.kw_fn or k2 = tokens.Tk.kw_struct or k2 = tokens.Tk.kw_impl or k2 = tokens.Tk.kw_let or k2 = tokens.Tk.at:
                         break
                     else:
                         p.pos ← p.pos + 1

@@ -30,99 +30,99 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
     let nb : i64 = a.nb[id × 1¤ptrdiff]
     let nc : i64 = a.nc[id × 1¤ptrdiff]
     let ttext : str = tokens.run_str(src, toks.off[tok × 1¤ptrdiff], toks.len[tok × 1¤ptrdiff])
-    if k = ast.NK_INT:
+    if k = ast.Nk.lit_int:
         std.println("{}int {} big={}", pad, na, nb)
-    elif k = ast.NK_BOOL:
+    elif k = ast.Nk.lit_bool:
         std.println("{}bool {}", pad, na)
-    elif k = ast.NK_STR:
+    elif k = ast.Nk.lit_str:
         std.println("{}str \"{}\"", pad, a.strs[na × 1¤ptrdiff])
-    elif k = ast.NK_VAR:
+    elif k = ast.Nk.var:
         std.println("{}var {}", pad, ttext)
-    elif k = ast.NK_ARRLIT:
+    elif k = ast.Nk.arrlit:
         std.println("{}arrlit", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_INDEX:
+    elif k = ast.Nk.index:
         std.println("{}index", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = ast.NK_LEN:
+    elif k = ast.Nk.len:
         std.println("{}len", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_CALL:
+    elif k = ast.Nk.call:
         std.println("{}call {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_SCALL:
+    elif k = ast.Nk.scall:
         std.println("{}scall {}", pad, na)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_MCALL:
+    elif k = ast.Nk.mcall:
         std.println("{}mcall {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_REF:
+    elif k = ast.Nk.ref:
         std.println("{}ref {}", pad, nb)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_SLIT:
+    elif k = ast.Nk.slit:
         std.println("{}slit {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 2 + i × 2) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_FIELD:
+    elif k = ast.Nk.field:
         std.println("{}field {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_STOREFLD:
+    elif k = ast.Nk.storefld:
         std.println("{}storefld {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = ast.NK_BLOCK:
+    elif k = ast.Nk.block:
         std.println("{}block", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-    elif k = ast.NK_LET:
+    elif k = ast.Nk.st_let:
         std.println("{}let {} mut={} ty={}", pad, ttext, nb, types.type_name_m(nc, a.umarks, snames_of(a), a.enames))
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_ASSIGN:
+    elif k = ast.Nk.assign:
         std.println("{}assign {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_STOREIDXP:
+    elif k = ast.Nk.storeidxp:
         std.println("{}storeidx", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
         dump_node(a, nc, depth + 1, src, toks)
-    elif k = ast.NK_DISCARD:
+    elif k = ast.Nk.discard:
         std.println("{}discard", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_IF:
+    elif k = ast.Nk.st_if:
         std.println("{}if", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
         if nc ≠ ⁻1:
             std.println("{}else", pad)
             dump_node(a, nc, depth + 1, src, toks)
-    elif k = ast.NK_WHILE:
+    elif k = ast.Nk.st_while:
         std.println("{}while", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = ast.NK_FOREACH:
+    elif k = ast.Nk.st_foreach:
         std.println("{}foreach {}", pad, ttext)
         dump_node(a, a.extra[na × 1¤ptrdiff], depth + 1, src, toks)
         if a.extra[(na + 1) × 1¤ptrdiff] ≠ ⁻1:
             dump_node(a, a.extra[(na + 1) × 1¤ptrdiff], depth + 1, src, toks)
         dump_node(a, a.extra[(na + 2) × 1¤ptrdiff], depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = ast.NK_FOREACHA:
+    elif k = ast.Nk.foreacha:
         std.println("{}foreacha {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
-    elif k = ast.NK_MATCHE:
+    elif k = ast.Nk.matche:
         std.println("{}match-enum", pad)
         dump_node(a, na, depth + 1, src, toks)
         let mn : i64 = a.extra[nb × 1¤ptrdiff]
@@ -136,21 +136,21 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
         if a.extra[(nb + 1) × 1¤ptrdiff] ≠ ⁻1:
             std.println("{}  arm _", pad)
             dump_node(a, a.extra[(nb + 1) × 1¤ptrdiff], depth + 2, src, toks)
-    elif k = ast.NK_RETURN:
+    elif k = ast.Nk.st_return:
         std.println("{}return", pad)
         if na ≠ ⁻1:
             dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_BREAK:
+    elif k = ast.Nk.st_break:
         std.println("{}break", pad)
-    elif k = ast.NK_CONTINUE:
+    elif k = ast.Nk.st_continue:
         std.println("{}continue", pad)
-    elif k = ast.NK_EXPRSTMT:
+    elif k = ast.Nk.exprstmt:
         std.println("{}exprstmt", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_WRAP:
+    elif k = ast.Nk.op_wrap:
         std.println("{}wrap", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = ast.NK_NEG or k = ast.NK_NOT or k = ast.NK_BNOT:
+    elif k = ast.Nk.neg or k = ast.Nk.op_not or k = ast.Nk.bnot:
         std.println("{}unop {}", pad, k)
         dump_node(a, na, depth + 1, src, toks)
     else:

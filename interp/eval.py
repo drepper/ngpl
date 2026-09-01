@@ -6582,7 +6582,9 @@ class Evaluator:
         source: list[Value]
         backing: list[Value] | None = None
         etype: str | None = None
-        if isinstance(du, IntValue):
+        if isinstance(du, (IntValue, EnumValue)):
+            # An enumerator is a value like any other, and a table of
+            # them starts out filled with one.
             source = [du]
         elif isinstance(du, ObjectValue) and isinstance(du.obj, ArrayValue):
             arr = du.obj

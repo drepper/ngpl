@@ -8,198 +8,112 @@ let diag := @import("diag")
 
 
 @export
-let NK_INT : i64 = 1        // na = value (wrapped), nb = big flag
-@export
-let NK_BOOL : i64 = 2       // na = 0 or 1
-@export
-let NK_STR : i64 = 3        // na = string table index
-@export
-let NK_VAR : i64 = 4        // name is the token
-@export
-let NK_ARRLIT : i64 = 5     // na = extra [count, elem…]
-@export
-let NK_INDEX : i64 = 6      // na = base, nb = index
-@export
-let NK_LEN : i64 = 7        // na = base (# of an array or a string)
-@export
-let NK_CALL : i64 = 10      // na = extra [argc, arg…]; callee token
-@export
-let NK_SCALL : i64 = 11     // na = builtin id, nb = extra [argc, arg…]
-@export
-let NK_MCALL : i64 = 12     // na = base, nb = extra [argc, arg…]; method token
-@export
-let NK_REF : i64 = 13       // na = inner, nb = 1 shared or 2 mut
-@export
-let NK_SLIT : i64 = 14      // na = extra [n, field-token, expr, …]; name token
-@export
-let NK_FIELD : i64 = 15     // na = base; field token
-@export
-let NK_SOME : i64 = 16      // na = the value ⊨ carries
-@export
-let NK_EMPTYV : i64 = 17    // a bare ∅
-@export
-let NK_HLIT : i64 = 18      // na = extra [n, key, value, …]
-@export
-let NK_TUPLE : i64 = 19     // na = extra [n, expr…]
-@export
-let NK_DROPU : i64 = 45     // @dropunit: na = the measured value
-@export
-let NK_IOTA : i64 = 46      // container ⍳ wanted: where it sits, if anywhere
-@export
-let NK_SATADD : i64 = 47    // ⊞: the sum, held at the type's edge
-@export
-let NK_SATSUB : i64 = 48    // ⊟
-@export
-let NK_SATMUL : i64 = 49    // ⊠
-@export
-let NK_LXOR : i64 = 53      // ⊕, both sides read
-@export
-let NK_LNAND : i64 = 54     // ⊼
-@export
-let NK_LNOR : i64 = 58      // ⊽
-@export
-let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
-@export
-let NK_RESHAPE : i64 = 60   // n ⍴ x: na = the count, nb = the filler
-@export
-let NK_WHILEB : i64 = 61    // while x := e: na = e, nb = body; name token
-@export
-let NK_TYPEOF : i64 = 62    // @typeof(e): folds to the type's spelling
-@export
-let NK_ELEMOF : i64 = 43    // key ∊ dictionary
-@export
-let NK_ADD : i64 = 20
-@export
-let NK_SUB : i64 = 21
-@export
-let NK_MUL : i64 = 22
-@export
-let NK_DIV : i64 = 23
-@export
-let NK_MOD : i64 = 24
-@export
-let NK_SHL : i64 = 25
-@export
-let NK_SHR : i64 = 26
-@export
-let NK_BAND : i64 = 27
-@export
-let NK_BOR : i64 = 28
-@export
-let NK_BXOR : i64 = 29
-@export
-let NK_EQ : i64 = 30
-@export
-let NK_NE : i64 = 31
-@export
-let NK_LT : i64 = 32
-@export
-let NK_LE : i64 = 33
-@export
-let NK_GT : i64 = 34
-@export
-let NK_GE : i64 = 35
-@export
-let NK_AND : i64 = 36       // short-circuit
-@export
-let NK_OR : i64 = 37        // short-circuit
-@export
-let NK_LAND : i64 = 38      // ∧, both sides read
-@export
-let NK_LOR : i64 = 39       // ∨
-@export
-let NK_MAXOP : i64 = 40     // ⌈
-@export
-let NK_MINOP : i64 = 41     // ⌊
-@export
-let NK_CCAT : i64 = 42      // ⧺ on strings
-@export
-let NK_NEG : i64 = 50       // ⁻
-@export
-let NK_NOT : i64 = 51       // not, ¬
-@export
-let NK_BNOT : i64 = 52      // ~
+enum Nk : i64:
+    none = 0    // no node kind: what a lookup answers for nothing
+    lit_int = 1    // na = value (wrapped), nb = big flag
+    lit_bool = 2    // na = 0 or 1
+    lit_str = 3    // na = string table index
+    var = 4    // name is the token
+    arrlit = 5    // na = extra [count, elem…]
+    index = 6    // na = base, nb = index
+    len = 7    // na = base (# of an array or a string)
+    call = 10    // na = extra [argc, arg…]; callee token
+    scall = 11    // na = builtin id, nb = extra [argc, arg…]
+    mcall = 12    // na = base, nb = extra [argc, arg…]; method token
+    ref = 13    // na = inner, nb = 1 shared or 2 mut
+    slit = 14    // na = extra [n, field-token, expr, …]; name token
+    field = 15    // na = base; field token
+    op_some = 16    // na = the value ⊨ carries
+    emptyv = 17    // a bare ∅
+    hlit = 18    // na = extra [n, key, value, …]
+    tuple = 19    // na = extra [n, expr…]
+    dropu = 45    // @dropunit: na = the measured value
+    iota = 46    // container ⍳ wanted: where it sits, if anywhere
+    satadd = 47    // ⊞: the sum, held at the type's edge
+    satsub = 48    // ⊟
+    satmul = 49    // ⊠
+    lxor = 53    // ⊕, both sides read
+    lnand = 54    // ⊼
+    lnor = 58    // ⊽
+    slice = 59    // v[a…b]: na = base, nb = lo, nc = hi
+    reshape = 60    // n ⍴ x: na = the count, nb = the filler
+    whileb = 61    // while x := e: na = e, nb = body; name token
+    typeof = 62    // @typeof(e): folds to the type's spelling
+    elemof = 43    // key ∊ dictionary
+    add = 20
+    sub = 21
+    mul = 22
+    div = 23
+    mod = 24
+    shl = 25
+    shr = 26
+    band = 27
+    bor = 28
+    bxor = 29
+    eq = 30
+    ne = 31
+    lt = 32
+    le = 33
+    gt = 34
+    ge = 35
+    op_and = 36    // short-circuit
+    op_or = 37    // short-circuit
+    land = 38    // ∧, both sides read
+    lor = 39    // ∨
+    maxop = 40    // ⌈
+    minop = 41    // ⌊
+    ccat = 42    // ⧺ on strings
+    neg = 50    // ⁻
+    op_not = 51    // not, ¬
+    bnot = 52    // ~
 // 55 was NK_COND, `a if c else b`, which was withdrawn.  @old took the
 // number rather than another gap being opened: na = the expression,
 // nb = which @old of this function's postconditions it is.
-@export
-let NK_OLD : i64 = 55
+    old = 55
 // A field named inside an @invariant.  The condition is written once
 // and read wherever one of the type is made or changed, so its field
 // references cannot be slots of any one frame: na is the field's
 // index, and what it is read out of is whatever the site has to hand.
-@export
-let NK_IFIELD : i64 = 98
-@export
-let NK_WRAP : i64 = 56      // na = inner
-@export
-let NK_DEFAULT : i64 = 57   // na = the result-shaped thing, nb = default
+    ifield = 98
+    op_wrap = 56    // na = inner
+    default = 57    // na = the result-shaped thing, nb = default
 // statements
-@export
-let NK_LET : i64 = 70       // na = init, nb = 1 when mut, nc = type; name token
-@export
-let NK_ASSIGN : i64 = 71    // na = value; target name token
-@export
-let NK_DISCARD : i64 = 72   // na = value
-@export
-let NK_IF : i64 = 73        // na = cond, nb = then block, nc = else block or ⁻1
-@export
-let NK_WHILE : i64 = 74     // na = cond, nb = body
-@export
-let NK_FOREACH : i64 = 75   // na = extra [lo, step or ⁻1, hi], nb = body; var token
-@export
-let NK_FOREACHA : i64 = 76  // na = array expr, nb = body; var token
-@export
-let NK_RETURN : i64 = 77    // na = value or ⁻1
-@export
-let NK_BREAK : i64 = 78
-@export
-let NK_CONTINUE : i64 = 79
-@export
-let NK_EXPRSTMT : i64 = 80  // na = expr
-@export
-let NK_BLOCK : i64 = 81     // na = extra [count, stmt…]
-@export
-let NK_STOREFLD : i64 = 83  // na = base var, nb = value; field token
-@export
-let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block]; bind token
-@export
-let NK_LETT : i64 = 85      // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
-@export
-let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = value
-@export
-let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = hi, nc = step or ⁻1
-@export
-let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
-@export
-let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
-@export
-let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
-@export
-let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
-@export
-let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
-@export
-let NK_SIZEOF : i64 = 96    // @sizeof(T) or @sizeof(e): folds to a count of bytes
+    st_let = 70    // na = init, nb = 1 when mut, nc = type; name token
+    assign = 71    // na = value; target name token
+    discard = 72    // na = value
+    st_if = 73    // na = cond, nb = then block, nc = else block or ⁻1
+    st_while = 74    // na = cond, nb = body
+    st_foreach = 75    // na = extra [lo, step or ⁻1, hi], nb = body; var token
+    foreacha = 76    // na = array expr, nb = body; var token
+    st_return = 77    // na = value or ⁻1
+    st_break = 78
+    st_continue = 79
+    exprstmt = 80    // na = expr
+    block = 81    // na = extra [count, stmt…]
+    storefld = 83    // na = base var, nb = value; field token
+    st_match = 84    // na = subject, nb = extra [some-block, empty-block]; bind token
+    st_lett = 85    // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
+    storeidxp = 86    // path[i] ← v: na = base expr, nb = index, nc = value
+    rangev = 87    // a…b and a…step…b as a value: na = lo, nb = hi, nc = step or ⁻1
+    lambda = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
+    fnval = 89    // a named function as a value: na = fn index
+    callv = 90    // applying a value: na = callee expr, nb = args
+    expects = 93    // @expect over one statement: na = it, nb = 1 when an error is expected
+    hinted = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
+    sizeof = 96    // @sizeof(T) or @sizeof(e): folds to a count of bytes
 // match over an enumeration: na = subject, nb = extra
 //   [n, default block or ⁻1, then n × (enum token, member token, block)]
 // and nc = which enum, settled by the checker
-@export
-let NK_MATCHE : i64 = 97
+    matche = 97
 // f ∀ v and f ∃ v: na = what asks, nb = what is asked about, nc = 1
 // for ∃ and 0 for ∀
-@export
-let NK_QUANT : i64 = 99
+    quant = 99
 // a ⊑ b and a ⊒ b: na = the shorter run, nb = the one it is laid
 // against, nc = 1 for the back and 0 for the front
-@export
-let NK_RUN : i64 = 100
-@export
-let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
-@export
-let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
-@export
-let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
+    run = 100
+    mslice = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
+    try = 91    // e?: ∅ answers the function early, a value unwraps
+    badlam = 92    // a λ the checker refuses: na says why
 
 // std builtins reachable from core-1
 @export
@@ -269,24 +183,22 @@ let SLIT_EXE : i64 = 1      // std.Build.Executable{…}
 // std, so they are dispatched where the receiver is known -- at
 // evaluation -- and are numbered only to be named in a diagnostic.
 @export
-let BM_ADDEXE : i64 = 1     // b.add_executable(cfg)
-@export
-let BM_PATH : i64 = 2       // b.search_path(p)
-@export
-let BM_FLAG : i64 = 3       // b.flag(f)
-@export
-let BM_HOST : i64 = 4       // b.host_target
-@export
-let BM_OUTDIR : i64 = 5     // b.output_dir
+enum Bm : i64:
+    none = ⁻1   // the name is nothing the build holds
+    addexe = 1    // b.add_executable(cfg)
+    path = 2    // b.search_path(p)
+    cflag = 3    // b.flag(f)
+    host = 4    // b.host_target
+    outdir = 5    // b.output_dir
 
 @export
-fn build_member(name : str) → i64:
-    if name = "add_executable": return BM_ADDEXE
-    if name = "search_path": return BM_PATH
-    if name = "flag": return BM_FLAG
-    if name = "host_target": return BM_HOST
-    if name = "output_dir": return BM_OUTDIR
-    ⁻1
+fn build_member(name : str) → Bm:
+    if name = "add_executable": return Bm.addexe
+    if name = "search_path": return Bm.path
+    if name = "flag": return Bm.cflag
+    if name = "host_target": return Bm.host
+    if name = "output_dir": return Bm.outdir
+    Bm.none
 
 // What a recipe may read of the command line.  These are data members
 // of the std.Options it is handed, one per option whose value a recipe
@@ -294,20 +206,20 @@ fn build_member(name : str) → i64:
 // recipe's signature, which is the reason the options arrive as one
 // thing rather than as a parameter each.
 @export
-let OM_OUTPUT : i64 = 1     // o.output: what -o named, ∅ where it was not given
-@export
-let OM_TARGET : i64 = 2     // o.target: what --target named, ∅ likewise
-@export
-let OM_OPTIMIZE : i64 = 3   // o.optimize: the level -O asked for, ∅ likewise
-let OM_PATH : i64 = 4       // o.path: where --path said to look, ∅ likewise
+enum Om : i64:
+    none = ⁻1   // the name is nothing the command line says
+    output = 1    // o.output: what -o named, ∅ where it was not given
+    target = 2    // o.target: what --target named, ∅ likewise
+    optimize = 3    // o.optimize: the level -O asked for, ∅ likewise
+    path = 4    // o.path: where --path said to look, ∅ likewise
 
 @export
-fn option_member(name : str) → i64:
-    if name = "output": return OM_OUTPUT
-    if name = "target": return OM_TARGET
-    if name = "optimize": return OM_OPTIMIZE
-    if name = "path": return OM_PATH
-    ⁻1
+fn option_member(name : str) → Om:
+    if name = "output": return Om.output
+    if name = "target": return Om.target
+    if name = "optimize": return Om.optimize
+    if name = "path": return Om.path
+    Om.none
 
 // what a std.Options holds, for the diagnostic that says it does not
 @export

@@ -20,14 +20,14 @@ let tokens := @import("tokens")
 
 
 fn tok_name(k : i64) → str:
-    if k = tokens.TK_EOF: return "eof"
-    if k = tokens.TK_NL: return "nl"
-    if k = tokens.TK_INDENT: return "indent"
-    if k = tokens.TK_DEDENT: return "dedent"
-    if k = tokens.TK_IDENT: return "ident"
-    if k = tokens.TK_INT: return "int"
-    if k = tokens.TK_STR: return "str"
-    if k = tokens.TK_RESERVED: return "reserved"
+    if k = tokens.Tk.eof: return "eof"
+    if k = tokens.Tk.nl: return "nl"
+    if k = tokens.Tk.indent: return "indent"
+    if k = tokens.Tk.dedent: return "dedent"
+    if k = tokens.Tk.ident: return "ident"
+    if k = tokens.Tk.number: return "int"
+    if k = tokens.Tk.string: return "str"
+    if k = tokens.Tk.reserved: return "reserved"
     if k >= 20 and k <= 38: return "kw"
     "op"
 

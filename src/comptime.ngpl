@@ -139,31 +139,31 @@ struct Cev:
 // how a construct a recipe may not use is spelled, so the complaint
 // names what was written rather than a node number
 fn ev_spell(k : i64) → str:
-    if k = ast.NK_MCALL: return "a method call"
-    if k = ast.NK_HLIT: return "a dictionary literal"
-    if k = ast.NK_SLIT: return "a struct literal"
-    if k = ast.NK_FIELD: return "a field"
-    if k = ast.NK_TUPLE: return "a tuple"
-    if k = ast.NK_LAMBDA or k = ast.NK_BADLAM: return "a λ"
-    if k = ast.NK_FNVAL or k = ast.NK_CALLV: return "a function value"
-    if k = ast.NK_SOME or k = ast.NK_TRY: return "an optional"
-    if k = ast.NK_MATCH or k = ast.NK_MATCHE: return "a match"
-    if k = ast.NK_REF: return "a borrow"
-    if k = ast.NK_SLICE or k = ast.NK_MSLICE: return "a slice"
-    if k = ast.NK_RESHAPE: return "a reshape"
-    if k = ast.NK_IOTA or k = ast.NK_ELEMOF: return "a search"
-    if k = ast.NK_SATADD or k = ast.NK_SATSUB or k = ast.NK_SATMUL: return "saturating arithmetic"
-    if k = ast.NK_SHL or k = ast.NK_SHR or k = ast.NK_BAND or k = ast.NK_BOR or k = ast.NK_BXOR or k = ast.NK_BNOT: return "a bit operation"
-    if k = ast.NK_LAND or k = ast.NK_LOR or k = ast.NK_LXOR or k = ast.NK_LNAND or k = ast.NK_LNOR: return "an eager logical operation"
-    if k = ast.NK_MAXOP or k = ast.NK_MINOP: return "⌈ or ⌊"
-    if k = ast.NK_WRAP: return "@wrap"
-    if k = ast.NK_TYPEOF or k = ast.NK_SIZEOF: return "@typeof or @sizeof"
-    if k = ast.NK_RANGEV: return "a range as a value"
-    if k = ast.NK_WHILEB: return "while with a binding"
-    if k = ast.NK_LETT: return "a tuple binding"
-    if k = ast.NK_STOREFLD or k = ast.NK_STOREIDXP: return "a write through a path"
-    if k = ast.NK_EXPECTS: return "@expect"
-    if k = ast.NK_HINTED: return "@likely or @unlikely"
+    if k = ast.Nk.mcall: return "a method call"
+    if k = ast.Nk.hlit: return "a dictionary literal"
+    if k = ast.Nk.slit: return "a struct literal"
+    if k = ast.Nk.field: return "a field"
+    if k = ast.Nk.tuple: return "a tuple"
+    if k = ast.Nk.lambda or k = ast.Nk.badlam: return "a λ"
+    if k = ast.Nk.fnval or k = ast.Nk.callv: return "a function value"
+    if k = ast.Nk.op_some or k = ast.Nk.try: return "an optional"
+    if k = ast.Nk.st_match or k = ast.Nk.matche: return "a match"
+    if k = ast.Nk.ref: return "a borrow"
+    if k = ast.Nk.slice or k = ast.Nk.mslice: return "a slice"
+    if k = ast.Nk.reshape: return "a reshape"
+    if k = ast.Nk.iota or k = ast.Nk.elemof: return "a search"
+    if k = ast.Nk.satadd or k = ast.Nk.satsub or k = ast.Nk.satmul: return "saturating arithmetic"
+    if k = ast.Nk.shl or k = ast.Nk.shr or k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor or k = ast.Nk.bnot: return "a bit operation"
+    if k = ast.Nk.land or k = ast.Nk.lor or k = ast.Nk.lxor or k = ast.Nk.lnand or k = ast.Nk.lnor: return "an eager logical operation"
+    if k = ast.Nk.maxop or k = ast.Nk.minop: return "⌈ or ⌊"
+    if k = ast.Nk.op_wrap: return "@wrap"
+    if k = ast.Nk.typeof or k = ast.Nk.sizeof: return "@typeof or @sizeof"
+    if k = ast.Nk.rangev: return "a range as a value"
+    if k = ast.Nk.whileb: return "while with a binding"
+    if k = ast.Nk.st_lett: return "a tuple binding"
+    if k = ast.Nk.storefld or k = ast.Nk.storeidxp: return "a write through a path"
+    if k = ast.Nk.expects: return "@expect"
+    if k = ast.Nk.hinted: return "@likely or @unlikely"
     "that"
 
 // how a std member a recipe may not reach is spelled
@@ -186,8 +186,8 @@ fn ev_subset() → str:
 
 // a node with nothing under it
 fn ev_is_leaf(k : i64) → bool:
-    if k = ast.NK_INT or k = ast.NK_BOOL or k = ast.NK_STR or k = ast.NK_EMPTYV: return true
-    k = ast.NK_VAR or k = ast.NK_BREAK or k = ast.NK_CONTINUE
+    if k = ast.Nk.lit_int or k = ast.Nk.lit_bool or k = ast.Nk.lit_str or k = ast.Nk.emptyv: return true
+    k = ast.Nk.var or k = ast.Nk.st_break or k = ast.Nk.st_continue
 
 // How many of na, nb and nc hold a child, for the nodes that keep them
 // there; 0 says the node is not part of the subset.  The count has to
@@ -195,17 +195,17 @@ fn ev_is_leaf(k : i64) → bool:
 // nb and its type in nc, and either read as a node id sends the walk
 // somewhere else in the tree entirely.
 fn ev_nchildren(k : i64) → i64:
-    if k = ast.NK_LEN or k = ast.NK_NEG or k = ast.NK_NOT or k = ast.NK_DROPU: return 1
-    if k = ast.NK_RETURN or k = ast.NK_DISCARD or k = ast.NK_EXPRSTMT: return 1
-    if k = ast.NK_LET or k = ast.NK_ASSIGN: return 1
-    if k = ast.NK_INDEX or k = ast.NK_CCAT or k = ast.NK_DEFAULT: return 2
-    if k >= ast.NK_ADD and k <= ast.NK_MOD: return 2
-    if k >= ast.NK_EQ and k <= ast.NK_OR: return 2
-    if k = ast.NK_WHILE or k = ast.NK_FOREACHA: return 2
-    if k = ast.NK_IF: return 3
+    if k = ast.Nk.len or k = ast.Nk.neg or k = ast.Nk.op_not or k = ast.Nk.dropu: return 1
+    if k = ast.Nk.st_return or k = ast.Nk.discard or k = ast.Nk.exprstmt: return 1
+    if k = ast.Nk.st_let or k = ast.Nk.assign: return 1
+    if k = ast.Nk.index or k = ast.Nk.ccat or k = ast.Nk.default: return 2
+    if k >= ast.Nk.add.ord() and k <= ast.Nk.mod.ord(): return 2
+    if k >= ast.Nk.eq.ord() and k <= ast.Nk.op_or.ord(): return 2
+    if k = ast.Nk.st_while or k = ast.Nk.foreacha: return 2
+    if k = ast.Nk.st_if: return 3
     0
 
-// which orderings each comparison admits, indexed by NK_EQ…NK_GE:
+// which orderings each comparison admits, indexed by Nk.eq…Nk.ge:
 // less is 1, equal is 2, greater is 4.  One subtraction and a mask
 // answers all six, over integers, strings and truth values alike.
 fn ev_cmp_admits() → i64[]:
@@ -245,22 +245,22 @@ impl Cev:
         // would be handed its code point here and a character by the
         // interpreter, which is two different programs.  So it is
         // refused by name, as everything else outside the subset is.
-        if k = ast.NK_INT and nb >= 2 and (nb » 1) = types.TY_CHAR:
+        if k = ast.Nk.lit_int and nb >= 2 and (nb » 1) = types.TY_CHAR:
             self.derr(tok, "a character is not part of a build recipe; " ⧺ ev_subset())
             return
         if ev_is_leaf(k):
             return
-        if k = ast.NK_ARRLIT or k = ast.NK_CALL:
-            if k = ast.NK_CALL:
+        if k = ast.Nk.arrlit or k = ast.Nk.call:
+            if k = ast.Nk.call:
                 self.scan_callee(tok)
                 if self.halted():
                     return
             self.scan_list(na)
             return
-        if k = ast.NK_SCALL:
+        if k = ast.Nk.scall:
             self.derr(tok, sb_spell(na) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
             return
-        if k = ast.NK_SLIT:
+        if k = ast.Nk.slit:
             // the build system's own struct is a recipe's to write; a
             // program's struct is not, since a recipe holds no program
             if nb ≠ ast.SLIT_EXE:
@@ -270,25 +270,25 @@ impl Cev:
             foreach i := 0…nf:
                 self.ev_scan(self.a.extra[(na + 2 + i × 2) × 1¤"aextra"])
             return
-        if k = ast.NK_MCALL:
+        if k = ast.Nk.mcall:
             // what a recipe says to the build it was handed; whether the
             // receiver really is one is settled where it has a value
             self.ev_scan(na)
             self.scan_list(nb)
             return
-        if k = ast.NK_FIELD:
+        if k = ast.Nk.field:
             self.ev_scan(na)
             return
-        if k = ast.NK_STOREFLD:
+        if k = ast.Nk.storefld:
             // a write to what the build holds; that the thing written
             // into is a build is settled where it has a value
             self.ev_scan(na)
             self.ev_scan(nb)
             return
-        if k = ast.NK_BLOCK:
+        if k = ast.Nk.block:
             self.scan_list(na)
             return
-        if k = ast.NK_FOREACH:
+        if k = ast.Nk.st_foreach:
             self.ev_scan(self.a.extra[na × 1¤ptrdiff])
             self.ev_scan(self.a.extra[(na + 1) × 1¤ptrdiff])
             self.ev_scan(self.a.extra[(na + 2) × 1¤ptrdiff])
@@ -406,9 +406,9 @@ impl Cev:
         let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
         let lk : i64 = self.a.nkind[last × 1¤ptrdiff]
         let v : mut CVal = cv_none()
-        if lk = ast.NK_EXPRSTMT:
+        if lk = ast.Nk.exprstmt:
             v ← self.ev_expr(self.a.na[last × 1¤ptrdiff])
-        elif lk = ast.NK_IF:
+        elif lk = ast.Nk.st_if:
             v ← self.ev_expr(last)
         else:
             _ ← self.ev_stmt(last)
@@ -423,12 +423,12 @@ impl Cev:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
-        if k = ast.NK_BLOCK:
+        if k = ast.Nk.block:
             self.push_scope()
             let fl : i64 = self.ev_block(na)
             self.pop_scope()
             return fl
-        if k = ast.NK_STOREFLD:
+        if k = ast.Nk.storefld:
             let base : CVal = self.ev_expr(na)
             if self.halted():
                 return EV_STOP
@@ -446,18 +446,18 @@ impl Cev:
                 self.derr(tok, "what a std.Build holds is a string, and this is " ⧺ self.cv_kind(v))
                 return EV_STOP
             let f : str = self.text(tok)
-            if ast.build_member(f) ≠ ast.BM_OUTDIR:
+            if ast.build_member(f) ≠ ast.Bm.outdir:
                 self.derr(tok, "'" ⧺ f ⧺ "' is nothing a recipe may write; output_dir is")
                 return EV_STOP
             self.outd ← v.s
             return EV_NORM
-        if k = ast.NK_LET:
+        if k = ast.Nk.st_let:
             let v : CVal = self.ev_expr(na)
             if self.halted():
                 return EV_STOP
             self.bind(self.text(tok), v, nb = 1)
             return EV_NORM
-        if k = ast.NK_ASSIGN:
+        if k = ast.Nk.assign:
             let v : CVal = self.ev_expr(na)
             if self.halted():
                 return EV_STOP
@@ -471,31 +471,31 @@ impl Cev:
                 return EV_STOP
             self.vals[s × 1¤ptrdiff] ← v
             return EV_NORM
-        if k = ast.NK_DISCARD:
+        if k = ast.Nk.discard:
             _ ← self.ev_expr(na)
             return if self.halted(): EV_STOP else: EV_NORM
-        if k = ast.NK_EXPRSTMT:
+        if k = ast.Nk.exprstmt:
             // A function answers with its last expression rather than a
             // return, so every expression statement leaves its value
             // where a return would; the one the body ends on is the one
             // still there when the frame closes.
             self.ret ← self.ev_expr(na)
             return if self.halted(): EV_STOP else: EV_NORM
-        if k = ast.NK_RETURN:
+        if k = ast.Nk.st_return:
             self.ret ← if na = ⁻1: cv_none() else: self.ev_expr(na)
             return if self.halted(): EV_STOP else: EV_RET
-        if k = ast.NK_BREAK:
+        if k = ast.Nk.st_break:
             return EV_BREAK
-        if k = ast.NK_CONTINUE:
+        if k = ast.Nk.st_continue:
             return EV_CONT
-        if k = ast.NK_IF:
+        if k = ast.Nk.st_if:
             let c : CVal = self.ev_expr(na)
             if self.halted():
                 return EV_STOP
             if c.n ≠ 0:
                 return self.ev_stmt(nb)
             return if nc = ⁻1: EV_NORM else: self.ev_stmt(nc)
-        if k = ast.NK_WHILE:
+        if k = ast.Nk.st_while:
             while true:
                 let c : CVal = self.ev_expr(na)
                 if self.halted():
@@ -510,9 +510,9 @@ impl Cev:
                 if not self.tick(tok):
                     return EV_STOP
             return EV_NORM
-        if k = ast.NK_FOREACH:
+        if k = ast.Nk.st_foreach:
             return self.ev_foreach(id, tok, na, nb)
-        if k = ast.NK_FOREACHA:
+        if k = ast.Nk.foreacha:
             return self.ev_foreacha(id, tok, na, nb)
         self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
         EV_STOP
@@ -599,26 +599,26 @@ impl Cev:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
-        if k = ast.NK_INT:
+        if k = ast.Nk.lit_int:
             return cv_int(na)
-        if k = ast.NK_BOOL:
+        if k = ast.Nk.lit_bool:
             return cv_bool(na = 1)
-        if k = ast.NK_STR:
+        if k = ast.Nk.lit_str:
             return cv_str(self.a.strs[na × 1¤ptrdiff])
-        if k = ast.NK_DROPU:
+        if k = ast.Nk.dropu:
             // @dropunit(#xs) is how this project writes a count, and a
             // recipe in the house style should not be punished for it
             return self.ev_expr(na)
-        if k = ast.NK_VAR:
+        if k = ast.Nk.var:
             return self.ev_var(tok)
-        if k = ast.NK_ARRLIT:
+        if k = ast.Nk.arrlit:
             return self.ev_arrlit(tok, na)
-        if k = ast.NK_SLIT:
+        if k = ast.Nk.slit:
             if nb ≠ ast.SLIT_EXE:
                 self.derr(tok, "a struct literal is not part of a build recipe; " ⧺ ev_subset())
                 return cv_none()
             return self.ev_exe_lit(tok, na)
-        if k = ast.NK_MCALL:
+        if k = ast.Nk.mcall:
             let recv : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
@@ -626,7 +626,7 @@ impl Cev:
                 self.derr(tok, "a method call is not part of a build recipe; " ⧺ ev_subset())
                 return cv_none()
             return self.ev_bmethod(tok, self.text(tok), nb × 1¤"aextra")
-        if k = ast.NK_FIELD:
+        if k = ast.Nk.field:
             let base : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
@@ -636,7 +636,7 @@ impl Cev:
                 self.derr(tok, "a field is not part of a build recipe; " ⧺ ev_subset())
                 return cv_none()
             return self.ev_bfield(tok, self.text(tok))
-        if k = ast.NK_LEN:
+        if k = ast.Nk.len:
             let v : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
@@ -646,15 +646,15 @@ impl Cev:
                 return cv_int(@dropunit(#v.s))
             self.derr(tok, "# counts an array or a string, and this is " ⧺ self.cv_kind(v))
             return cv_none()
-        if k = ast.NK_INDEX:
+        if k = ast.Nk.index:
             return self.ev_index(tok, na, nb)
-        if k = ast.NK_CCAT:
+        if k = ast.Nk.ccat:
             return self.ev_ccat(tok, na, nb)
-        if k = ast.NK_EMPTYV:
+        if k = ast.Nk.emptyv:
             // ∅, which is what a recipe reads where the command line
             // said nothing
             return cv_none()
-        if k = ast.NK_DEFAULT:
+        if k = ast.Nk.default:
             // x ?? y: the value where there is one, and the other where
             // there is not.  It is how a recipe reads what -o and
             // --target said without having to say what ∅ would mean
@@ -665,37 +665,37 @@ impl Cev:
             if v.tag ≠ CV_NONE:
                 return v
             return self.ev_expr(nb)
-        if k = ast.NK_NEG:
+        if k = ast.Nk.neg:
             let v : CVal = self.ev_expr(na)
             return cv_int(⁻v.n)
-        if k = ast.NK_NOT:
+        if k = ast.Nk.op_not:
             let v : CVal = self.ev_expr(na)
             return cv_bool(v.n = 0)
-        if k = ast.NK_AND or k = ast.NK_OR:
+        if k = ast.Nk.op_and or k = ast.Nk.op_or:
             // short-circuit, as the language has it
             let l : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
-            if k = ast.NK_AND and l.n = 0:
+            if k = ast.Nk.op_and and l.n = 0:
                 return cv_bool(false)
-            if k = ast.NK_OR and l.n ≠ 0:
+            if k = ast.Nk.op_or and l.n ≠ 0:
                 return cv_bool(true)
             let r : CVal = self.ev_expr(nb)
             return cv_bool(r.n ≠ 0)
-        if k = ast.NK_IF:
+        if k = ast.Nk.st_if:
             // an if standing where a value is wanted: the branch that
             // runs is the value, and the other side is not read
             let c : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
             return self.ev_block_value(if c.n ≠ 0: nb else: nc)
-        if k >= ast.NK_ADD and k <= ast.NK_MOD:
+        if k >= ast.Nk.add.ord() and k <= ast.Nk.mod.ord():
             return self.ev_arith(k, tok, na, nb)
-        if k >= ast.NK_EQ and k <= ast.NK_GE:
+        if k >= ast.Nk.eq.ord() and k <= ast.Nk.ge.ord():
             return self.ev_cmp(k, tok, na, nb)
-        if k = ast.NK_CALL:
+        if k = ast.Nk.call:
             return self.ev_call(tok, na × 1¤"aextra")
-        if k = ast.NK_SCALL:
+        if k = ast.Nk.scall:
             self.derr(tok, sb_spell(na) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
             return cv_none()
         self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
@@ -791,9 +791,9 @@ impl Cev:
             self.derr(tok, """the numbers a build recipe counts with stay well inside i64; these do
                             " not""")
             return cv_none()
-        if k = ast.NK_ADD: return cv_int(l.n + r.n)
-        if k = ast.NK_SUB: return cv_int(l.n - r.n)
-        if k = ast.NK_MUL:
+        if k = ast.Nk.add: return cv_int(l.n + r.n)
+        if k = ast.Nk.sub: return cv_int(l.n - r.n)
+        if k = ast.Nk.mul:
             let small : i64 = 2147483647
             if l.n > small or l.n < ⁻small or r.n > small or r.n < ⁻small:
                 self.derr(tok, """the numbers a build recipe multiplies stay inside i32; these do
@@ -806,7 +806,7 @@ impl Cev:
         // the zero divisor was refused just above, so the default here
         // stands for a case that cannot arise
         let zero : i64 = 0
-        cv_int(if k = ast.NK_DIV: ((l.n ÷ r.n) ?? zero) else: ((l.n % r.n) ?? zero))
+        cv_int(if k = ast.Nk.div: ((l.n ÷ r.n) ?? zero) else: ((l.n % r.n) ?? zero))
 
     // One comparison into a sign, then which orderings the operator
     // admits: less is 1, equal is 2, greater is 4.
@@ -827,7 +827,7 @@ impl Cev:
         else:
             ord ← if l.n = r.n: two else: (if l.n < r.n: one else: four)
         let admits : i64[] = ev_cmp_admits()
-        cv_bool(admits[(k - ast.NK_EQ) × 1¤ptrdiff] & ord ≠ 0)
+        cv_bool(admits[(k - ast.Nk.eq.ord()) × 1¤ptrdiff] & ord ≠ 0)
 
     // -------------------------------------------------------------------
     // Calls, and what the recipe declares
@@ -929,9 +929,9 @@ impl Cev:
 
     fn ev_bmethod(&mut self, tok : i64, name : str, args_off : i64 ¤"aextra") → CVal:
         // A member function of the build: what the recipe declares.
-        let bm : i64 = ast.build_member(name)
+        let bm : ast.Bm = ast.build_member(name)
         let argc : i64 = @dropunit(self.a.extra[args_off])
-        if bm = ast.BM_ADDEXE:
+        if bm = ast.Bm.addexe:
             if argc ≠ 1:
                 self.derr(tok, "add_executable takes the one std.Build.Executable")
                 return cv_none()
@@ -951,7 +951,7 @@ impl Cev:
                 return cv_none()
             self.added.push(v.n)
             return cv_none()
-        if bm = ast.BM_PATH or bm = ast.BM_FLAG:
+        if bm = ast.Bm.path or bm = ast.Bm.cflag:
             if argc ≠ 1:
                 self.derr(tok, "'" ⧺ name ⧺ "' takes the one string")
                 return cv_none()
@@ -961,7 +961,7 @@ impl Cev:
             if v.tag ≠ CV_STR:
                 self.derr(tok, "'" ⧺ name ⧺ "' is told a string, and this is " ⧺ self.cv_kind(v))
                 return cv_none()
-            if bm = ast.BM_PATH: self.paths.push(v.s)
+            if bm = ast.Bm.path: self.paths.push(v.s)
             else: self.flags.push(v.s)
             return cv_none()
         self.derr(tok, "'" ⧺ name ⧺ "' is nothing a std.Build does; " ⧺ ast.build_members())
@@ -971,20 +971,20 @@ impl Cev:
         // A data member of the command line, read.  Each is an optional:
         // ∅ where nothing was said, which is what the empty string and
         // the ⁻1 the compiler carries stand for.
-        let om : i64 = ast.option_member(name)
+        let om : ast.Om = ast.option_member(name)
         if om = ⁻1:
             self.derr(tok, "'" ⧺ name ⧺ "' is nothing the command line says; " ⧺ ast.option_members())
             return cv_none()
-        if om = ast.OM_OPTIMIZE:
+        if om = ast.Om.optimize:
             return if self.opt_optimize < 0: cv_none() else: cv_int(self.opt_optimize)
-        let said : str = if om = ast.OM_OUTPUT: self.opt_output elif om = ast.OM_TARGET: self.opt_target else: self.opt_path
+        let said : str = if om = ast.Om.output: self.opt_output elif om = ast.Om.target: self.opt_target else: self.opt_path
         if said = "": cv_none() else: cv_str(said)
 
     fn ev_bfield(&mut self, tok : i64, name : str) → CVal:
         // A data member of the build, read.
-        let bm : i64 = ast.build_member(name)
-        if bm = ast.BM_HOST: return cv_str(self.host)
-        if bm = ast.BM_OUTDIR: return cv_str(self.outd)
+        let bm : ast.Bm = ast.build_member(name)
+        if bm = ast.Bm.host: return cv_str(self.host)
+        if bm = ast.Bm.outdir: return cv_str(self.outd)
         self.derr(tok, "'" ⧺ name ⧺ "' is nothing a std.Build holds; " ⧺ ast.build_members())
         cv_none()
 

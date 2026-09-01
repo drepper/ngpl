@@ -441,7 +441,7 @@ fn incr_regenerate(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
         let d := a.fns[i]
         let t : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
         while t < d.tok_hi × 1¤ptrdiff:
-            if toks.kind[t] = tokens.TK_IDENT:
+            if toks.kind[t] = tokens.Tk.ident:
                 let nm : str = tokens.run_str(src, toks.off[t], toks.len[t])
                 let g : i64 = fnames.find(nm)
                 if g >= 0 and moved[g × 1¤ptrdiff]:
@@ -522,7 +522,7 @@ fn reached_fns(a : ast.Ast, toks : lex.Toks, src : byte[]) → bool[]:
         while fi < nf and a.fns[fi].tok_hi × 1¤ptrdiff <= t:
             fi ← fi + 1¤ptrdiff
         let inside : bool = fi < nf and a.fns[fi].tok_lo × 1¤ptrdiff <= t
-        if not inside and toks.kind[t] = tokens.TK_IDENT:
+        if not inside and toks.kind[t] = tokens.Tk.ident:
             let g : i64 = byname.find(tokens.run_str(src, toks.off[t], toks.len[t]))
             if g >= 0:
                 out[g × 1¤ptrdiff] ← true
@@ -537,7 +537,7 @@ fn reached_fns(a : ast.Ast, toks : lex.Toks, src : byte[]) → bool[]:
             let d := a.fns[i]
             let k : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
             while k < d.tok_hi × 1¤ptrdiff and k < ntok:
-                if toks.kind[k] = tokens.TK_IDENT:
+                if toks.kind[k] = tokens.Tk.ident:
                     let g : i64 = byname.find(tokens.run_str(src, toks.off[k], toks.len[k]))
                     if g >= 0 and not out[g × 1¤ptrdiff]:
                         out[g × 1¤ptrdiff] ← true

@@ -86,6 +86,7 @@ let TY_OPTIONS : i64 = 15   // &std.Options: what the command line said, as a re
 let TY_UNT : i64 = 8
 @export
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
+@export
 let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
 @export
 let TY_I64 : i64 = 23        // 16 + 1 + 2×3, the widest signed

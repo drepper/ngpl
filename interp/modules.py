@@ -267,6 +267,12 @@ def rename_types(defs, mine: set, qualify, through=None) -> None:
     def fix(t):
         if not isinstance(t, str):
             return t
+        # A container says what it holds, and what it holds is a type
+        # like any other: the name inside is the module's to answer for.
+        head, _, rest = t.partition("(")
+        if rest.endswith(")") and head in ("std.dict", "std.set"):
+            inner = ", ".join(fix(a.strip()) for a in rest[:-1].split(","))
+            return f"{head}({inner})"
         # what a type is written with -- `[]`, `[N]`, `?` -- says how
         # many and whether it is there, not which type it is
         base, suffix = t, ""

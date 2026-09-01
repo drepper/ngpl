@@ -103,17 +103,17 @@ let TC_SEP : i64 = 3         // a newline, or ;
 fn colon_opens(t : lex.Toks, i : i64 ¤ptrdiff) → bool:
     let n : i64 ¤ptrdiff = #t.kind
     let j : mut i64 ¤ptrdiff = i + 1¤ptrdiff
-    while j < n and t.kind[j] = tokens.TK_NL:
+    while j < n and t.kind[j] = tokens.Tk.nl:
         j ← j + 1¤ptrdiff
-    j < n and t.kind[j] = tokens.TK_INDENT
+    j < n and t.kind[j] = tokens.Tk.indent
 
 @post(r: r >= 0)
 fn canon_kind(k : i64) → i64:
-    if k = tokens.TK_INDENT or k = tokens.TK_LBRACE:
+    if k = tokens.Tk.indent or k = tokens.Tk.lbrace:
         return TC_OPEN
-    if k = tokens.TK_DEDENT or k = tokens.TK_RBRACE:
+    if k = tokens.Tk.dedent or k = tokens.Tk.rbrace:
         return TC_CLOSE
-    if k = tokens.TK_NL or k = tokens.TK_SEMI:
+    if k = tokens.Tk.nl or k = tokens.Tk.semi:
         return TC_SEP
     // the rest keep their own kind, moved past the three codes above
     k + 8
@@ -128,14 +128,14 @@ fn token_bytes(t : lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
     let k : i64 = canon_kind(k0)
     into.push(k & 255)
     into.push((k » 8) & 255)
-    if k0 = tokens.TK_IDENT or k0 = tokens.TK_INT or k0 = tokens.TK_STR:
+    if k0 = tokens.Tk.ident or k0 = tokens.Tk.number or k0 = tokens.Tk.string:
         // an identifier and a string say their text; a number says the
         // value the lexer read, and whether it needed all sixty-four
         // bits to hold it
-        let what : str = if k0 = tokens.TK_STR: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = tokens.TK_INT: tokens.i64_str(t.val[i]) else: tokens.run_str(src, t.off[i], t.len[i]))
+        let what : str = if k0 = tokens.Tk.string: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = tokens.Tk.number: tokens.i64_str(t.val[i]) else: tokens.run_str(src, t.off[i], t.len[i]))
         foreach b := std.bytes(what):
             into.push(b)
-        if k0 = tokens.TK_INT:
+        if k0 = tokens.Tk.number:
             into.push(t.big[i] & 255)
     into.push(0)
 
@@ -222,7 +222,7 @@ fn sbom_sources(a : ast.Ast, t : lex.Toks, src : byte[], files : diag.Files,
             else:
                 fnext ← fnext + 1¤ptrdiff
         // the token's own bytes, read once however many digests want them
-        let opener : bool = t.kind[i] = tokens.TK_COLON and colon_opens(t, i)
+        let opener : bool = t.kind[i] = tokens.Tk.colon and colon_opens(t, i)
         let c : i64 = if opener: TC_SEP else: canon_kind(t.kind[i])
         ready ← []
         if c ≠ TC_SEP:

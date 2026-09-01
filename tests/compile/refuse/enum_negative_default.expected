@@ -1,0 +1,3 @@
+tests/compile/refuse/enum_negative_default.ngpl:8:1: error: enum 'Side': member 'none' is -1, which does not fit u64, the type the values are stored in when none is named; a negative member wants a signed underlying type, as 'enum Side : i64:'
+  8 | @start
+    | ^

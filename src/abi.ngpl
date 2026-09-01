@@ -75,11 +75,11 @@ fn analyze_abi(a : ast.Ast, toks : lex.Toks, argregs : i64, extra : i64, want_lo
     if nnodes > 0:
         foreach i := 0…nnodes:
             let k : i64 = a.nkind[i]
-            if k = ast.NK_FNVAL:
+            if k = ast.Nk.fnval:
                 let fi : i64 = a.na[i]
                 if fi >= 0 and fi < @dropunit(nfns):
                     taken[fi × 1¤ptrdiff] ← 1
-            if k = ast.NK_LAMBDA:
+            if k = ast.Nk.lambda:
                 // A lambda that captures a function holds its value in
                 // the box, and calls it through that -- indirectly, by
                 // an agreement with the architecture rather than with

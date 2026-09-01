@@ -32,9 +32,37 @@ let CL_GT : i64 = 12         // > >= >>
 let CL_DASH : i64 = 13       // - or ->
 let CL_QMARK : i64 = 14      // ??
 let CL_APOS : i64 = 15       // a character literal
+let CL_PUNCT : i64 = 16      // a byte that is a whole token by itself
 
-// The class table, built once per run.  An entry of kind+100 is a
-// complete single-byte token.
+// Which token each byte makes where it makes one by itself, and
+// Tk.none for every byte that does not.  The kinds live here rather
+// than folded into the class table's numbers: a table of kinds holds
+// kinds, and the class table then says what kind of byte it is and
+// nothing more.
+fn mkpunct() → tokens.Tk[256]:
+    let t : mut tokens.Tk[256] = 256 ⍴ tokens.Tk.none
+    t[33] ← tokens.Tk.bang
+    t[59] ← tokens.Tk.semi
+    t[40] ← tokens.Tk.lpar
+    t[41] ← tokens.Tk.rpar
+    t[44] ← tokens.Tk.comma
+    t[46] ← tokens.Tk.dot
+    t[64] ← tokens.Tk.at
+    t[43] ← tokens.Tk.plus
+    t[37] ← tokens.Tk.mod
+    t[61] ← tokens.Tk.eq
+    t[126] ← tokens.Tk.bnot
+    t[38] ← tokens.Tk.band
+    t[124] ← tokens.Tk.bor
+    t[94] ← tokens.Tk.bxor
+    t[91] ← tokens.Tk.lbrack
+    t[93] ← tokens.Tk.rbrack
+    t[35] ← tokens.Tk.hash
+    t[123] ← tokens.Tk.lbrace
+    t[125] ← tokens.Tk.rbrace
+    t
+
+// The class table, built once per run.
 //
 // It is a sized array and not a T[] because its size is not in
 // question: a byte has two hundred and fifty-six values and the table
@@ -45,7 +73,11 @@ let CL_APOS : i64 = 15       // a character literal
 // Every self.cls[b] below then checks against a constant rather than
 // against a length it has to load first.
 fn mkcls() → i64[256]:
+    let p : tokens.Tk[256] = mkpunct()
     let t : mut i64[256] = 256 ⍴ 0
+    foreach b := 0¤ptrdiff…256:
+        if p[b] ≠ tokens.Tk.none:
+            t[b] ← CL_PUNCT
     t[32] ← CL_WS
     t[10] ← CL_NL
     t[9] ← CL_TAB
@@ -61,8 +93,6 @@ fn mkcls() → i64[256]:
     t[194] ← CL_MB2
     t[195] ← CL_MB2
     t[206] ← CL_MB2
-    t[33] ← 100 + tokens.TK_BANG
-    t[59] ← 100 + tokens.TK_SEMI
     t[226] ← CL_MB3
     t[58] ← CL_COLON
     t[60] ← CL_LT
@@ -70,23 +100,6 @@ fn mkcls() → i64[256]:
     t[45] ← CL_DASH
     t[63] ← CL_QMARK
     t[39] ← CL_APOS
-    t[40] ← 100 + tokens.TK_LPAR
-    t[41] ← 100 + tokens.TK_RPAR
-    t[44] ← 100 + tokens.TK_COMMA
-    t[46] ← 100 + tokens.TK_DOT
-    t[64] ← 100 + tokens.TK_AT
-    t[43] ← 100 + tokens.TK_PLUS
-    t[37] ← 100 + tokens.TK_MOD
-    t[61] ← 100 + tokens.TK_EQ
-    t[126] ← 100 + tokens.TK_BNOT
-    t[38] ← 100 + tokens.TK_BAND
-    t[124] ← 100 + tokens.TK_BOR
-    t[94] ← 100 + tokens.TK_BXOR
-    t[91] ← 100 + tokens.TK_LBRACK
-    t[93] ← 100 + tokens.TK_RBRACK
-    t[35] ← 100 + tokens.TK_HASH
-    t[123] ← 100 + tokens.TK_LBRACE
-    t[125] ← 100 + tokens.TK_RBRACE
     t
 
 fn is_digit(b : i64) → bool:
@@ -106,8 +119,8 @@ struct Toks:
     len : i64[]
     line : i64 ¤"line"[]
     col : i64 ¤"col"[]
-    val : i64[]      // value of TK_INT, string table index of TK_STR
-    big : i64[]      // 1 when a TK_INT is in [2^63, 2^64), stored wrapped
+    val : i64[]      // value of Tk.number, string table index of Tk.string
+    big : i64[]      // 1 when a Tk.number is in [2^63, 2^64), stored wrapped
     strs : str[]     // string literal table
     diags : diag.Diag[]
 
@@ -115,6 +128,7 @@ struct Lexer:
     src : byte[]
     n : i64
     cls : i64[256]
+    punct : tokens.Tk[256]   // which token a byte makes by itself
     pos : i64
     line : i64 ¤"line"
     col : i64 ¤"col"
@@ -135,8 +149,11 @@ impl Lexer:
         if self.pos + ahead >= self.n: return ⁻1
         self.src[(self.pos + ahead) × 1¤byte]
 
-    fn emit(&mut self, k : i64, o : i64, l : i64, c : i64 ¤"col", v : i64, b : i64):
-        self.kind.push(k)
+    // The kind arrives as what it is and is written down as the number
+    // behind it: the table of kinds is one array of numbers, which is
+    // what every reader of it indexes and compares.
+    fn emit(&mut self, k : tokens.Tk, o : i64, l : i64, c : i64 ¤"col", v : i64, b : i64):
+        self.kind.push(k.ord())
         self.off.push(o)
         self.len.push(l)
         self.tline.push(self.line)
@@ -203,11 +220,11 @@ impl Lexer:
         let top : i64 ¤"col" = self.indents[#self.indents - 1]
         if width > top:
             self.indents.push(width)
-            self.emit(tokens.TK_INDENT, self.pos, 0, self.col, 0, 0)
+            self.emit(tokens.Tk.indent, self.pos, 0, self.col, 0, 0)
         else:
             while width < self.indents[#self.indents - 1]:
                 _ ← self.indents.pop() ?? 0¤"col"
-                self.emit(tokens.TK_DEDENT, self.pos, 0, self.col, 0, 0)
+                self.emit(tokens.Tk.dedent, self.pos, 0, self.col, 0, 0)
             if width ≠ self.indents[#self.indents - 1]:
                 self.err("indentation does not match any enclosing block")
 
@@ -300,12 +317,12 @@ impl Lexer:
             else:
                 st ← types.ty_with_unit(if st ≠ ⁻1: st else: types.TY_I64, u)
         if st ≠ ⁻1:
-            self.emit(tokens.TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
+            self.emit(tokens.Tk.number, spos, self.pos - spos, scol, v, big + st × 2)
             return
-        self.emit(tokens.TK_INT, spos, self.pos - spos, scol, v, big)
+        self.emit(tokens.Tk.number, spos, self.pos - spos, scol, v, big)
 
     // 'a', 'λ', '\n', '\u{1F389}': one character between apostrophes.
-    // The token is a TK_INT whose big field carries 2 × TY_CHAR, the
+    // The token is a Tk.number whose big field carries 2 × TY_CHAR, the
     // same closed-type ride a width suffix takes.
     fn read_char(&mut self):
         let spos : i64 = self.pos
@@ -392,7 +409,7 @@ impl Lexer:
             self.err("character literal: " ⧺ tokens.i64_str(code) ⧺ """ is a surrogate, which encodes half
                     " of a character in UTF-16 rather than being one""")
             return
-        self.emit(tokens.TK_INT, spos, self.pos - spos, scol, code, types.TY_CHAR × 2)
+        self.emit(tokens.Tk.number, spos, self.pos - spos, scol, code, types.TY_CHAR × 2)
 
     // Three quotes open a string that may run over several lines.
     // Every line after the first begins with a quote, which may be
@@ -463,7 +480,7 @@ impl Lexer:
         // began, which is where anything said about it should point
         let eline : i64 ¤"line" = self.line
         self.line ← sline
-        self.emit(tokens.TK_STR, spos, self.pos - spos, scol, idx, 0)
+        self.emit(tokens.Tk.string, spos, self.pos - spos, scol, idx, 0)
         self.line ← eline
 
     fn read_ident(&mut self):
@@ -479,48 +496,48 @@ impl Lexer:
             // F', T': the prime rides the name; it spells a type variable
             self.adv()
         let text := tokens.run_str(self.src, spos, self.pos - spos)
-        self.emit(tokens.KEYWORDS[text] ?? tokens.TK_IDENT, spos, self.pos - spos, scol, 0, 0)
+        self.emit(tokens.KEYWORDS[text] ?? tokens.Tk.ident, spos, self.pos - spos, scol, 0, 0)
 
     // the two-character ASCII operators, reached through their class
     fn read_op2(&mut self, c : i64):
         let spos : i64 = self.pos
         let scol : i64 ¤"col" = self.col
         let b1 : i64 = self.peek(1)
-        let k : mut i64 = ⁻1
+        let k : mut tokens.Tk = tokens.Tk.none
         let w : mut i64 = 1
         if c = CL_COLON:
-            k ← tokens.TK_COLON
+            k ← tokens.Tk.colon
             if b1 = 61:
-                k ← tokens.TK_DEFINE
+                k ← tokens.Tk.define
                 w ← 2
         elif c = CL_LT:
-            k ← tokens.TK_LT
+            k ← tokens.Tk.lt
             if b1 = 61:
-                k ← tokens.TK_LE
+                k ← tokens.Tk.le
                 w ← 2
             elif b1 = 60:
-                k ← tokens.TK_SHL
+                k ← tokens.Tk.shl
                 w ← 2
             elif b1 = 45:
-                k ← tokens.TK_ASSIGN
+                k ← tokens.Tk.assign
                 w ← 2
         elif c = CL_GT:
-            k ← tokens.TK_GT
+            k ← tokens.Tk.gt
             if b1 = 61:
-                k ← tokens.TK_GE
+                k ← tokens.Tk.ge
                 w ← 2
             elif b1 = 62:
-                k ← tokens.TK_SHR
+                k ← tokens.Tk.shr
                 w ← 2
         elif c = CL_DASH:
-            k ← tokens.TK_MINUS
+            k ← tokens.Tk.minus
             if b1 = 62:
-                k ← tokens.TK_ARROW
+                k ← tokens.Tk.arrow
                 w ← 2
         else:
-            k ← tokens.TK_QMARK
+            k ← tokens.Tk.qmark
             if b1 = 63:
-                k ← tokens.TK_COALESCE
+                k ← tokens.Tk.coalesce
                 w ← 2
         foreach i := 0…w:
             self.adv()
@@ -531,28 +548,28 @@ impl Lexer:
         let scol : i64 ¤"col" = self.col
         if c = CL_MB2:
             let key : i64 = self.peek(0) × 256 + self.peek(1)
-            let k : i64 = tokens.GLYPHS2[key] ?? ⁻1
-            if k = ⁻1:
+            let k : tokens.Tk = tokens.GLYPHS2[key] ?? tokens.Tk.none
+            if k = tokens.Tk.none:
                 self.err("this character begins nothing core-1 knows")
                 return
             self.advg(2)
             self.emit(k, spos, 2, scol, 0, 0)
         else:
             let key : i64 = self.peek(0) × 65536 + self.peek(1) × 256 + self.peek(2)
-            let k : i64 = tokens.GLYPHS3[key] ?? ⁻1
-            if k = ⁻1:
+            let k : tokens.Tk = tokens.GLYPHS3[key] ?? tokens.Tk.none
+            if k = tokens.Tk.none:
                 self.err("this character begins nothing core-1 knows")
                 return
-            if k = tokens.TK_LHASH:
+            if k = tokens.Tk.lhash:
                 self.parens ← self.parens + 1
-            if k = tokens.TK_RHASH and self.parens > 0:
+            if k = tokens.Tk.rhash and self.parens > 0:
                 self.parens ← self.parens - 1
             self.advg(3)
             self.emit(k, spos, 3, scol, 0, 0)
 
 @export
 fn lex(src : byte[]) → Toks:
-    let lx : mut Lexer = (Lexer{src: src, n: @dropunit(#src), cls: mkcls(),
+    let lx : mut Lexer = (Lexer{src: src, n: @dropunit(#src), cls: mkcls(), punct: mkpunct(),
                                 pos: 0, line: 1, col: 1, parens: 0,
                                 kind: [], off: [], len: [], tline: [],
                                 tcol: [], val: [], big: [], strs: [],
@@ -563,7 +580,7 @@ fn lex(src : byte[]) → Toks:
         if not more:
             if lx.peek(0) = 10:
                 if lx.parens = 0 and not at_line_start:
-                    lx.emit(tokens.TK_NL, lx.pos, 1, lx.col, 0, 0)
+                    lx.emit(tokens.Tk.nl, lx.pos, 1, lx.col, 0, 0)
                 lx.pos ← lx.pos + 1
                 lx.line ← lx.line + 1
                 lx.col ← 1
@@ -577,11 +594,11 @@ fn lex(src : byte[]) → Toks:
                 break
         let b : i64 = lx.peek(0)
         let c : i64 = lx.cls[b × 1¤ptrdiff]
-        if c >= 100:
-            let k : i64 = c - 100
-            if k = tokens.TK_LPAR or k = tokens.TK_LBRACK or k = tokens.TK_LBRACE:
+        if c = CL_PUNCT:
+            let k : tokens.Tk = lx.punct[b × 1¤ptrdiff]
+            if k = tokens.Tk.lpar or k = tokens.Tk.lbrack or k = tokens.Tk.lbrace:
                 lx.parens ← lx.parens + 1
-            if (k = tokens.TK_RPAR or k = tokens.TK_RBRACK or k = tokens.TK_RBRACE) and lx.parens > 0:
+            if (k = tokens.Tk.rpar or k = tokens.Tk.rbrack or k = tokens.Tk.rbrace) and lx.parens > 0:
                 lx.parens ← lx.parens - 1
             lx.emit(k, lx.pos, 1, lx.col, 0, 0)
             lx.adv()
@@ -602,11 +619,11 @@ fn lex(src : byte[]) → Toks:
         else:
             lx.err("this byte begins nothing core-1 knows")
     if not at_line_start and #lx.diags = 0:
-        lx.emit(tokens.TK_NL, lx.n, 0, lx.col, 0, 0)
+        lx.emit(tokens.Tk.nl, lx.n, 0, lx.col, 0, 0)
     while #lx.indents > 1:
         _ ← lx.indents.pop() ?? 0¤"col"
-        lx.emit(tokens.TK_DEDENT, lx.n, 0, 1, 0, 0)
-    lx.emit(tokens.TK_EOF, lx.n, 0, 1, 0, 0)
+        lx.emit(tokens.Tk.dedent, lx.n, 0, 1, 0, 0)
+    lx.emit(tokens.Tk.eof, lx.n, 0, 1, 0, 0)
     // the token columns are parallel arrays; leaving out of step here
     // would surface as nonsense positions far away
     assert(#lx.kind = #lx.off and #lx.kind = #lx.len, "token arrays in step")

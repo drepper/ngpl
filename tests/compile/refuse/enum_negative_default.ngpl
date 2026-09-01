@@ -1,0 +1,11 @@
+// An enum names no type of its own, so its values are stored in u64 --
+// the widest unsigned, which covers every auto-numbered and every
+// @flag member.  A negative member wants a signed type written down.
+enum Side:
+    none = ⁻1
+    left = 0
+
+@start
+@impure
+fn main():
+    std.println("{}", Side.left.ord())
