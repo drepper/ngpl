@@ -1314,24 +1314,43 @@ class Parser:
         self._eat(TokenType.PUNCT, ")")
         return kind_tok.value
 
+    def _at_punct(self, mark: str) -> bool:
+        """Whether the token in hand is this piece of punctuation."""
+        return self._check(TokenType.PUNCT) and self._cur().value == mark
+
     def _parse_struct_def(self, repr_kind: str | None = None,
                           invariants=None):
-        """Parse: struct Name: INDENT field_definitions DEDENT"""
+        """Parse: struct Name: INDENT fields DEDENT, or struct Name { … }
+
+        The fields are written the two ways a block is: indented under
+        a colon, or in braces, which may stand where the colon would or
+        follow it.  Inside braces a line ends nothing -- the lexer
+        stops counting them there -- so ';' separates the fields and
+        the next field's name will do on its own.
+        """
         kw_tok = self._eat(TokenType.STRUCT)
         name_tok = self._eat(TokenType.IDENT)
         name = name_tok.value
-        self._eat(TokenType.PUNCT, ":")
+        braced = self._at_punct("{")
+        if not braced:
+            self._eat(TokenType.PUNCT, ":")
+            braced = self._at_punct("{")
         while self._try_eat(TokenType.NEWLINE):
             pass
 
         fields: list[tuple[str, str]] = []
         field_units: dict = {}
         field_positions: dict[str, tuple[int, int, int | None]] = {}
-        if self._check(TokenType.INDENT):
-            self._eat(TokenType.INDENT)
+        if braced or self._check(TokenType.INDENT):
+            if braced:
+                self._eat(TokenType.PUNCT, "{")
+            else:
+                self._eat(TokenType.INDENT)
             while True:
                 while self._try_eat(TokenType.NEWLINE):
                     pass
+                if braced and self._at_punct("}"):
+                    break
                 if self._check(TokenType.DEDENT, TokenType.EOF):
                     break
                 field_name_tok = self._eat(TokenType.IDENT)
@@ -1366,9 +1385,13 @@ class Parser:
                     type_tok.line, type_tok.col,
                     self.tokens[self.pos - 1].end_col)
                 self._try_eat(TokenType.PUNCT, ",")
+                self._try_eat(TokenType.PUNCT, ";")
                 while self._try_eat(TokenType.NEWLINE):
                     pass
-            self._eat(TokenType.DEDENT)
+            if braced:
+                self._eat(TokenType.PUNCT, "}")
+            else:
+                self._eat(TokenType.DEDENT)
         sdef = StructDef(name, fields, repr_kind, field_units, invariants)
         sdef.field_positions = field_positions
         return self._set_pos(sdef, kw_tok)

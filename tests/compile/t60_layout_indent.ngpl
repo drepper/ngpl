@@ -8,8 +8,21 @@
 // checks, since nothing a program prints could show it.
 //
 // Both forms are accepted everywhere a block goes: a function's body,
-// an if's, a while's, a walk's, a lambda's.  This file indents all of
-// them and gives every statement its own line.
+// an if's, a while's, a walk's, a lambda's -- and a struct's fields go
+// the same two ways.  This file indents all of them and gives every
+// statement and every field its own line.
+
+struct Pair:
+    a : i64
+    b : i64
+
+struct Wide:
+    lo : i64
+    hi : i64
+
+fn spread(p : Pair) → i64:
+    let w : Wide = Wide{lo: p.a, hi: p.b}
+    w.hi - w.lo
 
 fn work(n : i64) → i64:
     let step := λx : i64 → i64:
@@ -44,4 +57,4 @@ fn walked(v : i64[]) → i64:
 @impure
 fn main():
     let v : i64[] = [1, 2, 3]
-    std.println("{} {} {} {}", work(3), grade(20), total(5), walked(v))
+    std.println("{} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}))

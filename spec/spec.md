@@ -4447,6 +4447,25 @@ fn abs(x : int) → int {
 
 Braces enclose zero or more statements, separated by `;`.  A statement that is itself a block ends at its own `}` and needs no separator of its own, so `{ if c { a } b }` is two statements.  Indentation inside braces is not significant — it is conventional but not enforced by the parser.
 
+#### A Struct's Fields
+
+A struct's fields are laid out the same two ways, and mean the same either way:
+
+```
+struct Point:
+    x : i64
+    y : i64
+
+struct Point { x : i64; y : i64 }
+
+struct Point: {
+    x : i64
+    y : i64
+}
+```
+
+The braces stand where the colon would, and are also allowed after one, as they are for a block.  Inside them a line ends nothing — [indentation is not tracked inside brackets](#layout-driven-blocks), which is what lets a struct literal be spread over several lines — so `;` separates the fields, and a field's own name will do on its own where the fields are written a line each.
+
 #### Layout-Driven Blocks
 
 A colon `:` at the end of a construct header introduces a layout-driven block, where indentation determines the block's extent:

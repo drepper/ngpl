@@ -2591,12 +2591,25 @@ impl Parser:
         let name_tok : i64 = self.pos
         let name := self.ttext(name_tok)
         _ ← self.eat_name("the struct's name")
-        _ ← self.eat(tokens.TK_COLON, "':' after the struct's name")
-        _ ← self.eat(tokens.TK_NL, "the fields on their own lines")
-        _ ← self.eat(tokens.TK_INDENT, "an indented field list")
+        // The fields are written the two ways a block is: indented
+        // under a colon, or in braces, which may stand where the colon
+        // would or follow it.  Inside braces a line ends nothing --
+        // the lexer stops counting them there, which is what lets a
+        // struct literal be spread out -- so ';' separates the fields
+        // and the next field's name will do on its own.
+        let braced : mut bool = self.peek() = tokens.TK_LBRACE
+        if not braced:
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the struct's name")
+            braced ← self.peek() = tokens.TK_LBRACE
+        if braced:
+            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the fields")
+        else:
+            _ ← self.eat(tokens.TK_NL, "the fields on their own lines")
+            _ ← self.eat(tokens.TK_INDENT, "an indented field list")
+        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
         let ftoks : mut i64[] = []
         let ftypes : mut i64[] = []
-        while self.peek() ≠ tokens.TK_DEDENT and not self.failed():
+        while self.peek() ≠ ender and not self.failed():
             ftoks.push(self.pos)
             _ ← self.eat_name("a field's name")
             // a field may state a unit the way a binding does:
@@ -2612,9 +2625,11 @@ impl Parser:
             if types.ty_is_tup(ty):
                 self.err("a tuple inside a struct is not core-2 yet")
             ftypes.push(ty)
+            if self.peek() = tokens.TK_SEMI:
+                self.pos ← self.pos + 1
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
-        _ ← self.eat(tokens.TK_DEDENT, "the end of the struct")
+        _ ← self.eat(ender, if braced: "'}' closing the fields" else: "the end of the struct")
         if self.peek() = tokens.TK_NL:
             self.pos ← self.pos + 1
         let off : i64 ¤"aextra" = self.extra_end()

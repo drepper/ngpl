@@ -1,6 +1,19 @@
 // The same program as t60_layout_indent.ngpl, laid out the other way:
 // braces where that one indents, and several statements to a line where
 // that one gives each its own.  See the note there.
+//
+// A struct's fields are written the same two ways, and this file writes
+// them both ways: the braces may stand where the colon would or follow
+// it, and inside them ';' separates the fields where a line cannot.
+
+struct Pair { a : i64; b : i64 }
+
+struct Wide: {
+    lo : i64
+    hi : i64
+}
+
+fn spread(p : Pair) → i64: { let w : Wide = Wide{lo: p.a, hi: p.b}; w.hi - w.lo }
 
 fn work(n : i64) → i64: { let step := λx : i64 → i64: { let y : i64 = x + 1; let z : i64 = y × 2; z }; step(n) }
 
@@ -17,4 +30,4 @@ fn walked(v : i64[]) → i64: { let s : mut i64 = 0; foreach x := v: { s ← s +
 
 @start
 @impure
-fn main(): { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {}", work(3), grade(20), total(5), walked(v)) }
+fn main(): { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9})) }
