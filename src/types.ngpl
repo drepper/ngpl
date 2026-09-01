@@ -91,8 +91,23 @@ let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
 @export
 let TY_I64 : i64 = 23        // 16 + 1 + 2×3, the widest signed
 @export
+let TY_I8 : i64 = 17         // 16 + 1 + 2×0, the narrowest signed
+@export
+let TY_I16 : i64 = 19        // 16 + 1 + 2×1
+@export
+let TY_I32 : i64 = 21        // 16 + 1 + 2×2
+@export
 let TY_U8 : i64 = 16         // 16 + 0 + 2×0, the narrowest unsigned
+@export
 let TY_U16 : i64 = 18        // 16 + 0 + 2×1
+
+// the base type names, one probe instead of a ladder
+@export
+let TYNAMES : std.dict(str, i64) = (⸨
+    "i8": TY_I8, "i16": TY_I16, "i32": TY_I32, "i64": TY_I64,
+    "u8": TY_U8, "u16": TY_U16, "u32": TY_U32, "u64": TY_U64,
+    "bool": TY_BOOL, "str": TY_STR, "char": TY_CHAR,
+    "byte": TY_U8, "int": TY_INT⸩)
 
 @export
 let UNIT_NONE : i64 = 0

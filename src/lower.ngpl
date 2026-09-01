@@ -615,7 +615,7 @@ impl Lower:
             self.ir(ir.IR_FSTO, dp, 1 + cargc, bx9, 0, 0)
             return dp
         if k = ast.Nk.scall:
-            if na = ast.SB_ARGS:
+            if na = ast.Sb.args.ord():
                 let d : i64 = self.tmp()
                 if self.argsfix >= 0:
                     let coff : i64 = @dropunit(#self.extra)
@@ -624,33 +624,33 @@ impl Lower:
                 else:
                     self.ir(ir.IR_ARGS, 0, 0, 0, d, 0)
                 return d
-            if na = ast.SB_OPEN:
+            if na = ast.Sb.open.ord():
                 let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_FOPEN, pv, 0, 0, d, 0)
                 return d
-            if na = ast.SB_CREATE:
+            if na = ast.Sb.create.ord():
                 let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let mv : i64 = self.lower_expr(self.a.extra[(nb + 2) × 1¤ptrdiff])
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_FCREATE, pv, mv, 0, d, 0)
                 return d
-            if na = ast.SB_CWD:
+            if na = ast.Sb.cwd.ord():
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_CONST, 0, 0, 0, d, 0)
                 return d
-            if na = ast.SB_BYTES:
+            if na = ast.Sb.bytes.ord():
                 let sv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_SBYTES, sv, 0, 0, d, 0)
                 return d
-            if na = ast.SB_HSTART:
+            if na = ast.Sb.hstart.ord():
                 let av : i64 = self.tmp()
                 self.ir(ir.IR_CONST, self.a.nc[nid × 1¤ptrdiff], 0, 0, av, 0)
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_HSTART, av, 0, 0, d, 0)
                 return d
-            if na = ast.SB_HDIGEST:
+            if na = ast.Sb.hdigest.ord():
                 // A message already in hand is the same thing said in
                 // three steps, so it is: one implementation of the
                 // algorithm, not two that could drift apart.
@@ -663,20 +663,20 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_HFINAL, hv, dst, 0, d, 0)
                 return d
-            if na = ast.SB_IOV:
+            if na = ast.Sb.iov.ord():
                 return self.lower_iov(self.a.extra[(nb + 1) × 1¤ptrdiff])
-            if na = ast.SB_ALLOCATOR:
+            if na = ast.Sb.allocator.ord():
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_CONST, 0, 0, 0, d, 0)
                 return d
-            if na = ast.SB_PROC:
-                if nb = ast.PROC_EXECFN:
+            if na = ast.Sb.proc.ord():
+                if nb = ast.Proc.execfn.ord():
                     let d : i64 = self.tmp()
                     self.ir(ir.IR_EXECFN, 0, 0, 0, d, 0)
                     return d
                 let v : i64 = self.tmp()
                 self.ir(ir.IR_AUXV, ast.proc_key(nb), 0, 0, v, 0)
-                if nb ≠ ast.PROC_SECURE:
+                if nb ≠ ast.Proc.secure.ord():
                     return v
                 // secure is what the kernel set, said as a truth value
                 let z : i64 = self.tmp()
@@ -684,15 +684,15 @@ impl Lower:
                 let b : i64 = self.tmp()
                 self.ir(ir.IR_CNE, v, z, 0, b, 64)
                 return b
-            if na = ast.SB_ENVN:
+            if na = ast.Sb.envn.ord():
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_ENVN, 0, 0, 0, d, 0)
                 return d
-            if na = ast.SB_ENVG or na = ast.SB_ENVH:
+            if na = ast.Sb.envg.ord() or na = ast.Sb.envh.ord():
                 let nv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let d : i64 = self.tmp()
                 self.ir(ir.IR_ENVG, nv, 0, 0, d, 0)
-                if na = ast.SB_ENVG:
+                if na = ast.Sb.envg.ord():
                     return d
                 // has: the box is there, or it is not
                 let z : i64 = self.tmp()
@@ -2127,7 +2127,7 @@ impl Lower:
         self.ir(ir.IR_LABEL, lok, 0, 0, 0, 0)
 
     fn lower_scall(&mut self, nid : i64, tok : i64, sb : i64, args_off : i64 ¤"aextra"):
-        if sb = ast.SB_EXIT:
+        if sb = ast.Sb.exit.ord():
             let v : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(ir.IR_EXIT, v, 0, 0, 0, 0)
             return
@@ -2154,7 +2154,7 @@ impl Lower:
             else:
                 i ← i + 1
         let rest : mut str = cs[cut…#cs]
-        if sb = ast.SB_PRINTLN:
+        if sb = ast.Sb.println.ord():
             rest ← rest ⧺ (10).chr()
         if rest ≠ "":
             let m : i64 = self.intern(rest)

@@ -15,9 +15,9 @@ fn test_enum_member_access():
 
 @test
 fn test_enum_sequential_values():
-    assert(Color.red = 0)
-    assert(Color.green = 1)
-    assert(Color.blue = 2)
+    assert(Color.red.ord() = 0)
+    assert(Color.green.ord() = 1)
+    assert(Color.blue.ord() = 2)
 
 @test
 fn test_enum_equality():
@@ -38,10 +38,10 @@ enum Status:
 
 @test
 fn test_enum_explicit_values():
-    assert(Status.ok = 0)
-    assert(Status.warning = 10)
-    assert(Status.error = 20)
-    assert(Status.fatal = 30)
+    assert(Status.ok.ord() = 0)
+    assert(Status.warning.ord() = 10)
+    assert(Status.error.ord() = 20)
+    assert(Status.fatal.ord() = 30)
 
 // ---- enum with mixed auto and explicit -----------------------------------
 
@@ -53,10 +53,10 @@ enum Level:
 
 @test
 fn test_enum_mixed_values():
-    assert(Level.low = 0)
-    assert(Level.medium = 1)
-    assert(Level.high = 10)
-    assert(Level.critical = 11)
+    assert(Level.low.ord() = 0)
+    assert(Level.medium.ord() = 1)
+    assert(Level.high.ord() = 10)
+    assert(Level.critical.ord() = 11)
 
 // ---- enum with underlying type -------------------------------------------
 
@@ -68,7 +68,7 @@ enum SmallEnum : u8:
 @test
 fn test_enum_underlying_type():
     let x := SmallEnum.a
-    assert(x = 0)
+    assert(x.ord() = 0)
     assert(x = SmallEnum.a)
 
 // ---- @flag enum: powers of two -------------------------------------------
@@ -159,32 +159,32 @@ fn test_flag_explicit_zero_no_nil():
 @test
 fn test_std_errors_runtime():
     let e := std.errors.division_by_zero
-    assert(e = 100)
+    assert(e.ord() = 100)
     assert_eq(e, std.errors.division_by_zero)
 
 @test
 fn test_std_errors_compile():
-    assert(std.errors.type_mismatch = 200)
-    assert(std.errors.unknown_type = 201)
-    assert(std.errors.syntax_error = 202)
+    assert(std.errors.type_mismatch.ord() = 200)
+    assert(std.errors.unknown_type.ord() = 201)
+    assert(std.errors.syntax_error.ord() = 202)
 
 @test
 fn test_std_errors_library():
-    assert(std.errors.file_not_found = 300)
-    assert(std.errors.permission_denied = 301)
-    assert(std.errors.io_error = 302)
+    assert(std.errors.file_not_found.ord() = 300)
+    assert(std.errors.permission_denied.ord() = 301)
+    assert(std.errors.io_error.ord() = 302)
 
 @test
 fn test_std_errors_grouping():
     // Runtime errors are in 100-199
     let div := std.errors.division_by_zero
-    assert(div = 100 ∧ 100 <= 199)
+    assert(div.ord() = 100 ∧ 100 <= 199)
     // Compile errors are in 200-299
     let typ := std.errors.type_mismatch
-    assert(typ = 200 ∧ 200 <= 299)
+    assert(typ.ord() = 200 ∧ 200 <= 299)
     // Library errors are in 300-399
     let fnf := std.errors.file_not_found
-    assert(fnf = 300 ∧ 300 <= 399)
+    assert(fnf.ord() = 300 ∧ 300 <= 399)
 
 // ---- invalid operations on non-flag enums --------------------------------
 

@@ -773,22 +773,32 @@ def unwrap_optional(value):
     return value
 
 
-def _enum_meets_number(ev) -> bool:
-    """Whether an enum value may be compared with a bare number.
+def _side_name(v, ev) -> str:
+    """What a side of the comparison is called in the refusal.
 
-    An ordinary enum holds exactly its members, so asking whether one
-    equals a number is a fair question with a plain answer: it matches
-    or it does not.  A @flag enum's values are combinations of its
-    members, which no bare number names, so the question is refused
-    rather than answered -- `.ord()` is how a program asks for the
-    bits, and asking for them is then written down.
+    A number that has not settled on a width takes the enum's own,
+    which is where it would have settled: that is the type the reader
+    sees written, and what the compiler says of the same program.
     """
-    if ev.enum_type.is_flag:
-        raise coded(2826, TypeError(
-            f"'{ev.enum_type.name}' is a @flag enum, so its values are "
-            f"combinations of members that a bare number does not name; "
-            f"write .ord() to compare the bits"))
-    return True
+    if isinstance(v, EnumValue):
+        return v.enum_type.name
+    if isinstance(v, IntValue) and v.width == UNTYPED:
+        return ev.enum_type.underlying_type or "u64"
+    return runtime_type_of(v)
+
+
+def _enum_meets_number(left, right, ev) -> bool:
+    """An enum is asked about its own kind and nothing else.
+
+    A number that happens to equal a member is not that member, and
+    comparing the two hides the mistake of holding a kind in a plain
+    number.  `.ord()` is how a program says it means the number, and
+    saying so is then written down where a reader can see it.
+    """
+    raise coded(2810, TypeError(
+        f"an enum is asked about its own kind; the sides are "
+        f"{_side_name(left, ev)} and {_side_name(right, ev)}; .ord() "
+        f"answers the number behind an enumerator"))
 
 
 def _unwrap_operand(value):
@@ -1772,9 +1782,9 @@ class Evaluator:
                     f"with enum '{ru.enum_type.name}'"))
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, EnumValue) and isinstance(ru, IntValue):
-            return mk_bool(_enum_meets_number(lu) and lu.value == ru.value)
+            return mk_bool(_enum_meets_number(lu, ru, lu))
         if isinstance(lu, IntValue) and isinstance(ru, EnumValue):
-            return mk_bool(_enum_meets_number(ru) and lu.value == ru.value)
+            return mk_bool(_enum_meets_number(lu, ru, ru))
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):

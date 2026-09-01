@@ -308,7 +308,7 @@ impl Lexer:
                 sfxn ← sfxn + 1
             self.adv(sfxn)
             let sfx : str = tokens.run_str(self.src, spos9, self.pos - spos9)
-            st ← ast.TYNAMES[sfx] ?? ⁻1
+            st ← types.TYNAMES[sfx] ?? ⁻1
             if st = ⁻1 or not types.ty_is_int(st):
                 self.err("'" ⧺ sfx ⧺ "' is not a width; a literal's suffix is i8…i64 or u8…u64")
                 return

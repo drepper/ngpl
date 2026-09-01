@@ -481,7 +481,7 @@ impl Checker:
         let nm := self.text(self.a.ntok[na × 1¤ptrdiff])
         if self.lookup(nm) ≠ ⁻1:
             return ⁻1
-        let bt : i64 = ast.TYNAMES[nm] ?? ⁻1
+        let bt : i64 = types.TYNAMES[nm] ?? ⁻1
         if bt ≠ ⁻1:
             return bt
         let si : i64 = self.struct_here(nm)
@@ -1018,7 +1018,7 @@ impl Checker:
     fn unit_meet(&mut self, tok : i64, k : ast.Nk, tl : i64, tr : i64) → i64:
         let ul : i64 = types.ty_unit(tl)
         let ur : i64 = types.ty_unit(tr)
-        if k = ⁻1:
+        if k = ast.Nk.none:
             // a conditional is not an operation on its two sides; it
             // hands one of them on, and the bootstrap lets the binding
             // say what that is
@@ -1174,7 +1174,7 @@ impl Checker:
                 // so a std.Build.Executable reaching here is outside one by
                 // construction: it is the build system's struct, and only a
                 // recipe has a build to hand it to.
-                if nb = ast.SLIT_EXE:
+                if nb = ast.Slit.exe.ord():
                     self.derr(tok, """std.Build.Executable belongs to the @build function; nothing else
                                     " declares a build""")
                     self.set_type(id, types.TY_UNIT)
@@ -1735,18 +1735,13 @@ impl Checker:
             self.set_type(id, types.TY_BOOL)
             return
         if types.ty_is_enum(l) or types.ty_is_enum(r):
-            let e9 : i64 = if types.ty_is_enum(l): l else: r
-            let o9 : i64 = if types.ty_is_enum(l): r else: l
-            // asking is not storing: a number may be compared with an
-            // enum and simply not match, where assigning one would
-            // make a value the enum does not hold
-            let numeric : bool = types.ty_is_int(o9) and types.ty_unit(o9) = 0
-            if l ≠ r and not numeric:
-                self.derr(tok, "an enum is asked about its own kind; the sides are " ⧺ self.tn(l) ⧺ " and " ⧺ self.tn(r))
-            elif l ≠ r and self.enum_is_flag(e9):
-                // a flag enum's values are combinations, which no bare
-                // number names
-                self.derr(tok, "a @flag enum holds combinations; a bare number names none of them")
+            // An enum is asked about its own kind and nothing else: a
+            // number that happens to equal a member is not that member,
+            // and comparing the two hides the mistake of holding a kind
+            // in a plain number.  .ord() is how a program says it means
+            // the number.
+            if l ≠ r:
+                self.derr(tok, "an enum is asked about its own kind; the sides are " ⧺ self.tn(l) ⧺ " and " ⧺ self.tn(r) ⧺ "; .ord() answers the number behind an enumerator")
             elif not (k = ast.Nk.eq or k = ast.Nk.ne):
                 self.derr(tok, "an enum is asked which it is; it has no order")
             self.set_type(id, types.TY_BOOL)
@@ -2002,6 +1997,38 @@ impl Checker:
 
     // What a read of a global settles, wherever the name came from:
     // one written plainly, or one asked of a module.
+    // A name standing for a constant global folds to what it stands
+    // for.  A table written with the names says what its entries mean,
+    // where the numbers would have said only what they are; the global
+    // it names has been checked already, since a global reaches only
+    // what stands above it.
+    fn fold_const_global(&mut self, id : i64):
+        if self.kind_of(id) ≠ ast.Nk.var:
+            return
+        // `m.NAME` where m is a bound import: the module rides with the
+        // node, as it does everywhere a name is asked of one
+        let qm : i64 = self.a.nc[id × 1¤ptrdiff]
+        let bare : str = self.text(self.a.ntok[id × 1¤ptrdiff])
+        let whole : str = if qm > 0: self.a.qmods[(qm - 1) × 1¤ptrdiff] ⧺ "." ⧺ bare else: bare
+        let g : i64 = if qm > 0: self.global_index(whole) else: self.global_here(bare)
+        if g = ⁻1:
+            return
+        let gd := self.a.globals[g × 1¤ptrdiff]
+        if gd.is_mut:
+            return
+        // The value is where the global was written, whether or not
+        // that global has been checked yet: a name standing for a
+        // written-out number stands for it wherever it is read, and a
+        // table may be read before the file declaring the numbers is.
+        let ik : ast.Nk = self.kind_of(gd.init)
+        if ik ≠ ast.Nk.lit_int and ik ≠ ast.Nk.lit_bool:
+            return
+        self.a.nkind[id × 1¤ptrdiff] ← ik
+        self.a.na[id × 1¤ptrdiff] ← self.a.na[gd.init × 1¤ptrdiff]
+        self.a.nb[id × 1¤ptrdiff] ← 0
+        self.a.nc[id × 1¤ptrdiff] ← 0
+        self.set_type(id, if gd.ty ≠ ⁻1: gd.ty else: types.TY_I64)
+
     fn read_global(&mut self, id : i64, tok : i64, g : i64):
         let name : str = self.text(tok)
         let gd := self.a.globals[g × 1¤ptrdiff]
@@ -2158,7 +2185,7 @@ impl Checker:
         let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
         if self.lookup(nm) ≠ ⁻1:
             return
-        let known : bool = (ast.TYNAMES[nm] ?? ⁻1) ≠ ⁻1 or self.struct_here(nm) ≠ ⁻1
+        let known : bool = (types.TYNAMES[nm] ?? ⁻1) ≠ ⁻1 or self.struct_here(nm) ≠ ⁻1
         if not known:
             return
         self.a.strs.push(nm)
@@ -3917,20 +3944,20 @@ impl Checker:
         n
 
     fn check_scall(&mut self, id : i64, tok : i64, sb : i64, args_off : i64 ¤"aextra"):
-        if sb = ast.SB_PROC:
+        if sb = ast.Sb.proc.ord():
             // the member's own index rides where an argument list would;
             // what it answers cannot change, so reading it is pure
-            if @dropunit(args_off) = ast.PROC_PAGESIZE:
+            if @dropunit(args_off) = ast.Proc.pagesize.ord():
                 self.set_type(id, types.ty_with_unit(types.TY_I64, types.UNIT_BYTE))
-            elif @dropunit(args_off) = ast.PROC_SECURE:
+            elif @dropunit(args_off) = ast.Proc.secure.ord():
                 self.set_type(id, types.TY_BOOL)
-            elif @dropunit(args_off) = ast.PROC_EXECFN:
+            elif @dropunit(args_off) = ast.Proc.execfn.ord():
                 self.set_type(id, types.TY_STR)
             else:
                 self.set_type(id, types.TY_U32)
             return
         let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
-        if sb = ast.SB_EXIT:
+        if sb = ast.Sb.exit.ord():
             if argc ≠ 1:
                 self.derr(tok, "std.exit takes the exit code")
             else:
@@ -3942,38 +3969,38 @@ impl Checker:
                     self.derr(tok, "the exit code is a number")
             self.set_type(id, types.TY_UNIT)
             return
-        if sb = ast.SB_ARGS:
+        if sb = ast.Sb.args.ord():
             if argc ≠ 0:
                 self.derr(tok, "std.args.all takes nothing")
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                 self.derr(tok, "reading the arguments is impure; the function wants @impure")
             self.set_type(id, types.mk_aty(types.TY_STR))
             return
-        if sb = ast.SB_ENVN or sb = ast.SB_ENVG or sb = ast.SB_ENVH:
+        if sb = ast.Sb.envn.ord() or sb = ast.Sb.envg.ord() or sb = ast.Sb.envh.ord():
             // the environment is the process's own, and reading it is
             // as impure as reading the arguments
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                 self.derr(tok, "reading the environment is impure; the function wants @impure")
-            if sb = ast.SB_ENVN:
+            if sb = ast.Sb.envn.ord():
                 if argc ≠ 0:
                     self.derr(tok, "std.env.names takes nothing")
                 self.set_type(id, types.mk_aty(types.TY_STR))
                 return
             if argc ≠ 1:
-                self.derr(tok, "std.env." ⧺ (if sb = ast.SB_ENVG: "get" else: "has") ⧺ " takes the variable's name")
+                self.derr(tok, "std.env." ⧺ (if sb = ast.Sb.envg.ord(): "get" else: "has") ⧺ " takes the variable's name")
             else:
                 let nv : i64 = self.a.extra[args_off + 1]
                 self.check_expr(nv, types.TY_STR)
                 if self.ty_of(nv) ≠ types.TY_STR:
                     self.derr(tok, "a variable's name is a string, not " ⧺ self.tn(self.ty_of(nv)))
-            self.set_type(id, if sb = ast.SB_ENVG: types.mk_oty(types.TY_STR) else: types.TY_BOOL)
+            self.set_type(id, if sb = ast.Sb.envg.ord(): types.mk_oty(types.TY_STR) else: types.TY_BOOL)
             return
-        if sb = ast.SB_CWD:
+        if sb = ast.Sb.cwd.ord():
             // looking at a directory writes nothing; only opening and
             // creating files want @impure
             self.set_type(id, types.TY_DIR)
             return
-        if sb = ast.SB_BYTES:
+        if sb = ast.Sb.bytes.ord():
             if argc ≠ 1:
                 self.derr(tok, "std.bytes takes the string")
             else:
@@ -3983,10 +4010,10 @@ impl Checker:
                     self.derr(tok, "std.bytes reads a string, not " ⧺ self.tn(self.ty_of(bs)))
             self.set_type(id, types.mk_aty(types.TY_U8))
             return
-        if sb = ast.SB_HDIGEST or sb = ast.SB_HSTART:
+        if sb = ast.Sb.hdigest.ord() or sb = ast.Sb.hstart.ord():
             let algs := ast.hash_algs()
             let who : str = "std.hash." ⧺ algs[self.a.nc[id × 1¤ptrdiff] × 1¤ptrdiff]
-            if sb = ast.SB_HSTART:
+            if sb = ast.Sb.hstart.ord():
                 if argc ≠ 0:
                     self.derr(tok, who ⧺ """.start() takes nothing; what is to be digested goes to
                                           " update()""")
@@ -4006,7 +4033,7 @@ impl Checker:
                     self.derr(tok, who ⧺ ".digest digests a string or its bytes, not " ⧺ self.tn(ht))
             self.set_type(id, self.digest_type(self.a.nc[id × 1¤ptrdiff]))
             return
-        if sb = ast.SB_IOV:
+        if sb = ast.Sb.iov.ord():
             if argc ≠ 1:
                 self.derr(tok, "std.iov takes the one thing it is to write")
             else:
@@ -4015,25 +4042,25 @@ impl Checker:
                 self.iov_source_ok(tok, types.ty_strip_ref(self.ty_of(iv)))
             self.set_type(id, types.TY_IOVEC)
             return
-        if sb = ast.SB_ALLOCATOR:
+        if sb = ast.Sb.allocator.ord():
             if argc ≠ 0:
                 self.derr(tok, "std.arena.allocator takes nothing")
             self.set_type(id, types.TY_ALLOC)
             return
-        if sb = ast.SB_OPEN or sb = ast.SB_CREATE:
+        if sb = ast.Sb.open.ord() or sb = ast.Sb.create.ord():
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                 self.derr(tok, "touching files is impure; the function wants @impure")
             if self.in_contract:
                 self.derr(tok, "a contract's condition is pure and touches nothing")
             if argc < 1:
                 self.derr(tok, "the path comes first")
-                self.set_type(id, if sb = ast.SB_OPEN: types.mk_oty(types.TY_FILE) else: types.TY_FILE)
+                self.set_type(id, if sb = ast.Sb.open.ord(): types.mk_oty(types.TY_FILE) else: types.TY_FILE)
                 return
             let pth : i64 = self.a.extra[args_off + 1]
             self.check_expr(pth, types.TY_STR)
             if self.ty_of(pth) ≠ types.TY_STR:
                 self.derr(tok, "the path is a string, not " ⧺ self.tn(self.ty_of(pth)))
-            if sb = ast.SB_OPEN:
+            if sb = ast.Sb.open.ord():
                 if argc ≠ 1:
                     self.derr(tok, "open_file takes the path alone")
                 self.set_type(id, types.mk_oty(types.TY_FILE))
@@ -5833,7 +5860,7 @@ impl Checker:
         if k = ast.Nk.exprstmt:
             let e : i64 = self.a.na[id × 1¤ptrdiff]
             let ek : ast.Nk = self.kind_of(e)
-            if ek = ast.Nk.scall and self.a.na[e × 1¤ptrdiff] = ast.SB_EXIT:
+            if ek = ast.Nk.scall and self.a.na[e × 1¤ptrdiff] = ast.Sb.exit.ord():
                 return true
             if ek = ast.Nk.call:
                 let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
@@ -6175,6 +6202,8 @@ impl Checker:
             foreach hi := 0…hn:
                 let ke : i64 = self.a.extra[(hoff + 1 + hi × 2) × 1¤ptrdiff]
                 let ve : i64 = self.a.extra[(hoff + 2 + hi × 2) × 1¤ptrdiff]
+                self.fold_const_global(ke)
+                self.fold_const_global(ve)
                 if self.kind_of(ke) ≠ ast.Nk.lit_int and self.kind_of(ke) ≠ ast.Nk.lit_str:
                     self.derr(gd.tok, "a global dictionary holds constants the compiler can see")
                 if self.kind_of(ve) ≠ ast.Nk.lit_int and self.kind_of(ve) ≠ ast.Nk.lit_str and self.kind_of(ve) ≠ ast.Nk.lit_bool:

@@ -101,14 +101,16 @@ fn error_outside_number_rejected_at_a_binding():
     let c : Color = 3
     _ ← paint(c)
 
-// Comparing with an outside number is not storing it: the answer is
-// simply no match, never an error.
+// An enum is compared with its own kind.  What a member stands for is
+// asked for with .ord(), and then it is a number being compared with a
+// number, which is what the program said it meant.
 @test
-fn test_comparison_with_an_outside_number_answers_no():
+fn test_comparison_with_a_number_says_ord():
     let c : Color = Color.green
-    assert_eq(c = 7, false)
-    assert_eq(c ≠ 7, true)
-    assert(c = 1)
+    assert_eq(c.ord() = 7, false)
+    assert_eq(c.ord() ≠ 7, true)
+    assert(c.ord() = 1)
+    assert(c = Color.green)
 
 // A @flag enum's values are combinations of members, which a bare
 // number does not name, so a number is refused there regardless --
@@ -117,9 +119,11 @@ fn test_comparison_with_an_outside_number_answers_no():
 fn error_flag_enum_still_rejects_numbers():
     _ ← count_perms(1)
 
-// …and the same reason, in the same words, where one is compared
-@expect error 2826 "'Perms' is a @flag enum, so its values are combinations of members that a bare number does not name; write .ord() to compare the bits"
-fn error_flag_enum_is_not_compared_with_a_number() → bool:
+// An enum is asked about its own kind and nothing else: a number that
+// happens to equal a member is not that member, and .ord() is how a
+// program says it means the number.
+@expect error 2810 "an enum is asked about its own kind; the sides are 'Perms' and a number; .ord() answers the number behind an enumerator"
+fn error_an_enum_is_not_compared_with_a_number() → bool:
     Perms.read = 1
 
 @expect error 2829 "'Color' is an enum, but the value is Size"
@@ -207,7 +211,7 @@ enum Delta : i8:
 fn test_a_signed_underlying_type_holds_a_negative_member():
     let d : Delta = Delta.down
     assert_eq(d, Delta.down)
-    assert(Delta.down = ⁻1)
+    assert(Delta.down.ord() = ⁻1)
 
 // A member that does not fit is refused where the enum is defined,
 // which is before anything runs; tests/output/enum_member_range_* hold

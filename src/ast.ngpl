@@ -8,7 +8,7 @@ let diag := @import("diag")
 
 
 @export
-enum Nk : i64:
+enum Nk : u8:
     none = 0    // no node kind: what a lookup answers for nothing
     lit_int = 1    // na = value (wrapped), nb = big flag
     lit_bool = 2    // na = 0 or 1
@@ -117,33 +117,26 @@ enum Nk : i64:
 
 // std builtins reachable from core-1
 @export
-let SB_PRINTLN : i64 = 1
-@export
-let SB_PRINT : i64 = 2
-@export
-let SB_EXIT : i64 = 3
-@export
-let SB_ARGS : i64 = 4       // std.args.all() → str[]
-@export
-let SB_OPEN : i64 = 5       // std.fs.cwd().open_file(p) → File?
-@export
-let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
-@export
-let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
-@export
-let SB_BYTES : i64 = 8      // std.bytes(s) → the string's bytes, u8[]
-@export
-let SB_CWD : i64 = 9        // std.fs.cwd() as a value
-@export
-let SB_ENVN : i64 = 10      // std.env.names() → str[]
-@export
-let SB_ENVG : i64 = 11      // std.env.get(name) → str?
-@export
-let SB_ENVH : i64 = 12      // std.env.has(name) → bool
-@export
-let SB_IOV : i64 = 14       // std.iov(x) → the bytes of x, ready to be written
-@export
-let SB_PROC : i64 = 13      // std.process.<member>: nb names which
+enum Sb : u8:
+    println = 1
+    print = 2
+    exit = 3
+    args = 4    // std.args.all() → str[]
+    open = 5    // std.fs.cwd().open_file(p) → File?
+    create = 6    // std.fs.cwd().create_file(p, mode) → File
+    allocator = 7    // std.arena.allocator()
+    bytes = 8    // std.bytes(s) → the string's bytes, u8[]
+    cwd = 9    // std.fs.cwd() as a value
+    envn = 10    // std.env.names() → str[]
+    envg = 11    // std.env.get(name) → str?
+    envh = 12    // std.env.has(name) → bool
+    iov = 14    // std.iov(x) → the bytes of x, ready to be written
+    proc = 13    // std.process.<member>: nb names which
+    // std.hash.<alg>.<member>: which algorithm is in nc, so an
+    // algorithm added later adds an entry to the table below and
+    // nothing else.
+    hdigest = 25    // std.hash.<alg>.digest(x) → the digest of x, a u8[]
+    hstart = 26    // std.hash.<alg>.start() → a handle to feed
 
 // What the reader worked out about the modules, as the parser reads
 // it.  A module is a file and everything it reads in plainly; a bound
@@ -174,16 +167,16 @@ fn no_mods() → Mods:
 // struct the program declares but the one the build system defines,
 // std.Build.Executable, and this in nb is how the node says so.
 @export
-let SLIT_PLAIN : i64 = 0
-@export
-let SLIT_EXE : i64 = 1      // std.Build.Executable{…}
+enum Slit : u8:
+    plain = 0
+    exe = 1    // std.Build.Executable{…}
 
 // What a recipe may say to the std.Build it is handed.  These are
 // member functions and data members of a value rather than names under
 // std, so they are dispatched where the receiver is known -- at
 // evaluation -- and are numbered only to be named in a diagnostic.
 @export
-enum Bm : i64:
+enum Bm : i8:
     none = ⁻1   // the name is nothing the build holds
     addexe = 1    // b.add_executable(cfg)
     path = 2    // b.search_path(p)
@@ -206,7 +199,7 @@ fn build_member(name : str) → Bm:
 // recipe's signature, which is the reason the options arrive as one
 // thing rather than as a parameter each.
 @export
-enum Om : i64:
+enum Om : i8:
     none = ⁻1   // the name is nothing the command line says
     output = 1    // o.output: what -o named, ∅ where it was not given
     target = 2    // o.target: what --target named, ∅ likewise
@@ -234,13 +227,6 @@ fn build_members() → str:
      " looked for and what the compiler is asked for; host_target and output_dir are what it
      " holds"""
 
-// std.hash.<alg>.<member>: which algorithm is in nc, so an algorithm
-// added later adds an entry to the table below and nothing else.
-@export
-let SB_HDIGEST : i64 = 25   // std.hash.<alg>.digest(x) → the digest of x, a u8[]
-@export
-let SB_HSTART : i64 = 26    // std.hash.<alg>.start() → a handle to feed
-
 // the algorithms, in the order hash_algs() names them
 let HALG_SHA256 : i64 = 0
 
@@ -267,38 +253,28 @@ fn hash_algs_named() → str:
 
 // what the auxiliary vector is asked for, and under which key
 @export
-let PROC_PAGESIZE : i64 = 0
-@export
-let PROC_UID : i64 = 1
-@export
-let PROC_EUID : i64 = 2
-@export
-let PROC_GID : i64 = 3
-@export
-let PROC_EGID : i64 = 4
-@export
-let PROC_SECURE : i64 = 5
-@export
-let PROC_EXECFN : i64 = 6
+enum Proc : u8:
+    pagesize = 0
+    uid = 1
+    euid = 2
+    gid = 3
+    egid = 4
+    secure = 5
+    execfn = 6
 
 @export
 @pre(m >= 0 and m <= 6)
 fn proc_key(m : i64) → i64:
-    if m = PROC_PAGESIZE: return 6
-    if m = PROC_UID: return 11
-    if m = PROC_EUID: return 12
-    if m = PROC_GID: return 13
-    if m = PROC_EGID: return 14
-    if m = PROC_SECURE: return 23
+    // the member arrives as the number the tree slot holds, so the
+    // names are asked for theirs
+    if m = Proc.pagesize.ord(): return 6
+    if m = Proc.uid.ord(): return 11
+    if m = Proc.euid.ord(): return 12
+    if m = Proc.gid.ord(): return 13
+    if m = Proc.egid.ord(): return 14
+    if m = Proc.secure.ord(): return 23
     31
 
-// the base type names, one probe instead of a ladder
-@export
-let TYNAMES : std.dict(str, i64) = ⸨
-    "i8": 17, "i16": 19, "i32": 21, "i64": 23,
-    "u8": 16, "u16": 18, "u32": 20, "u64": 22,
-    "bool": 2, "str": 3, "char": 4, "byte": 16,
-    "int": 11⸩
 
 // Where something sits in the extra table, and how many slots it takes
 // up there.  The table is one flat array of plain numbers -- a count

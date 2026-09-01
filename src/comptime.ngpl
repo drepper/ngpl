@@ -168,15 +168,15 @@ fn ev_spell(k : ast.Nk) → str:
 
 // how a std member a recipe may not reach is spelled
 fn sb_spell(sb : i64) → str:
-    if sb = ast.SB_PRINTLN or sb = ast.SB_PRINT: return "std.println"
-    if sb = ast.SB_EXIT: return "std.exit"
-    if sb = ast.SB_ARGS: return "std.args"
-    if sb = ast.SB_OPEN or sb = ast.SB_CREATE or sb = ast.SB_CWD: return "std.fs"
-    if sb = ast.SB_ALLOCATOR: return "std.arena"
-    if sb = ast.SB_BYTES or sb = ast.SB_IOV: return "std.bytes"
-    if sb = ast.SB_ENVN or sb = ast.SB_ENVG or sb = ast.SB_ENVH: return "std.env"
-    if sb = ast.SB_PROC: return "std.process"
-    if sb = ast.SB_HDIGEST or sb = ast.SB_HSTART: return "std.hash"
+    if sb = ast.Sb.println.ord() or sb = ast.Sb.print.ord(): return "std.println"
+    if sb = ast.Sb.exit.ord(): return "std.exit"
+    if sb = ast.Sb.args.ord(): return "std.args"
+    if sb = ast.Sb.open.ord() or sb = ast.Sb.create.ord() or sb = ast.Sb.cwd.ord(): return "std.fs"
+    if sb = ast.Sb.allocator.ord(): return "std.arena"
+    if sb = ast.Sb.bytes.ord() or sb = ast.Sb.iov.ord(): return "std.bytes"
+    if sb = ast.Sb.envn.ord() or sb = ast.Sb.envg.ord() or sb = ast.Sb.envh.ord(): return "std.env"
+    if sb = ast.Sb.proc.ord(): return "std.process"
+    if sb = ast.Sb.hdigest.ord() or sb = ast.Sb.hstart.ord(): return "std.hash"
     "that"
 
 // what a recipe holds, said once and quoted wherever it is refused
@@ -269,7 +269,7 @@ impl Cev:
         if k = ast.Nk.slit:
             // the build system's own struct is a recipe's to write; a
             // program's struct is not, since a recipe holds no program
-            if nb ≠ ast.SLIT_EXE:
+            if nb ≠ ast.Slit.exe.ord():
                 self.derr(tok, "a struct literal is not part of a build recipe; " ⧺ ev_subset())
                 return
             let nf : i64 = self.a.extra[na × 1¤"aextra"]
@@ -620,7 +620,7 @@ impl Cev:
         if k = ast.Nk.arrlit:
             return self.ev_arrlit(tok, na)
         if k = ast.Nk.slit:
-            if nb ≠ ast.SLIT_EXE:
+            if nb ≠ ast.Slit.exe.ord():
                 self.derr(tok, "a struct literal is not part of a build recipe; " ⧺ ev_subset())
                 return cv_none()
             return self.ev_exe_lit(tok, na)
@@ -978,7 +978,7 @@ impl Cev:
         // ∅ where nothing was said, which is what the empty string and
         // the ⁻1 the compiler carries stand for.
         let om : ast.Om = ast.option_member(name)
-        if om = ⁻1:
+        if om = ast.Om.none:
             self.derr(tok, "'" ⧺ name ⧺ "' is nothing the command line says; " ⧺ ast.option_members())
             return cv_none()
         if om = ast.Om.optimize:

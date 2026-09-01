@@ -6674,7 +6674,7 @@ The iterator reads through the directory's descriptor, so it stops working once 
 
 #### File Types
 
-`std.filetype` is an enumeration — one the language ships rather than one a file declares, but an enum in every other way: its members answer `.ord()`, it compares with a number without becoming one, and it is asked which it is rather than put in an order.  It names the kinds of thing a directory entry can be, with the values of the `S_IF*` constants in `<sys/stat.h>`:
+`std.filetype` is an enumeration — one the language ships rather than one a file declares, but an enum in every other way: its members answer `.ord()`, it is compared with its own kind rather than with a number, and it is asked which it is rather than put in an order.  It names the kinds of thing a directory entry can be, with the values of the `S_IF*` constants in `<sys/stat.h>`:
 
 | Member | Value | `<sys/stat.h>` |
 |--------|-------|----------------|
@@ -8493,11 +8493,12 @@ assert_eq(c = 0, true)             /* compare with integer */
 let x : mut = Color.red = Status.ok
 ```
 
-A comparison with a number that is no member's value simply answers no match — `=` false, `≠` true, never an error.  Asking "is this that value" of a value the enum does not hold is a question whose answer is no:
+A comparison with a number is refused, whatever the number is.  A number that happens to equal a member is not that member, and asking whether they match hides the mistake of keeping a kind in a plain number.  `.ord()` says the number is what is meant, and then it is a number against a number:
 
 ```
-assert_eq(c = 7, false)            /* 7 names no member of Color */
-assert_eq(c ≠ 7, true)
+c = 7                              /* error: an enum is asked about its own kind */
+assert_eq(c.ord() = 7, false)      /* 7 is no member's value */
+assert_eq(c.ord() ≠ 7, true)
 ```
 
 #### Underlying Type
@@ -8750,15 +8751,16 @@ paint(0)            // Color.red: 0 is red's value
 paint(7)            // error: 'Color' holds exactly its members, and 7 is not one of them
 ```
 
-The two rules meet cleanly: *assigning* an outside number is an error, since a Color holding 7 would be a Color that is no color; *comparing* with one merely answers no match, as [Comparison](#comparison) describes, since asking is not storing.  A `@flag` enum is different on both counts — its values are combinations of members, which a bare number does not name, so a number is refused there regardless of its value, in an assignment and in a comparison alike:
+**An enum is asked about its own kind and nothing else.**  Assigning an outside number is an error, since a Color holding 7 would be a Color that is no color — and comparing with one is an error too: a number that happens to equal a member is not that member, and asking whether they match hides the mistake of keeping a kind in a plain number.  `.ord()` is how a program says it means the number, and saying so is then written where a reader can see it:
 
 ```
-Perms.read = 1          // error: a bare number does not name a combination
-let p : Perms = 1       // error, for the same reason
+Color.red = 0           // error: an enum is asked about its own kind
+Color.red.ord() = 0     // true: the number, asked for by name
+let p : Perms = 1       // error: 'Perms' holds exactly its members
 Perms.read.ord() = 1    // true: the bits, asked for by name
 ```
 
-`.ord()` is the door to the bits, and a program that wants them writes it down.
+`.ord()` is the door to the number behind an enumerator, and a program that wants it writes it down.
 
 An enum may be declared below whatever names it, as a struct may.
 

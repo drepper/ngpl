@@ -814,7 +814,9 @@ def tokenize(src: str):
 def process_indentation(tokens: list[Token]) -> list[Token]:
     """Insert INDENT and DEDENT tokens based on indentation changes.
 
-    Indentation processing is suppressed inside (), [] and {} nesting.
+    Indentation processing is suppressed inside (), [], {} and ⸨⸩
+    nesting: a dictionary written over several lines is one literal,
+    and its own lines are not a block.
     A line ending with a binary operator is treated as a continuation;
     no INDENT/DEDENT is emitted for the following line.
 
@@ -834,8 +836,8 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
     while i < len(tokens):
         tok = tokens[i]
 
-        if tok.type is TokenType.PUNCT and tok.value in "([{)]}":
-            if tok.value in  "([{":
+        if tok.type is TokenType.PUNCT and tok.value in "([{)]}\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}":
+            if tok.value in "([{\N{LEFT DOUBLE PARENTHESIS}":
                 nesting += 1
             elif nesting > 0:
                 nesting -= 1

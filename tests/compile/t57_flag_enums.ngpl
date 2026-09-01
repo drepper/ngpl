@@ -74,20 +74,21 @@ fn error_a_number_does_not_become_a_flag() → bool:
     let bad : Perm = 1
     bad = Perm.x
 
-@expect error 2826 "'Perm' is a @flag enum, so its values are combinations of members that a bare number does not name; write .ord() to compare the bits"
-fn error_a_number_is_not_compared_with_a_flag() → bool:
+@expect error 2810 "an enum is asked about its own kind; the sides are Perm and u32; .ord() answers the number behind an enumerator"
+fn error_a_number_is_not_compared_with_an_enum() → bool:
     Perm.x = 1
 
 @impure
 fn the_bits_are_asked_for():
     std.println("{} {}", Perm.x.ord() = 1, (Perm.r | Perm.w).ord() = 6)
-    // an ordinary enum answers the question directly
-    std.println("{} {}", Plain.b = 1, Plain.b = 9)
+    // an ordinary enum is asked the same way: the number behind a
+    // member is asked for, and then numbers are compared
+    std.println("{} {}", Plain.b.ord() = 1, Plain.b.ord() = 9)
 
 @impure
 fn the_builtin_enum():
     std.println("{} {} {}", std.filetype.unknown.ord(), std.filetype.dir.ord(), std.filetype.reg.ord())
-    std.println("{} {}", std.filetype.reg = 32768, std.filetype.reg = 1)
+    std.println("{} {}", std.filetype.reg.ord() = 32768, std.filetype.reg.ord() = 1)
     std.println("{}", std.filetype.dir = std.filetype.dir)
     std.println("{}", @typeof(std.filetype.lnk))
 

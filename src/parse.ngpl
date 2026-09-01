@@ -432,7 +432,7 @@ impl Parser:
                 self.err("a type variable travels by value")
                 return types.TY_I64
             return tv
-        let base0 : i64 = if stdbase ≠ ⁻1: stdbase else: (ast.TYNAMES[name] ?? self.sindex_here(name, ntok))
+        let base0 : i64 = if stdbase ≠ ⁻1: stdbase else: (types.TYNAMES[name] ?? self.sindex_here(name, ntok))
         if base0 = ⁻1:
             self.err("'" ⧺ name ⧺ "' is not a core-2 type")
             return types.TY_I64
@@ -1197,16 +1197,16 @@ impl Parser:
                         return 0
                     self.pos ← self.pos + 1
                     let aoff : i64 = self.parse_args()
-                    return self.mknode(ast.Nk.scall, at, ast.SB_ARGS, aoff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.Sb.args.ord(), aoff, 0)
                 if m = "process":
                     return self.parse_process(at)
                 if m = "env":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.env")
                     let em0 := self.ttext(self.pos)
                     let esb : mut i64 = ⁻1
-                    if em0 = "names": esb ← ast.SB_ENVN
-                    elif em0 = "get": esb ← ast.SB_ENVG
-                    elif em0 = "has": esb ← ast.SB_ENVH
+                    if em0 = "names": esb ← ast.Sb.envn.ord()
+                    elif em0 = "get": esb ← ast.Sb.envg.ord()
+                    elif em0 = "has": esb ← ast.Sb.envh.ord()
                     else:
                         self.err("'std.env." ⧺ em0 ⧺ """' is not core-2; names(), get() and has()
                                                       " are""")
@@ -1244,7 +1244,7 @@ impl Parser:
                     self.extra.push(@dropunit(#bitems) ÷ 2 ?? 0)
                     foreach it := bitems:
                         self.extra.push(it)
-                    return self.mknode(ast.Nk.slit, at, boff, ast.SLIT_EXE, 0)
+                    return self.mknode(ast.Nk.slit, at, boff, ast.Slit.exe.ord(), 0)
                 if m = "arena":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.arena")
                     if self.ttext(self.pos) ≠ "allocator":
@@ -1252,7 +1252,7 @@ impl Parser:
                         return 0
                     self.pos ← self.pos + 1
                     let loff : i64 = self.parse_args()
-                    return self.mknode(ast.Nk.scall, at, ast.SB_ALLOCATOR, loff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.Sb.allocator.ord(), loff, 0)
                 if m = "fs":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.fs")
                     if self.ttext(self.pos) ≠ "cwd":
@@ -1265,16 +1265,16 @@ impl Parser:
                         // the directory itself, a value to iterate
                         let coff0 : i64 = @dropunit(#self.extra)
                         self.extra.push(0)
-                        return self.mknode(ast.Nk.scall, at, ast.SB_CWD, coff0, 0)
+                        return self.mknode(ast.Nk.scall, at, ast.Sb.cwd.ord(), coff0, 0)
                     _ ← self.eat(tokens.Tk.dot, "'.' and what cwd() is asked")
                     let fm := self.ttext(self.pos)
                     self.pos ← self.pos + 1
                     if fm = "open_file":
                         let ooff : i64 = self.parse_args()
-                        return self.mknode(ast.Nk.scall, at, ast.SB_OPEN, ooff, 0)
+                        return self.mknode(ast.Nk.scall, at, ast.Sb.open.ord(), ooff, 0)
                     if fm = "create_file":
                         let coff : i64 = self.parse_args()
-                        return self.mknode(ast.Nk.scall, at, ast.SB_CREATE, coff, 0)
+                        return self.mknode(ast.Nk.scall, at, ast.Sb.create.ord(), coff, 0)
                     self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
                     return 0
                 if m = "filetype":
@@ -1297,10 +1297,10 @@ impl Parser:
                     return self.parse_postfix(self.mknode(ast.Nk.lit_int, at, fv, types.mk_ety(types.EI_FILETYPE) × 2, 0))
                 if m = "bytes":
                     let boff : i64 = self.parse_args()
-                    return self.mknode(ast.Nk.scall, at, ast.SB_BYTES, boff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.Sb.bytes.ord(), boff, 0)
                 if m = "iov":
                     let ioff : i64 = self.parse_args()
-                    return self.mknode(ast.Nk.scall, at, ast.SB_IOV, ioff, 0)
+                    return self.mknode(ast.Nk.scall, at, ast.Sb.iov.ord(), ioff, 0)
                 if m = "hash":
                     // std.hash.<alg>.<member>: the algorithm names a
                     // namespace, so another algorithm is another
@@ -1320,8 +1320,8 @@ impl Parser:
                     _ ← self.eat(tokens.Tk.dot, "'.' and what the algorithm is asked")
                     let hm := self.ttext(self.pos)
                     let hsb : mut i64 = ⁻1
-                    if hm = "digest": hsb ← ast.SB_HDIGEST
-                    elif hm = "start": hsb ← ast.SB_HSTART
+                    if hm = "digest": hsb ← ast.Sb.hdigest.ord()
+                    elif hm = "start": hsb ← ast.Sb.hstart.ord()
                     else:
                         self.err("'std.hash." ⧺ aname ⧺ "." ⧺ hm ⧺ """' is not core-2; digest()
                                 " answers the digest of a message in hand and start() a handle to
@@ -1336,9 +1336,9 @@ impl Parser:
                     let hoff : i64 = self.parse_args()
                     return self.mknode(ast.Nk.scall, at, hsb, hoff, alg)
                 let sb : mut i64 = ⁻1
-                if m = "println": sb ← ast.SB_PRINTLN
-                elif m = "print": sb ← ast.SB_PRINT
-                elif m = "exit": sb ← ast.SB_EXIT
+                if m = "println": sb ← ast.Sb.println.ord()
+                elif m = "print": sb ← ast.Sb.print.ord()
+                elif m = "exit": sb ← ast.Sb.exit.ord()
                 else:
                     self.err("'std." ⧺ m ⧺ """' is not core-2; println, print, exit, args, env,
                                             " process, fs, arena, bytes, iov, hash, build and
@@ -1354,7 +1354,7 @@ impl Parser:
                 self.pos ← self.pos + 1
                 let off : i64 = self.parse_slit_fields()
                 if self.failed(): return 0
-                return self.parse_postfix(self.mknode(ast.Nk.slit, at, off, ast.SLIT_PLAIN, 0))
+                return self.parse_postfix(self.mknode(ast.Nk.slit, at, off, ast.Slit.plain.ord(), 0))
             self.pos ← self.pos + 1
             return self.parse_postfix(self.mknode(ast.Nk.var, at, 0, 0, 0))
         if k = tokens.Tk.reserved:
@@ -1386,18 +1386,18 @@ impl Parser:
         let m := self.ttext(mtok)
         _ ← self.eat_word("the member's name")
         let idx : mut i64 = ⁻1
-        if m = "pagesize": idx ← ast.PROC_PAGESIZE
-        elif m = "uid": idx ← ast.PROC_UID
-        elif m = "euid": idx ← ast.PROC_EUID
-        elif m = "gid": idx ← ast.PROC_GID
-        elif m = "egid": idx ← ast.PROC_EGID
-        elif m = "secure": idx ← ast.PROC_SECURE
-        elif m = "exec_filename": idx ← ast.PROC_EXECFN
+        if m = "pagesize": idx ← ast.Proc.pagesize.ord()
+        elif m = "uid": idx ← ast.Proc.uid.ord()
+        elif m = "euid": idx ← ast.Proc.euid.ord()
+        elif m = "gid": idx ← ast.Proc.gid.ord()
+        elif m = "egid": idx ← ast.Proc.egid.ord()
+        elif m = "secure": idx ← ast.Proc.secure.ord()
+        elif m = "exec_filename": idx ← ast.Proc.execfn.ord()
         else:
             self.err("'std.process." ⧺ m ⧺ """' is not a member; pagesize, uid, euid, gid, egid,
                                             " secure and exec_filename are""")
             return 0
-        self.mknode(ast.Nk.scall, at, ast.SB_PROC, idx, 0)
+        self.mknode(ast.Nk.scall, at, ast.Sb.proc.ord(), idx, 0)
 
     fn parse_implementation(&mut self, at : i64) → i64:
         _ ← self.eat(tokens.Tk.dot, "'.' after std.implementation")
@@ -2379,7 +2379,7 @@ impl Parser:
         foreach d := self.edecl:
             if d = self.qual_type(name, name_tok):
                 twice ← true
-        if (ast.TYNAMES[name] ?? ⁻1) ≠ ⁻1 or twice or (found ≠ ⁻1 and not itself):
+        if (types.TYNAMES[name] ?? ⁻1) ≠ ⁻1 or twice or (found ≠ ⁻1 and not itself):
             self.err("'" ⧺ name ⧺ "' already names a type")
             return
         self.edecl.push(self.qual_type(name, name_tok))
@@ -2611,7 +2611,7 @@ impl Parser:
             let qm : i64 = @dropunit(#self.qmods)
             let off : i64 = self.parse_slit_fields()
             if self.failed(): return 0
-            return self.parse_postfix(self.mknode(ast.Nk.slit, ntok, off, ast.SLIT_PLAIN, qm))
+            return self.parse_postfix(self.mknode(ast.Nk.slit, ntok, off, ast.Slit.plain.ord(), qm))
         if self.peek() ≠ tokens.Tk.lpar:
             // A name asked of a module that is not called: a global it
             // holds, or an enum of its whose member follows.  The whole
@@ -2678,7 +2678,7 @@ impl Parser:
         let name_tok : i64 = self.pos
         let name := self.ttext(name_tok)
         _ ← self.eat_name("the name being given to a type")
-        if (ast.TYNAMES[name] ?? ⁻1) ≠ ⁻1:
+        if (types.TYNAMES[name] ?? ⁻1) ≠ ⁻1:
             self.err("'" ⧺ name ⧺ "' is already a type's name")
             return
         if self.sindex_ty(name) ≠ ⁻1:
