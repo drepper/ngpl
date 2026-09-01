@@ -54,10 +54,10 @@ let BT_DIGITS : i64 = 16
 // up.  riscv32 is the exception: its pair still takes sixteen bytes
 // because that is what the stack is aligned to, and it puts the return
 // address at eight and the saved frame pointer at four.
-fn bt_prev_off(tg : elf.Target) → i64:
+fn bt_prev_off(tg : &elf.Target) → i64:
     if tg.id = elf.Tgt.rv32: 4 else: 0
 
-fn bt_ret_off(tg : elf.Target) → i64:
+fn bt_ret_off(tg : &elf.Target) → i64:
     if tg.id = elf.Tgt.rv32: 8 else: tg.ptr
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ fn bt_ret_off(tg : elf.Target) → i64:
 // written as they will stand: the table is built once the layout is
 // settled, so nothing in it has to be relocated.
 
-fn bt_stride(tg : elf.Target) → i64:
+fn bt_stride(tg : &elf.Target) → i64:
     4 × tg.ptr
 
 // How many bytes a name is, which is not how long the string is: a
@@ -98,14 +98,14 @@ fn bt_word(out : &mut u8[], pw : i64, v : i64):
 @export
 @pre(#names = #offs and #names = #sizes)
 @post(r: @dropunit(#r) >= tg.ptr)
-fn bt_bytes(tg : elf.Target, text_vaddr : i64, names : str[], offs : i64[],
+fn bt_bytes(tg : &elf.Target, text_vaddr : i64, names : str[], offs : i64[],
             sizes : i64[]) → u8[]:
     let pw : i64 = tg.ptr
     let n : i64 ¤ptrdiff = #names
     let out : mut u8[] = []
     bt_word(&out, pw, @dropunit(n))
     // the names begin where the entries end
-    let noff : mut i64 = pw + bt_stride(tg) × @dropunit(n)
+    let noff : mut i64 = pw + bt_stride(&tg) × @dropunit(n)
     if n > 0:
         foreach i := 0…n:
             bt_word(&out, pw, text_vaddr + offs[i])
@@ -148,7 +148,7 @@ fn bt_decimal(b : &mut rt_portable.RtB, v : i64, buf : i64):
 // before anything was called -- prints nothing at all, which is why
 // the heading waits for the first frame it finds a name for.
 @export
-fn rt_bt_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
+fn rt_bt_ir(tg : &elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     let pw : i64 = tg.ptr
     let b : mut rt_portable.RtB = rt_portable.rtb(0)
     let lend : i64 = b.l()
@@ -170,7 +170,7 @@ fn rt_bt_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     let hi : i64 = b.sel(none, b.cst(⁻1), b.ldn(k, emit.KB_STOP, 8))
     let one : i64 = b.cst(1)
     let hdr : i64 = b.cst(pw)
-    let stride : i64 = b.cst(bt_stride(tg))
+    let stride : i64 = b.cst(bt_stride(&tg))
     let buf : i64 = b.frame(0)
     // the walk's state: the frame it stands in, and how many names it
     // has said
@@ -188,8 +188,8 @@ fn rt_bt_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
     b.lab(ltop)
     b.jnz(b.cltu(fp, lo), lend)
     b.jnz(b.cgeu(fp, hi), lend)
-    let ret : i64 = b.ldn(fp, bt_ret_off(tg), 0)
-    let nxt : i64 = b.ldn(fp, bt_prev_off(tg), 0)
+    let ret : i64 = b.ldn(fp, bt_ret_off(&tg), 0)
+    let nxt : i64 = b.ldn(fp, bt_prev_off(&tg), 0)
     // a return address is one past the call, so the byte before it is
     // the one that lies inside the caller
     let pc : i64 = b.sub(ret, one)
@@ -237,7 +237,7 @@ fn rt_bt_ir(tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
 // table's spelling of the whole signature, because a backtrace is read
 // by a person and the symbol table is not.
 @export
-fn bt_fn_names(a : ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
+fn bt_fn_names(a : &ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     let out : mut str[] = []
     if #a.fns > 0:
         foreach i := 0…#a.fns:
@@ -259,7 +259,7 @@ fn bt_fn_names(a : ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
 // begins.  A routine nobody reached is in no binary and has no offset,
 // and says nothing about where anything is.
 @export
-fn bt_text_end(em : &emit.Emit, text_size : i64) → i64:
+fn bt_text_end(em : emit.Emit, text_size : i64) → i64:
     let end : mut i64 = text_size
     if #em.rt_off > 0:
         foreach i := 0…#em.rt_off:

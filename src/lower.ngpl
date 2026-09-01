@@ -3340,7 +3340,7 @@ impl Lower:
 // registers, the box rides behind them, and the captures come out of
 // the box into the slots the body reads
 @export
-fn lower_lambda_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, j : i64) → ir.IrFn:
+fn lower_lambda_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, j : i64) → ir.IrFn:
     while #lw.op > 0:
         _ ← lw.op.pop() ?? ir.Ir.const
         _ ← lw.ia.pop() ?? 0
@@ -3426,7 +3426,7 @@ fn lower_lambda_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, j : i64) → i
 // arguments arrive in registers, the box rides behind them, and the
 // bound values come out of the box in front
 @export
-fn lower_shim_fn(lw : &mut Lower, chk : check.Chk, j : i64) → ir.IrFn:
+fn lower_shim_fn(lw : &mut Lower, chk : &check.Chk, j : i64) → ir.IrFn:
     while #lw.op > 0:
         _ ← lw.op.pop() ?? ir.Ir.const
         _ ← lw.ia.pop() ?? 0
@@ -3541,7 +3541,7 @@ fn lower_stub_fn(lw : &mut Lower, np : i64) → ir.IrFn:
          extra: [], nvregs: lw.tmax, nlabels: 0, fbytes: lw.fbytes}
 
 @export
-fn lower_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, f : i64) → ir.IrFn:
+fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrFn:
     let d := a.fns[f × 1¤ptrdiff]
     while #lw.op > 0:
         _ ← lw.op.pop() ?? ir.Ir.const

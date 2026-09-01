@@ -1007,7 +1007,7 @@ impl Cev:
 // carrying its own diagnostics, and so does this.
 @export
 @post(r: #r.diags = 0 or (#r.names = 0 and #r.paths = 0 and #r.flags = 0))
-fn build_recipe(a : ast.Ast, toks : lex.Toks, src : byte[], gvals : i64[],
+fn build_recipe(a : &ast.Ast, toks : &lex.Toks, src : byte[], gvals : i64[],
                 output : str, target : str, host : str, optimize : i64,
                 searched : str) → Recipe:
     if #a.builds = 0:

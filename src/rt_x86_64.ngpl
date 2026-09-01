@@ -11,6 +11,7 @@ let arch_x86_64 := @import("arch_x86_64")
 let elf := @import("elf")
 let emit := @import("emit")
 let lower := @import("lower")
+let machine := @import("machine")
 let rt_backtrace := @import("rt_backtrace")
 let rt_bigint := @import("rt_bigint")
 let rt_hash := @import("rt_hash")
@@ -50,7 +51,7 @@ fn emit_write(em : &mut emit.Emit, fd : i64):
     em.resolve_locals()
 
 @export
-fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, alloc_off : i64, args_off : i64,
+fn emit_runtime(em : &mut emit.Emit, tg : &elf.Target, lw : &mut lower.Lower, alloc_off : i64, args_off : i64,
                 relro_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
     em.rt_begin(emit.RT_PRINTI)
@@ -1205,7 +1206,7 @@ fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, all
     em.b2(65, 186)
     em.w32(2047)                    // mov r10d, STATX_BASIC_STATS
     em.b1(184)
-    em.w32(tg.sc_statx)             // mov eax, statx
+    em.w32(machine.sc_number(&tg, machine.Sc.statx))   // mov eax, statx
     em.b2(15, 5)                    // syscall
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(136, 0)               // js Lbad
@@ -1999,24 +2000,24 @@ fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, all
     // neither is anything a hand-written version would do differently,
     // so rt_backtrace.ngpl writes it once for all six as well.
     em.rt_begin(emit.RT_BT)
-    arch_x86_64.emit_fn(&em, rt_backtrace.rt_bt_ir(tg, &lw), 0, lw.strs, 0, [])
+    arch_x86_64.emit_fn(&em, rt_backtrace.rt_bt_ir(&tg, &lw), 0, lw.strs, 0, [])
 
     // Cutting a string is a walk over its characters and a descriptor,
     // and neither is anything a hand-written version would do
     // differently, so this is written once as IR as well.
     em.rt_begin(emit.RT_SSLICE)
-    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_SSLICE, tg, &lw), 3, lw.strs, 0, [])
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_SSLICE, &tg, &lw), 3, lw.strs, 0, [])
 
     // Asking whether a name is a file is a statx and a look at two bits
     // of what it answered, which is the same on every machine, so this
     // is written once as IR too.
     em.rt_begin(emit.RT_FTHERE)
-    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FTHERE, tg, &lw), 1, lw.strs, 0, [])
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FTHERE, &tg, &lw), 1, lw.strs, 0, [])
 
     // and what the name is, when what is wanted is not whether it is
     // there but which file it is
     em.rt_begin(emit.RT_FIDP)
-    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FIDP, tg, &lw), 1, lw.strs, 0, [])
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FIDP, &tg, &lw), 1, lw.strs, 0, [])
 
     // ------------------------------------------------------------------
     // The stack running out

@@ -6313,7 +6313,7 @@ fn draws_code(code : i64) → bool:
 // No code is written for any of them.  They are put on the schedule to
 // be checked and taken off again, so what the emission sees is what it
 // always saw.
-fn check_expectations(c : &mut Checker, a : ast.Ast):
+fn check_expectations(c : &mut Checker, a : &ast.Ast):
     if #a.expects = 0:
         return
     foreach i := 0…#a.expects:
@@ -6351,13 +6351,13 @@ fn check_expectations(c : &mut Checker, a : ast.Ast):
             _ ← c.psk.pop() ?? 0
             _ ← c.psnp.pop() ?? 0
 
-        c.hold_expectation(a, @dropunit(i), drew)
+        c.hold_expectation(&a, @dropunit(i), drew)
     assert(#c.fslots = #c.a.fns, "the expectations left the schedule as they found it")
 
 impl Checker:
     // The judgement on one @expect definition, given the numbers it
     // drew and whether anything it drew refuses.
-    fn hold_expectation(&mut self, a : ast.Ast, i : i64, drew : i64[]):
+    fn hold_expectation(&mut self, a : &ast.Ast, i : i64, drew : i64[]):
         let f := a.expects[i × 1¤ptrdiff]
         let off : i64 = a.expoff[i × 1¤ptrdiff]
         let want : i64 = if off ≠ ⁻1: a.extra[off × 1¤ptrdiff] else: 0
@@ -6371,7 +6371,7 @@ impl Checker:
                     self.derr(f.tok, "'" ⧺ f.name ⧺ "' says it draws " ⧺ tokens.i64_str(wc) ⧺ " and this compiler drew no such thing; the interpreter draws it, so leaving it out is a warning this implementation is missing")
 
 @export
-fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
+fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
     let fnames : mut str[] = []
     foreach f := a.fns:
         fnames.push(f.name)
@@ -6532,7 +6532,7 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
     // No code is written for any of them.  They are appended to the
     // schedule to be checked and taken off again, so what the emission
     // sees is what it always saw.
-    check_expectations(&c, a)
+    check_expectations(&c, &a)
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")

@@ -49,214 +49,214 @@ fn g_pioneer():
 // A load whose value is already in the accumulator, because the store
 // that would have put it in memory was dropped, is no load at all.
 @export
-fn g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn g_lds(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     if r = machine.RG_A and slot = em.hold_slot:
         em.hold_slot ← ⁻1
         return
     em.hold_slot ← ⁻1
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_lds(&em, tg, r, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_lds(&em, tg, r, slot)
-        elf.Tgt.i386: arch_i386.i3g_lds(&em, tg, r, slot)
-        elf.Tgt.a32: arch_arm.a32g_lds(&em, tg, r, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_lds(&em, tg, r, slot)
+        elf.Tgt.a64: arch_a64.a64g_lds(&em, &tg, r, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_lds(&em, &tg, r, slot)
+        elf.Tgt.i386: arch_i386.i3g_lds(&em, &tg, r, slot)
+        elf.Tgt.a32: arch_arm.a32g_lds(&em, &tg, r, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_lds(&em, &tg, r, slot)
         elf.Tgt.x64: g_pioneer()
 
 // A store nothing will read from memory is a store not worth making;
 // what holds the value instead is the accumulator, which is where the
 // one operation that wants it is about to look.
 @export
-fn g_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn g_sts(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     if r = machine.RG_A and slot = em.drop_slot:
         em.drop_slot ← ⁻1
         em.hold_slot ← slot
         return
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sts(&em, tg, r, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_sts(&em, tg, r, slot)
-        elf.Tgt.i386: arch_i386.i3g_sts(&em, tg, r, slot)
-        elf.Tgt.a32: arch_arm.a32g_sts(&em, tg, r, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_sts(&em, tg, r, slot)
+        elf.Tgt.a64: arch_a64.a64g_sts(&em, &tg, r, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_sts(&em, &tg, r, slot)
+        elf.Tgt.i386: arch_i386.i3g_sts(&em, &tg, r, slot)
+        elf.Tgt.a32: arch_arm.a32g_sts(&em, &tg, r, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_sts(&em, &tg, r, slot)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_const(em : &mut emit.Emit, tg : elf.Target, r : i64, v : i64):
+fn g_const(em : &mut emit.Emit, tg : &elf.Target, r : i64, v : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_const(&em, tg, r, v)
-        elf.Tgt.rv64: arch_rv64.rvg_const(&em, tg, r, v)
-        elf.Tgt.i386: arch_i386.i3g_const(&em, tg, r, v)
-        elf.Tgt.a32: arch_arm.a32g_const(&em, tg, r, v)
-        elf.Tgt.rv32: arch_rv32.r32g_const(&em, tg, r, v)
+        elf.Tgt.a64: arch_a64.a64g_const(&em, &tg, r, v)
+        elf.Tgt.rv64: arch_rv64.rvg_const(&em, &tg, r, v)
+        elf.Tgt.i386: arch_i386.i3g_const(&em, &tg, r, v)
+        elf.Tgt.a32: arch_arm.a32g_const(&em, &tg, r, v)
+        elf.Tgt.rv32: arch_rv32.r32g_const(&em, &tg, r, v)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_mov2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn g_mov2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_mov2(&em, tg, rd, rs)
-        elf.Tgt.rv64: arch_rv64.rvg_mov2(&em, tg, rd, rs)
-        elf.Tgt.i386: arch_i386.i3g_mov2(&em, tg, rd, rs)
-        elf.Tgt.a32: arch_arm.a32g_mov2(&em, tg, rd, rs)
-        elf.Tgt.rv32: arch_rv32.r32g_mov2(&em, tg, rd, rs)
+        elf.Tgt.a64: arch_a64.a64g_mov2(&em, &tg, rd, rs)
+        elf.Tgt.rv64: arch_rv64.rvg_mov2(&em, &tg, rd, rs)
+        elf.Tgt.i386: arch_i386.i3g_mov2(&em, &tg, rd, rs)
+        elf.Tgt.a32: arch_arm.a32g_mov2(&em, &tg, rd, rs)
+        elf.Tgt.rv32: arch_rv32.r32g_mov2(&em, &tg, rd, rs)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_add3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_add3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_add3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_add3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_add3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_add3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_add3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_add3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_add3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_add3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_add3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sub3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_sub3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sub3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_sub3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_sub3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_sub3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_sub3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_sub3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_sub3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_sub3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_sub3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_sub3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_mul3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_mul3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_mul3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_mul3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_mul3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_mul3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_mul3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_mul3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_mul3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_mul3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_mul3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_and3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_and3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_and3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_and3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_and3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_and3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_and3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_and3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_and3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_and3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_and3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_and3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_or3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_or3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_or3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_or3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_or3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_or3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_or3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_or3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_or3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_or3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_or3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_or3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_xor3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_xor3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_xor3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_xor3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_xor3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_xor3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_xor3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_xor3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_xor3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_xor3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_xor3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_xor3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_not2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn g_not2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_not2(&em, tg, rd, rs)
-        elf.Tgt.rv64: arch_rv64.rvg_not2(&em, tg, rd, rs)
-        elf.Tgt.i386: arch_i386.i3g_not2(&em, tg, rd, rs)
-        elf.Tgt.a32: arch_arm.a32g_not2(&em, tg, rd, rs)
-        elf.Tgt.rv32: arch_rv32.r32g_not2(&em, tg, rd, rs)
+        elf.Tgt.a64: arch_a64.a64g_not2(&em, &tg, rd, rs)
+        elf.Tgt.rv64: arch_rv64.rvg_not2(&em, &tg, rd, rs)
+        elf.Tgt.i386: arch_i386.i3g_not2(&em, &tg, rd, rs)
+        elf.Tgt.a32: arch_arm.a32g_not2(&em, &tg, rd, rs)
+        elf.Tgt.rv32: arch_rv32.r32g_not2(&em, &tg, rd, rs)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn g_neg2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_neg2(&em, tg, rd, rs)
-        elf.Tgt.rv64: arch_rv64.rvg_neg2(&em, tg, rd, rs)
-        elf.Tgt.i386: arch_i386.i3g_neg2(&em, tg, rd, rs)
-        elf.Tgt.a32: arch_arm.a32g_neg2(&em, tg, rd, rs)
-        elf.Tgt.rv32: arch_rv32.r32g_neg2(&em, tg, rd, rs)
+        elf.Tgt.a64: arch_a64.a64g_neg2(&em, &tg, rd, rs)
+        elf.Tgt.rv64: arch_rv64.rvg_neg2(&em, &tg, rd, rs)
+        elf.Tgt.i386: arch_i386.i3g_neg2(&em, &tg, rd, rs)
+        elf.Tgt.a32: arch_arm.a32g_neg2(&em, &tg, rd, rs)
+        elf.Tgt.rv32: arch_rv32.r32g_neg2(&em, &tg, rd, rs)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_shl3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_shl3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_shl3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_shl3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_shl3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_shl3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_shl3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_shl3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_shl3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_shl3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_shl3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_shl3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_shr3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_shr3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_shr3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_shr3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_shr3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_shr3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_shr3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_shr3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_shr3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_shr3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_shr3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_shr3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn g_sar3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sar3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_sar3(&em, tg, rd, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_sar3(&em, tg, rd, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_sar3(&em, tg, rd, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_sar3(&em, tg, rd, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_sar3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_sar3(&em, &tg, rd, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_sar3(&em, &tg, rd, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_sar3(&em, &tg, rd, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_sar3(&em, &tg, rd, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
+fn g_shl3i(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64, imm : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_shl3i(&em, tg, rd, rs, imm)
-        elf.Tgt.rv64: arch_rv64.rvg_shl3i(&em, tg, rd, rs, imm)
-        elf.Tgt.i386: arch_i386.i3g_shl3i(&em, tg, rd, rs, imm)
-        elf.Tgt.a32: arch_arm.a32g_shl3i(&em, tg, rd, rs, imm)
-        elf.Tgt.rv32: arch_rv32.r32g_shl3i(&em, tg, rd, rs, imm)
+        elf.Tgt.a64: arch_a64.a64g_shl3i(&em, &tg, rd, rs, imm)
+        elf.Tgt.rv64: arch_rv64.rvg_shl3i(&em, &tg, rd, rs, imm)
+        elf.Tgt.i386: arch_i386.i3g_shl3i(&em, &tg, rd, rs, imm)
+        elf.Tgt.a32: arch_arm.a32g_shl3i(&em, &tg, rd, rs, imm)
+        elf.Tgt.rv32: arch_rv32.r32g_shl3i(&em, &tg, rd, rs, imm)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+fn g_cmp3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_cmp3(&em, &tg, rd, rx, ry, cond, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_cmp3(&em, &tg, rd, rx, ry, cond, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_cmp3(&em, &tg, rd, rx, ry, cond, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_cmp3(&em, &tg, rd, rx, ry, cond, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_cmp3(&em, &tg, rd, rx, ry, cond, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
+fn g_sel4(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sel4(&em, tg, rd, rc, rx, ry)
-        elf.Tgt.rv64: arch_rv64.rvg_sel4(&em, tg, rd, rc, rx, ry)
-        elf.Tgt.i386: arch_i386.i3g_sel4(&em, tg, rd, rc, rx, ry)
-        elf.Tgt.a32: arch_arm.a32g_sel4(&em, tg, rd, rc, rx, ry)
-        elf.Tgt.rv32: arch_rv32.r32g_sel4(&em, tg, rd, rc, rx, ry)
+        elf.Tgt.a64: arch_a64.a64g_sel4(&em, &tg, rd, rc, rx, ry)
+        elf.Tgt.rv64: arch_rv64.rvg_sel4(&em, &tg, rd, rc, rx, ry)
+        elf.Tgt.i386: arch_i386.i3g_sel4(&em, &tg, rd, rc, rx, ry)
+        elf.Tgt.a32: arch_arm.a32g_sel4(&em, &tg, rd, rc, rx, ry)
+        elf.Tgt.rv32: arch_rv32.r32g_sel4(&em, &tg, rd, rc, rx, ry)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn g_div3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_div3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_div3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_div3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_div3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_div3(&em, tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_div3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_div3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_div3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_div3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_div3(&em, &tg, rd, rx, ry, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn g_mod3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_mod3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_mod3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_mod3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_mod3(&em, tg, rd, rx, ry, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_mod3(&em, tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_mod3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_mod3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_mod3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_mod3(&em, &tg, rd, rx, ry, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_mod3(&em, &tg, rd, rx, ry, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 // Which widths a target can settle an overflow at directly, the
@@ -274,7 +274,7 @@ fn g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sg
 // afterwards spends again.  Asking at 32 bits came to +0.05% on a
 // program of narrow arithmetic and nothing at all on t07_widths.
 @export
-fn g_narrow_ok(tg : elf.Target, bits : i64) → bool:
+fn g_narrow_ok(tg : &elf.Target, bits : i64) → bool:
     if bits = 64:
         return true
     match tg.id:
@@ -296,369 +296,369 @@ fn g_narrow_ok(tg : elf.Target, bits : i64) → bool:
 // a clear carry is the borrow, so a subtraction that did not overflow
 // leaves it set, and an addition that did not leaves it clear.
 @export
-fn g_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+fn g_addchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.i386: arch_i386.i3g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.a32: arch_arm.a32g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.a64: arch_a64.a64g_addchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_addchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.i386: arch_i386.i3g_addchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.a32: arch_arm.a32g_addchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_addchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+fn g_subchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.i386: arch_i386.i3g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.a32: arch_arm.a32g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.a64: arch_a64.a64g_subchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_subchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.i386: arch_i386.i3g_subchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.a32: arch_arm.a32g_subchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_subchk(&em, &tg, rd, rx, ry, sgn, bits, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn g_addov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_addov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_addov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_addov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_addov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_addov(&em, &tg, rd, rf, rx, ry, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn g_subov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_subov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_subov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_subov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_subov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_subov(&em, &tg, rd, rf, rx, ry, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn g_mulov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv64: arch_rv64.rvg_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.i386: arch_i386.i3g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.a32: arch_arm.a32g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
-        elf.Tgt.rv32: arch_rv32.r32g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a64: arch_a64.a64g_mulov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv64: arch_rv64.rvg_mulov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.i386: arch_i386.i3g_mulov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.a32: arch_arm.a32g_mulov(&em, &tg, rd, rf, rx, ry, sgn, bits)
+        elf.Tgt.rv32: arch_rv32.r32g_mulov(&em, &tg, rd, rf, rx, ry, sgn, bits)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64):
+fn g_ext2(em : &mut emit.Emit, tg : &elf.Target, r : i64, bits : i64, sgn : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_ext2(&em, tg, r, bits, sgn)
-        elf.Tgt.rv64: arch_rv64.rvg_ext2(&em, tg, r, bits, sgn)
-        elf.Tgt.i386: arch_i386.i3g_ext2(&em, tg, r, bits, sgn)
-        elf.Tgt.a32: arch_arm.a32g_ext2(&em, tg, r, bits, sgn)
-        elf.Tgt.rv32: arch_rv32.r32g_ext2(&em, tg, r, bits, sgn)
+        elf.Tgt.a64: arch_a64.a64g_ext2(&em, &tg, r, bits, sgn)
+        elf.Tgt.rv64: arch_rv64.rvg_ext2(&em, &tg, r, bits, sgn)
+        elf.Tgt.i386: arch_i386.i3g_ext2(&em, &tg, r, bits, sgn)
+        elf.Tgt.a32: arch_arm.a32g_ext2(&em, &tg, r, bits, sgn)
+        elf.Tgt.rv32: arch_rv32.r32g_ext2(&em, &tg, r, bits, sgn)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+fn g_ldo(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        elf.Tgt.rv64: arch_rv64.rvg_ldo(&em, tg, rd, rbase, off, width, sgn)
-        elf.Tgt.i386: arch_i386.i3g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        elf.Tgt.a32: arch_arm.a32g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        elf.Tgt.rv32: arch_rv32.r32g_ldo(&em, tg, rd, rbase, off, width, sgn)
+        elf.Tgt.a64: arch_a64.a64g_ldo(&em, &tg, rd, rbase, off, width, sgn)
+        elf.Tgt.rv64: arch_rv64.rvg_ldo(&em, &tg, rd, rbase, off, width, sgn)
+        elf.Tgt.i386: arch_i386.i3g_ldo(&em, &tg, rd, rbase, off, width, sgn)
+        elf.Tgt.a32: arch_arm.a32g_ldo(&em, &tg, rd, rbase, off, width, sgn)
+        elf.Tgt.rv32: arch_rv32.r32g_ldo(&em, &tg, rd, rbase, off, width, sgn)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
+fn g_sto(em : &mut emit.Emit, tg : &elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sto(&em, tg, rs, rbase, off, width)
-        elf.Tgt.rv64: arch_rv64.rvg_sto(&em, tg, rs, rbase, off, width)
-        elf.Tgt.i386: arch_i386.i3g_sto(&em, tg, rs, rbase, off, width)
-        elf.Tgt.a32: arch_arm.a32g_sto(&em, tg, rs, rbase, off, width)
-        elf.Tgt.rv32: arch_rv32.r32g_sto(&em, tg, rs, rbase, off, width)
+        elf.Tgt.a64: arch_a64.a64g_sto(&em, &tg, rs, rbase, off, width)
+        elf.Tgt.rv64: arch_rv64.rvg_sto(&em, &tg, rs, rbase, off, width)
+        elf.Tgt.i386: arch_i386.i3g_sto(&em, &tg, rs, rbase, off, width)
+        elf.Tgt.a32: arch_arm.a32g_sto(&em, &tg, rs, rbase, off, width)
+        elf.Tgt.rv32: arch_rv32.r32g_sto(&em, &tg, rs, rbase, off, width)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_jmp(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn g_jmp(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_jmp(&em, tg, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_jmp(&em, tg, lab)
-        elf.Tgt.i386: arch_i386.i3g_jmp(&em, tg, lab)
-        elf.Tgt.a32: arch_arm.a32g_jmp(&em, tg, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_jmp(&em, tg, lab)
+        elf.Tgt.a64: arch_a64.a64g_jmp(&em, &tg, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_jmp(&em, &tg, lab)
+        elf.Tgt.i386: arch_i386.i3g_jmp(&em, &tg, lab)
+        elf.Tgt.a32: arch_arm.a32g_jmp(&em, &tg, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_jmp(&em, &tg, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_jz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn g_jz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_jz(&em, tg, r, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_jz(&em, tg, r, lab)
-        elf.Tgt.i386: arch_i386.i3g_jz(&em, tg, r, lab)
-        elf.Tgt.a32: arch_arm.a32g_jz(&em, tg, r, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_jz(&em, tg, r, lab)
+        elf.Tgt.a64: arch_a64.a64g_jz(&em, &tg, r, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_jz(&em, &tg, r, lab)
+        elf.Tgt.i386: arch_i386.i3g_jz(&em, &tg, r, lab)
+        elf.Tgt.a32: arch_arm.a32g_jz(&em, &tg, r, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_jz(&em, &tg, r, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_jnz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn g_jnz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_jnz(&em, tg, r, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_jnz(&em, tg, r, lab)
-        elf.Tgt.i386: arch_i386.i3g_jnz(&em, tg, r, lab)
-        elf.Tgt.a32: arch_arm.a32g_jnz(&em, tg, r, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_jnz(&em, tg, r, lab)
+        elf.Tgt.a64: arch_a64.a64g_jnz(&em, &tg, r, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_jnz(&em, &tg, r, lab)
+        elf.Tgt.i386: arch_i386.i3g_jnz(&em, &tg, r, lab)
+        elf.Tgt.a32: arch_arm.a32g_jnz(&em, &tg, r, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_jnz(&em, &tg, r, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_label(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn g_label(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_label(&em, tg, lab)
-        elf.Tgt.rv64: arch_rv64.rvg_label(&em, tg, lab)
-        elf.Tgt.i386: arch_i386.i3g_label(&em, tg, lab)
-        elf.Tgt.a32: arch_arm.a32g_label(&em, tg, lab)
-        elf.Tgt.rv32: arch_rv32.r32g_label(&em, tg, lab)
+        elf.Tgt.a64: arch_a64.a64g_label(&em, &tg, lab)
+        elf.Tgt.rv64: arch_rv64.rvg_label(&em, &tg, lab)
+        elf.Tgt.i386: arch_i386.i3g_label(&em, &tg, lab)
+        elf.Tgt.a32: arch_arm.a32g_label(&em, &tg, lab)
+        elf.Tgt.rv32: arch_rv32.r32g_label(&em, &tg, lab)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
+fn g_call(em : &mut emit.Emit, tg : &elf.Target, target : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_call(&em, tg, target)
-        elf.Tgt.rv64: arch_rv64.rvg_call(&em, tg, target)
-        elf.Tgt.i386: arch_i386.i3g_call(&em, tg, target)
-        elf.Tgt.a32: arch_arm.a32g_call(&em, tg, target)
-        elf.Tgt.rv32: arch_rv32.r32g_call(&em, tg, target)
+        elf.Tgt.a64: arch_a64.a64g_call(&em, &tg, target)
+        elf.Tgt.rv64: arch_rv64.rvg_call(&em, &tg, target)
+        elf.Tgt.i386: arch_i386.i3g_call(&em, &tg, target)
+        elf.Tgt.a32: arch_arm.a32g_call(&em, &tg, target)
+        elf.Tgt.rv32: arch_rv32.r32g_call(&em, &tg, target)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_calli(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn g_calli(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_calli(&em, tg, r)
-        elf.Tgt.rv64: arch_rv64.rvg_calli(&em, tg, r)
-        elf.Tgt.i386: arch_i386.i3g_calli(&em, tg, r)
-        elf.Tgt.a32: arch_arm.a32g_calli(&em, tg, r)
-        elf.Tgt.rv32: arch_rv32.r32g_calli(&em, tg, r)
+        elf.Tgt.a64: arch_a64.a64g_calli(&em, &tg, r)
+        elf.Tgt.rv64: arch_rv64.rvg_calli(&em, &tg, r)
+        elf.Tgt.i386: arch_i386.i3g_calli(&em, &tg, r)
+        elf.Tgt.a32: arch_arm.a32g_calli(&em, &tg, r)
+        elf.Tgt.rv32: arch_rv32.r32g_calli(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn g_ijmp(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_ijmp(&em, tg, r)
-        elf.Tgt.rv64: arch_rv64.rvg_ijmp(&em, tg, r)
-        elf.Tgt.i386: arch_i386.i3g_ijmp(&em, tg, r)
-        elf.Tgt.a32: arch_arm.a32g_ijmp(&em, tg, r)
-        elf.Tgt.rv32: arch_rv32.r32g_ijmp(&em, tg, r)
+        elf.Tgt.a64: arch_a64.a64g_ijmp(&em, &tg, r)
+        elf.Tgt.rv64: arch_rv64.rvg_ijmp(&em, &tg, r)
+        elf.Tgt.i386: arch_i386.i3g_ijmp(&em, &tg, r)
+        elf.Tgt.a32: arch_arm.a32g_ijmp(&em, &tg, r)
+        elf.Tgt.rv32: arch_rv32.r32g_ijmp(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn g_argld(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_argld(&em, tg, k, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_argld(&em, tg, k, slot)
-        elf.Tgt.i386: arch_i386.i3g_argld(&em, tg, k, slot)
-        elf.Tgt.a32: arch_arm.a32g_argld(&em, tg, k, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_argld(&em, tg, k, slot)
+        elf.Tgt.a64: arch_a64.a64g_argld(&em, &tg, k, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_argld(&em, &tg, k, slot)
+        elf.Tgt.i386: arch_i386.i3g_argld(&em, &tg, k, slot)
+        elf.Tgt.a32: arch_arm.a32g_argld(&em, &tg, k, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_argld(&em, &tg, k, slot)
         elf.Tgt.x64: g_pioneer()
 
 // argument k of a function free to take a convention of its own
 @export
-fn g_argreg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn g_argreg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_argreg(&em, tg, k, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_argreg(&em, tg, k, slot)
-        elf.Tgt.i386: arch_i386.i3g_argreg(&em, tg, k, slot)
-        elf.Tgt.a32: arch_arm.a32g_argreg(&em, tg, k, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_argreg(&em, tg, k, slot)
+        elf.Tgt.a64: arch_a64.a64g_argreg(&em, &tg, k, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_argreg(&em, &tg, k, slot)
+        elf.Tgt.i386: arch_i386.i3g_argreg(&em, &tg, k, slot)
+        elf.Tgt.a32: arch_arm.a32g_argreg(&em, &tg, k, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_argreg(&em, &tg, k, slot)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_argconst(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn g_argconst(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_argconst(&em, tg, k, v)
-        elf.Tgt.rv64: arch_rv64.rvg_argconst(&em, tg, k, v)
-        elf.Tgt.i386: arch_i386.i3g_argconst(&em, tg, k, v)
-        elf.Tgt.a32: arch_arm.a32g_argconst(&em, tg, k, v)
-        elf.Tgt.rv32: arch_rv32.r32g_argconst(&em, tg, k, v)
+        elf.Tgt.a64: arch_a64.a64g_argconst(&em, &tg, k, v)
+        elf.Tgt.rv64: arch_rv64.rvg_argconst(&em, &tg, k, v)
+        elf.Tgt.i386: arch_i386.i3g_argconst(&em, &tg, k, v)
+        elf.Tgt.a32: arch_arm.a32g_argconst(&em, &tg, k, v)
+        elf.Tgt.rv32: arch_rv32.r32g_argconst(&em, &tg, k, v)
         elf.Tgt.x64: g_pioneer()
 
-fn g_argmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn g_argmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_argmov(&em, tg, k, r)
-        elf.Tgt.rv64: arch_rv64.rvg_argmov(&em, tg, k, r)
-        elf.Tgt.i386: arch_i386.i3g_argmov(&em, tg, k, r)
-        elf.Tgt.a32: arch_arm.a32g_argmov(&em, tg, k, r)
-        elf.Tgt.rv32: arch_rv32.r32g_argmov(&em, tg, k, r)
+        elf.Tgt.a64: arch_a64.a64g_argmov(&em, &tg, k, r)
+        elf.Tgt.rv64: arch_rv64.rvg_argmov(&em, &tg, k, r)
+        elf.Tgt.i386: arch_i386.i3g_argmov(&em, &tg, k, r)
+        elf.Tgt.a32: arch_arm.a32g_argmov(&em, &tg, k, r)
+        elf.Tgt.rv32: arch_rv32.r32g_argmov(&em, &tg, k, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn g_retst(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_retst(&em, tg, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_retst(&em, tg, slot)
-        elf.Tgt.i386: arch_i386.i3g_retst(&em, tg, slot)
-        elf.Tgt.a32: arch_arm.a32g_retst(&em, tg, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_retst(&em, tg, slot)
+        elf.Tgt.a64: arch_a64.a64g_retst(&em, &tg, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_retst(&em, &tg, slot)
+        elf.Tgt.i386: arch_i386.i3g_retst(&em, &tg, slot)
+        elf.Tgt.a32: arch_arm.a32g_retst(&em, &tg, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_retst(&em, &tg, slot)
         elf.Tgt.x64: g_pioneer()
 
 // The answer, on its way out.  Where the store that would have put it
 // in memory was dropped, it is still in the accumulator, and moving it
 // from there is what reading the slot would have been.
 @export
-fn g_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn g_retld(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     if slot = em.hold_slot:
         em.hold_slot ← ⁻1
-        g_retmov(&em, tg, machine.RG_A)
+        g_retmov(&em, &tg, machine.RG_A)
         return
     em.hold_slot ← ⁻1
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_retld(&em, tg, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_retld(&em, tg, slot)
-        elf.Tgt.i386: arch_i386.i3g_retld(&em, tg, slot)
-        elf.Tgt.a32: arch_arm.a32g_retld(&em, tg, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_retld(&em, tg, slot)
+        elf.Tgt.a64: arch_a64.a64g_retld(&em, &tg, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_retld(&em, &tg, slot)
+        elf.Tgt.i386: arch_i386.i3g_retld(&em, &tg, slot)
+        elf.Tgt.a32: arch_arm.a32g_retld(&em, &tg, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_retld(&em, &tg, slot)
         elf.Tgt.x64: g_pioneer()
 
-fn g_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn g_retmov(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_retmov(&em, tg, r)
-        elf.Tgt.rv64: arch_rv64.rvg_retmov(&em, tg, r)
-        elf.Tgt.i386: arch_i386.i3g_retmov(&em, tg, r)
-        elf.Tgt.a32: arch_arm.a32g_retmov(&em, tg, r)
-        elf.Tgt.rv32: arch_rv32.r32g_retmov(&em, tg, r)
+        elf.Tgt.a64: arch_a64.a64g_retmov(&em, &tg, r)
+        elf.Tgt.rv64: arch_rv64.rvg_retmov(&em, &tg, r)
+        elf.Tgt.i386: arch_i386.i3g_retmov(&em, &tg, r)
+        elf.Tgt.a32: arch_arm.a32g_retmov(&em, &tg, r)
+        elf.Tgt.rv32: arch_rv32.r32g_retmov(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 // where this frame stands, put where a value goes
 @export
-fn g_fptr(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn g_fptr(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_fptr(&em, tg, r)
-        elf.Tgt.rv64: arch_rv64.rvg_fptr(&em, tg, r)
-        elf.Tgt.i386: arch_i386.i3g_fptr(&em, tg, r)
-        elf.Tgt.a32: arch_arm.a32g_fptr(&em, tg, r)
-        elf.Tgt.rv32: arch_rv32.r32g_fptr(&em, tg, r)
+        elf.Tgt.a64: arch_a64.a64g_fptr(&em, &tg, r)
+        elf.Tgt.rv64: arch_rv64.rvg_fptr(&em, &tg, r)
+        elf.Tgt.i386: arch_i386.i3g_fptr(&em, &tg, r)
+        elf.Tgt.a32: arch_arm.a32g_fptr(&em, &tg, r)
+        elf.Tgt.rv32: arch_rv32.r32g_fptr(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
+fn g_absref(em : &mut emit.Emit, tg : &elf.Target, r : i64) → i64:
     match tg.id:
-        elf.Tgt.a64: return arch_a64.a64g_absref(&em, tg, r)
-        elf.Tgt.rv64: return arch_rv64.rvg_absref(&em, tg, r)
-        elf.Tgt.i386: return arch_i386.i3g_absref(&em, tg, r)
-        elf.Tgt.a32: return arch_arm.a32g_absref(&em, tg, r)
-        elf.Tgt.rv32: return arch_rv32.r32g_absref(&em, tg, r)
+        elf.Tgt.a64: return arch_a64.a64g_absref(&em, &tg, r)
+        elf.Tgt.rv64: return arch_rv64.rvg_absref(&em, &tg, r)
+        elf.Tgt.i386: return arch_i386.i3g_absref(&em, &tg, r)
+        elf.Tgt.a32: return arch_arm.a32g_absref(&em, &tg, r)
+        elf.Tgt.rv32: return arch_rv32.r32g_absref(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
+fn g_absref_arg(em : &mut emit.Emit, tg : &elf.Target, k : i64) → i64:
     match tg.id:
-        elf.Tgt.a64: return arch_a64.a64g_absref_arg(&em, tg, k)
-        elf.Tgt.rv64: return arch_rv64.rvg_absref_arg(&em, tg, k)
-        elf.Tgt.i386: return arch_i386.i3g_absref_arg(&em, tg, k)
-        elf.Tgt.a32: return arch_arm.a32g_absref_arg(&em, tg, k)
-        elf.Tgt.rv32: return arch_rv32.r32g_absref_arg(&em, tg, k)
+        elf.Tgt.a64: return arch_a64.a64g_absref_arg(&em, &tg, k)
+        elf.Tgt.rv64: return arch_rv64.rvg_absref_arg(&em, &tg, k)
+        elf.Tgt.i386: return arch_i386.i3g_absref_arg(&em, &tg, k)
+        elf.Tgt.a32: return arch_arm.a32g_absref_arg(&em, &tg, k)
+        elf.Tgt.rv32: return arch_rv32.r32g_absref_arg(&em, &tg, k)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sysarg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn g_sysarg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sysarg(&em, tg, k, slot)
-        elf.Tgt.rv64: arch_rv64.rvg_sysarg(&em, tg, k, slot)
-        elf.Tgt.i386: arch_i386.i3g_sysarg(&em, tg, k, slot)
-        elf.Tgt.a32: arch_arm.a32g_sysarg(&em, tg, k, slot)
-        elf.Tgt.rv32: arch_rv32.r32g_sysarg(&em, tg, k, slot)
+        elf.Tgt.a64: arch_a64.a64g_sysarg(&em, &tg, k, slot)
+        elf.Tgt.rv64: arch_rv64.rvg_sysarg(&em, &tg, k, slot)
+        elf.Tgt.i386: arch_i386.i3g_sysarg(&em, &tg, k, slot)
+        elf.Tgt.a32: arch_arm.a32g_sysarg(&em, &tg, k, slot)
+        elf.Tgt.rv32: arch_rv32.r32g_sysarg(&em, &tg, k, slot)
         elf.Tgt.x64: g_pioneer()
 
-fn g_sysimm(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn g_sysimm(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sysimm(&em, tg, k, v)
-        elf.Tgt.rv64: arch_rv64.rvg_sysimm(&em, tg, k, v)
-        elf.Tgt.i386: arch_i386.i3g_sysimm(&em, tg, k, v)
-        elf.Tgt.a32: arch_arm.a32g_sysimm(&em, tg, k, v)
-        elf.Tgt.rv32: arch_rv32.r32g_sysimm(&em, tg, k, v)
+        elf.Tgt.a64: arch_a64.a64g_sysimm(&em, &tg, k, v)
+        elf.Tgt.rv64: arch_rv64.rvg_sysimm(&em, &tg, k, v)
+        elf.Tgt.i386: arch_i386.i3g_sysimm(&em, &tg, k, v)
+        elf.Tgt.a32: arch_arm.a32g_sysimm(&em, &tg, k, v)
+        elf.Tgt.rv32: arch_rv32.r32g_sysimm(&em, &tg, k, v)
         elf.Tgt.x64: g_pioneer()
 
-fn g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn g_sysmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sysmov(&em, tg, k, r)
-        elf.Tgt.rv64: arch_rv64.rvg_sysmov(&em, tg, k, r)
-        elf.Tgt.i386: arch_i386.i3g_sysmov(&em, tg, k, r)
-        elf.Tgt.a32: arch_arm.a32g_sysmov(&em, tg, k, r)
-        elf.Tgt.rv32: arch_rv32.r32g_sysmov(&em, tg, k, r)
-        elf.Tgt.x64: g_pioneer()
-
-@export
-fn g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_syscall(&em, tg, scid)
-        elf.Tgt.rv64: arch_rv64.rvg_syscall(&em, tg, scid)
-        elf.Tgt.i386: arch_i386.i3g_syscall(&em, tg, scid)
-        elf.Tgt.a32: arch_arm.a32g_syscall(&em, tg, scid)
-        elf.Tgt.rv32: arch_rv32.r32g_syscall(&em, tg, scid)
+        elf.Tgt.a64: arch_a64.a64g_sysmov(&em, &tg, k, r)
+        elf.Tgt.rv64: arch_rv64.rvg_sysmov(&em, &tg, k, r)
+        elf.Tgt.i386: arch_i386.i3g_sysmov(&em, &tg, k, r)
+        elf.Tgt.a32: arch_arm.a32g_sysmov(&em, &tg, k, r)
+        elf.Tgt.rv32: arch_rv32.r32g_sysmov(&em, &tg, k, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn g_syscall(em : &mut emit.Emit, tg : &elf.Target, scid : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_sysret(&em, tg, r)
-        elf.Tgt.rv64: arch_rv64.rvg_sysret(&em, tg, r)
-        elf.Tgt.i386: arch_i386.i3g_sysret(&em, tg, r)
-        elf.Tgt.a32: arch_arm.a32g_sysret(&em, tg, r)
-        elf.Tgt.rv32: arch_rv32.r32g_sysret(&em, tg, r)
+        elf.Tgt.a64: arch_a64.a64g_syscall(&em, &tg, scid)
+        elf.Tgt.rv64: arch_rv64.rvg_syscall(&em, &tg, scid)
+        elf.Tgt.i386: arch_i386.i3g_syscall(&em, &tg, scid)
+        elf.Tgt.a32: arch_arm.a32g_syscall(&em, &tg, scid)
+        elf.Tgt.rv32: arch_rv32.r32g_syscall(&em, &tg, scid)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+fn g_sysret(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        elf.Tgt.rv64: arch_rv64.rvg_frameaddr(&em, tg, nvregs, nobj, off, r)
-        elf.Tgt.i386: arch_i386.i3g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        elf.Tgt.a32: arch_arm.a32g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        elf.Tgt.rv32: arch_rv32.r32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        elf.Tgt.a64: arch_a64.a64g_sysret(&em, &tg, r)
+        elf.Tgt.rv64: arch_rv64.rvg_sysret(&em, &tg, r)
+        elf.Tgt.i386: arch_i386.i3g_sysret(&em, &tg, r)
+        elf.Tgt.a32: arch_arm.a32g_sysret(&em, &tg, r)
+        elf.Tgt.rv32: arch_rv32.r32g_sysret(&em, &tg, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nreg : i64):
+fn g_frameaddr(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_prologue(&em, tg, nvregs, np, nreg)
-        elf.Tgt.rv64: arch_rv64.rvg_prologue(&em, tg, nvregs, np, nreg)
-        elf.Tgt.i386: arch_i386.i3g_prologue(&em, tg, nvregs, np, nreg)
-        elf.Tgt.a32: arch_arm.a32g_prologue(&em, tg, nvregs, np, nreg)
-        elf.Tgt.rv32: arch_rv32.r32g_prologue(&em, tg, nvregs, np, nreg)
+        elf.Tgt.a64: arch_a64.a64g_frameaddr(&em, &tg, nvregs, nobj, off, r)
+        elf.Tgt.rv64: arch_rv64.rvg_frameaddr(&em, &tg, nvregs, nobj, off, r)
+        elf.Tgt.i386: arch_i386.i3g_frameaddr(&em, &tg, nvregs, nobj, off, r)
+        elf.Tgt.a32: arch_arm.a32g_frameaddr(&em, &tg, nvregs, nobj, off, r)
+        elf.Tgt.rv32: arch_rv32.r32g_frameaddr(&em, &tg, nvregs, nobj, off, r)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_epilogue(em : &mut emit.Emit, tg : elf.Target):
+fn g_prologue(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, np : i64, nreg : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_epilogue(&em, tg)
-        elf.Tgt.rv64: arch_rv64.rvg_epilogue(&em, tg)
-        elf.Tgt.i386: arch_i386.i3g_epilogue(&em, tg)
-        elf.Tgt.a32: arch_arm.a32g_epilogue(&em, tg)
-        elf.Tgt.rv32: arch_rv32.r32g_epilogue(&em, tg)
+        elf.Tgt.a64: arch_a64.a64g_prologue(&em, &tg, nvregs, np, nreg)
+        elf.Tgt.rv64: arch_rv64.rvg_prologue(&em, &tg, nvregs, np, nreg)
+        elf.Tgt.i386: arch_i386.i3g_prologue(&em, &tg, nvregs, np, nreg)
+        elf.Tgt.a32: arch_arm.a32g_prologue(&em, &tg, nvregs, np, nreg)
+        elf.Tgt.rv32: arch_rv32.r32g_prologue(&em, &tg, nvregs, np, nreg)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_resolve(em : &mut emit.Emit, tg : elf.Target):
+fn g_epilogue(em : &mut emit.Emit, tg : &elf.Target):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_resolve(&em, tg)
-        elf.Tgt.rv64: arch_rv64.rvg_resolve(&em, tg)
-        elf.Tgt.i386: arch_i386.i3g_resolve(&em, tg)
-        elf.Tgt.a32: arch_arm.a32g_resolve(&em, tg)
-        elf.Tgt.rv32: arch_rv32.r32g_resolve(&em, tg)
+        elf.Tgt.a64: arch_a64.a64g_epilogue(&em, &tg)
+        elf.Tgt.rv64: arch_rv64.rvg_epilogue(&em, &tg)
+        elf.Tgt.i386: arch_i386.i3g_epilogue(&em, &tg)
+        elf.Tgt.a32: arch_arm.a32g_epilogue(&em, &tg)
+        elf.Tgt.rv32: arch_rv32.r32g_epilogue(&em, &tg)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
+fn g_resolve(em : &mut emit.Emit, tg : &elf.Target):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_patch_abs(&em, tg, pos, v)
-        elf.Tgt.rv64: arch_rv64.rvg_patch_abs(&em, tg, pos, v)
-        elf.Tgt.i386: arch_i386.i3g_patch_abs(&em, tg, pos, v)
-        elf.Tgt.a32: arch_arm.a32g_patch_abs(&em, tg, pos, v)
-        elf.Tgt.rv32: arch_rv32.r32g_patch_abs(&em, tg, pos, v)
+        elf.Tgt.a64: arch_a64.a64g_resolve(&em, &tg)
+        elf.Tgt.rv64: arch_rv64.rvg_resolve(&em, &tg)
+        elf.Tgt.i386: arch_i386.i3g_resolve(&em, &tg)
+        elf.Tgt.a32: arch_arm.a32g_resolve(&em, &tg)
+        elf.Tgt.rv32: arch_rv32.r32g_resolve(&em, &tg)
         elf.Tgt.x64: g_pioneer()
 
 @export
-fn g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
+fn g_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64g_patch_call(&em, tg, pos, dest)
-        elf.Tgt.rv64: arch_rv64.rvg_patch_call(&em, tg, pos, dest)
-        elf.Tgt.i386: arch_i386.i3g_patch_call(&em, tg, pos, dest)
-        elf.Tgt.a32: arch_arm.a32g_patch_call(&em, tg, pos, dest)
-        elf.Tgt.rv32: arch_rv32.r32g_patch_call(&em, tg, pos, dest)
+        elf.Tgt.a64: arch_a64.a64g_patch_abs(&em, &tg, pos, v)
+        elf.Tgt.rv64: arch_rv64.rvg_patch_abs(&em, &tg, pos, v)
+        elf.Tgt.i386: arch_i386.i3g_patch_abs(&em, &tg, pos, v)
+        elf.Tgt.a32: arch_arm.a32g_patch_abs(&em, &tg, pos, v)
+        elf.Tgt.rv32: arch_rv32.r32g_patch_abs(&em, &tg, pos, v)
+        elf.Tgt.x64: g_pioneer()
+
+@export
+fn g_patch_call(em : &mut emit.Emit, tg : &elf.Target, pos : i64, dest : i64):
+    match tg.id:
+        elf.Tgt.a64: arch_a64.a64g_patch_call(&em, &tg, pos, dest)
+        elf.Tgt.rv64: arch_rv64.rvg_patch_call(&em, &tg, pos, dest)
+        elf.Tgt.i386: arch_i386.i3g_patch_call(&em, &tg, pos, dest)
+        elf.Tgt.a32: arch_arm.a32g_patch_call(&em, &tg, pos, dest)
+        elf.Tgt.rv32: arch_rv32.r32g_patch_call(&em, &tg, pos, dest)
         elf.Tgt.x64: g_pioneer()
 
 // The program's door: what the kernel jumps to, which keeps what it
@@ -667,18 +667,18 @@ fn g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
 // composing it out of the operations above, so each writes its own
 // beside its instructions; this picks between them.
 @export
-fn g_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+fn g_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : &elf.Target, args_off : i64,
              stack_size : i64, guard_size : i64, ginit : i64,
              tdriver : i64, start_fn : i64, sret : bool):
     match tg.id:
-        elf.Tgt.a64: arch_a64.a64_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.a64: arch_a64.a64_startup(&em, &lw, &tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        elf.Tgt.rv64: arch_rv64.rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.rv64: arch_rv64.rv_startup(&em, &lw, &tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        elf.Tgt.i386: arch_i386.i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.i386: arch_i386.i3_startup(&em, &lw, &tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        elf.Tgt.a32: arch_arm.a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.a32: arch_arm.a32_startup(&em, lw, &tg, args_off, stack_size, guard_size,
                               ginit, tdriver, start_fn, sret)
-        elf.Tgt.rv32: arch_rv32.r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+        elf.Tgt.rv32: arch_rv32.r32_startup(&em, lw, &tg, args_off, stack_size, guard_size,
                                ginit, tdriver, start_fn, sret)
         elf.Tgt.x64: g_pioneer()

@@ -81,7 +81,7 @@ let TY_HASH : i64 = 13      // std.hash.<alg>.start(): a digest being fed, a pie
 @export
 let TY_BUILD : i64 = 14     // &mut std.Build: what a @build recipe declares a build on
 @export
-let TY_OPTIONS : i64 = 15   // &std.Options: what the command line said, as a recipe reads it
+let TY_OPTIONS : i64 = 15   // std.Options: what the command line said, as a recipe reads it
 @export
 let TY_UNT : i64 = 8
 @export

@@ -100,7 +100,7 @@ let TC_SEP : i64 = 3         // a newline, or ;
 // is the case exactly when what follows it, past the newlines, is an
 // indent.  A colon before anything else -- a type, a field's type, the
 // statement of a one-line block -- is written down like any token.
-fn colon_opens(t : lex.Toks, i : i64 ¤ptrdiff) → bool:
+fn colon_opens(t : &lex.Toks, i : i64 ¤ptrdiff) → bool:
     let n : i64 ¤ptrdiff = #t.kind
     let j : mut i64 ¤ptrdiff = i + 1¤ptrdiff
     while j < n and t.kind[j] = tokens.Tk.nl:
@@ -121,7 +121,7 @@ fn canon_kind(k : tokens.Tk) → i64:
 // lexer kept neither.  A number is written out in decimal rather than
 // as it was spelled, so 0x10 and 16 hash alike if the lexer read them
 // alike.
-fn token_bytes(t : lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
+fn token_bytes(t : &lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
     let k0 : tokens.Tk = t.kind[i]
     let k : i64 = canon_kind(k0)
     into.push(k & 255)
@@ -170,7 +170,7 @@ fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
 // `live` says which functions the build is writing: a bill names what
 // the binary is made of, and a function nothing reached is not in it.
 @export
-fn sbom_sources(a : ast.Ast, t : lex.Toks, src : byte[], files : diag.Files,
+fn sbom_sources(a : &ast.Ast, t : &lex.Toks, src : byte[], files : &diag.Files,
                 live : bool[]) → SbomRow[]:
     let rows : mut SbomRow[] = []
     let nf : i64 ¤ptrdiff = #files.names
@@ -220,11 +220,11 @@ fn sbom_sources(a : ast.Ast, t : lex.Toks, src : byte[], files : diag.Files,
             else:
                 fnext ← fnext + 1¤ptrdiff
         // the token's own bytes, read once however many digests want them
-        let opener : bool = t.kind[i] = tokens.Tk.colon and colon_opens(t, i)
+        let opener : bool = t.kind[i] = tokens.Tk.colon and colon_opens(&t, i)
         let c : i64 = if opener: TC_SEP else: canon_kind(t.kind[i])
         ready ← []
         if c ≠ TC_SEP:
-            token_bytes(t, src, i, &ready)
+            token_bytes(&t, src, i, &ready)
         let (h2, p2) : (i64, i64) = feed_token(c, ready, held, prev, &feed)
         held ← h2
         prev ← p2

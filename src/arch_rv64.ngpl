@@ -148,71 +148,71 @@ fn rv_stslot(em : &mut emit.Emit, rs : i64, slot : i64):
     rv_S(&em, o, rs, base, 3)                               // sd
 
 @export
-fn rvg_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn rvg_lds(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     rv_ldslot(&em, rv_r(r), slot)
 
 @export
-fn rvg_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn rvg_sts(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     rv_stslot(&em, rv_r(r), slot)
 
 @export
-fn rvg_const(em : &mut emit.Emit, tg : elf.Target, r : i64, v : i64):
+fn rvg_const(em : &mut emit.Emit, tg : &elf.Target, r : i64, v : i64):
     rv_movimm(&em, rv_r(r), v)
 
 @export
-fn rvg_mov2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn rvg_mov2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     rv_mv(&em, rv_r(rd), rv_r(rs))
 
 @export
-fn rvg_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_add3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 0, rv_r(rd), 51)
 
 @export
-fn rvg_sub3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_sub3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 32, rv_r(ry), rv_r(rx), 0, rv_r(rd), 51)
 
 @export
-fn rvg_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_mul3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), 0, rv_r(rd), 51)
 
 @export
-fn rvg_and3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_and3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 7, rv_r(rd), 51)
 
 @export
-fn rvg_or3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_or3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 6, rv_r(rd), 51)
 
 @export
-fn rvg_xor3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_xor3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 4, rv_r(rd), 51)
 
 @export
-fn rvg_not2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn rvg_not2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     rv_I(&em, ⁻1, rv_r(rs), 4, rv_r(rd), 19)                // xori rd, rs, -1
 
 @export
-fn rvg_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn rvg_neg2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     rv_R(&em, 32, rv_r(rs), 0, 0, rv_r(rd), 51)             // sub rd, x0, rs
 
 @export
-fn rvg_shl3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_shl3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 1, rv_r(rd), 51)
 
 @export
-fn rvg_shr3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_shr3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 0, rv_r(ry), rv_r(rx), 5, rv_r(rd), 51)
 
 @export
-fn rvg_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn rvg_sar3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     rv_R(&em, 32, rv_r(ry), rv_r(rx), 5, rv_r(rd), 51)
 
 @export
-fn rvg_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
+fn rvg_shl3i(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64, imm : i64):
     rv_I(&em, imm, rv_r(rs), 1, rv_r(rd), 19)               // slli
 
 @export
-fn rvg_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+fn rvg_cmp3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     let x : i64 = rv_r(rx)
     let y : i64 = rv_r(ry)
     let d : i64 = rv_r(rd)
@@ -236,7 +236,7 @@ fn rvg_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, 
         rv_I(&em, 1, d, 4, d, 19)
 
 @export
-fn rvg_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
+fn rvg_sel4(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
     // masks, not branches: t4 = all-ones where the condition holds
     rv_R(&em, 0, rv_r(rc), 0, 3, RV_S0, 51)                 // sltu t4, x0, rc
     rv_R(&em, 32, RV_S0, 0, 0, RV_S0, 51)                   // sub t4, x0, t4
@@ -246,27 +246,27 @@ fn rvg_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, 
     rv_R(&em, 0, RV_S0, RV_S1, 6, rv_r(rd), 51)             // or rd
 
 @export
-fn rvg_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn rvg_div3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), if sgn = 1: 4 else: 5, rv_r(rd), 51)
 
 @export
-fn rvg_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn rvg_mod3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), if sgn = 1: 6 else: 7, rv_r(rd), 51)
 
 // No flags on this machine: the answer is a value, so it is made and
 // tested exactly as it was before there was another way.
 @export
-fn rvg_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    rvg_addov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
-    rvg_jz(&em, tg, machine.RG_C, lab)
+fn rvg_addchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    rvg_addov(&em, &tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, &tg, machine.RG_C, lab)
 
 @export
-fn rvg_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    rvg_subov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
-    rvg_jz(&em, tg, machine.RG_C, lab)
+fn rvg_subchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    rvg_subov(&em, &tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, &tg, machine.RG_C, lab)
 
 @export
-fn rvg_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn rvg_addov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     if sgn = 1:
         rv_R(&em, 0, rv_r(ry), rv_r(rx), 0, RV_S1, 51)      // t5 = x + y
         rv_R(&em, 0, rv_r(ry), rv_r(rx), 4, RV_S0, 51)      // t4 = x ^ y
@@ -281,7 +281,7 @@ fn rvg_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64,
         rv_mv(&em, rv_r(rd), RV_S1)
 
 @export
-fn rvg_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn rvg_subov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     if sgn = 1:
         rv_R(&em, 32, rv_r(ry), rv_r(rx), 0, RV_S1, 51)     // t5 = x - y
         rv_R(&em, 0, rv_r(ry), rv_r(rx), 4, RV_S0, 51)      // t4 = x ^ y
@@ -295,7 +295,7 @@ fn rvg_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64,
         rv_mv(&em, rv_r(rf), RV_S0)
 
 @export
-fn rvg_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn rvg_mulov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     if sgn = 1:
         rv_R(&em, 1, rv_r(ry), rv_r(rx), 0, RV_S1, 51)      // mul
         rv_R(&em, 1, rv_r(ry), rv_r(rx), 1, RV_S2, 51)      // mulh
@@ -310,7 +310,7 @@ fn rvg_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64,
         rv_mv(&em, rv_r(rd), RV_S1)
 
 @export
-fn rvg_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64):
+fn rvg_ext2(em : &mut emit.Emit, tg : &elf.Target, r : i64, bits : i64, sgn : i64):
     if bits >= 64:
         return
     let sh : i64 = 64 - bits
@@ -318,7 +318,7 @@ fn rvg_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64
     rv_I(&em, if sgn = 1: sh + 1024 else: sh, rv_r(r), 5, rv_r(r), 19)
 
 @export
-fn rvg_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+fn rvg_ldo(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     let base : mut i64 = rv_r(rbase)
     let o : mut i64 = off
@@ -337,7 +337,7 @@ fn rvg_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i6
     rv_I(&em, o, base, f3, rv_r(rd), 3)
 
 @export
-fn rvg_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
+fn rvg_sto(em : &mut emit.Emit, tg : &elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     let base : mut i64 = rv_r(rbase)
     let o : mut i64 = off
@@ -354,28 +354,28 @@ fn rvg_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i6
 let RVF_J : i64 = 20
 
 @export
-fn rvg_jmp(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn rvg_jmp(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     em.tf_pos.push(em.here())
     em.tf_lab.push(lab)
     em.tf_form.push(RVF_J)
     em.aw(111)                                              // jal x0, 0
 
 @export
-fn rvg_jz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn rvg_jz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     rv_bshort(&em, 1, rv_r(r), 0, 8)                        // bne r, x0, +8
-    rvg_jmp(&em, tg, lab)
+    rvg_jmp(&em, &tg, lab)
 
 @export
-fn rvg_jnz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn rvg_jnz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     rv_bshort(&em, 0, rv_r(r), 0, 8)                        // beq r, x0, +8
-    rvg_jmp(&em, tg, lab)
+    rvg_jmp(&em, &tg, lab)
 
 @export
-fn rvg_label(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn rvg_label(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     em.set_label(lab)
 
 @export
-fn rvg_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
+fn rvg_call(em : &mut emit.Emit, tg : &elf.Target, target : i64):
     if em.skipping = 1:
         return
     em.cf_pos.push(em.here())
@@ -384,22 +384,22 @@ fn rvg_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
     rv_I(&em, 0, 1, 0, 1, 103)                              // jalr ra, ra, 0
 
 @export
-fn rvg_calli(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn rvg_calli(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     rv_I(&em, 0, rv_r(r), 0, 1, 103)                        // jalr ra, r
 
 @export
-fn rvg_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn rvg_ijmp(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     rv_I(&em, 0, rv_r(r), 0, 0, 103)                        // jalr x0, r
 
 // Only i386 spends the private convention's headroom so far, so
 // this puts the argument where the architecture's own convention
 // says and the two agree.
 @export
-fn rvg_argreg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
-    rvg_argld(&em, tg, k, slot)
+fn rvg_argreg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
+    rvg_argld(&em, &tg, k, slot)
 
 @export
-fn rvg_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn rvg_argld(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     if k < 8:
         rv_ldslot(&em, 10 + k, slot)
     else:
@@ -407,38 +407,38 @@ fn rvg_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
         rv_S(&em, 8 × (k - 8), RV_S1, 2, 3)                 // sd t5, off(sp)
 
 @export
-fn rvg_argconst(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn rvg_argconst(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     assert(k < 8, "a constant argument rides a register")
     rv_movimm(&em, 10 + k, v)
 
 @export
-fn rvg_argmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn rvg_argmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     assert(k < 8, "a moved argument rides a register")
     rv_mv(&em, 10 + k, rv_r(r))
 
 @export
-fn rvg_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn rvg_retst(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     rv_stslot(&em, 10, slot)
 
 @export
-fn rvg_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn rvg_retld(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     rv_ldslot(&em, 10, slot)
 
 @export
-fn rvg_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn rvg_retmov(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     rv_mv(&em, 10, rv_r(r))
 
 // s0 is the frame pointer the prologue set
 @export
-fn rvg_fptr(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn rvg_fptr(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     rv_I(&em, 0, 8, 0, rv_r(r), 19)              // mv rd, s0
 
 @export
-fn rvg_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
+fn rvg_absref(em : &mut emit.Emit, tg : &elf.Target, r : i64) → i64:
     rv_absref(&em, rv_r(r))
 
 @export
-fn rvg_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
+fn rvg_absref_arg(em : &mut emit.Emit, tg : &elf.Target, k : i64) → i64:
     assert(k < 8, "an address argument rides a register")
     rv_absref(&em, 10 + k)
 
@@ -450,37 +450,37 @@ fn rv_absref(em : &mut emit.Emit, rd : i64) → i64:
     pos
 
 @export
-fn rvg_sysarg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn rvg_sysarg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     rv_ldslot(&em, 10 + k, slot)
 
 @export
-fn rvg_sysimm(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn rvg_sysimm(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     rv_movimm(&em, 10 + k, v)
 
 @export
-fn rvg_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn rvg_sysmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     rv_mv(&em, 10 + k, rv_r(r))
 
 @export
-fn rvg_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    rv_movimm(&em, 17, machine.sc_number(tg, scid))
+fn rvg_syscall(em : &mut emit.Emit, tg : &elf.Target, scid : i64):
+    rv_movimm(&em, 17, machine.sc_at(&tg, scid))
     em.aw(115)                                              // ecall
 
 @export
-fn rvg_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn rvg_sysret(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     rv_mv(&em, rv_r(r), 10)
 
 // see a64g_frameaddr; here a slot sits at sp + 32 + 8×s
 @export
 @pre(off >= 0)
-fn rvg_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+fn rvg_frameaddr(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
     _ ← nobj
     let at : i64 = 32 + 8 × nvregs + off
     assert(at >= 0 and at < 2048, "the frame offset fits the immediate")
     rv_I(&em, at, 2, 0, rv_r(r), 19)                        // addi xr, sp, at
 
 @export
-fn rvg_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nreg : i64):
+fn rvg_prologue(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = elf.align_up(32 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     rv_I(&em, ⁻16, 2, 0, 2, 19)                             // addi sp, sp, -16
@@ -500,7 +500,7 @@ fn rvg_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nr
             rv_stslot(&em, RV_S1, j)
 
 @export
-fn rvg_epilogue(em : &mut emit.Emit, tg : elf.Target):
+fn rvg_epilogue(em : &mut emit.Emit, tg : &elf.Target):
     rv_I(&em, 0, 8, 0, 2, 19)                               // mv sp, s0
     rv_I(&em, 8, 2, 3, 1, 3)                                // ld ra, 8(sp)
     rv_I(&em, 0, 2, 3, 8, 3)                                // ld s0, 0(sp)
@@ -508,34 +508,34 @@ fn rvg_epilogue(em : &mut emit.Emit, tg : elf.Target):
     rv_I(&em, 0, 1, 0, 0, 103)                              // ret
 
 @export
-fn rvg_resolve(em : &mut emit.Emit, tg : elf.Target):
+fn rvg_resolve(em : &mut emit.Emit, tg : &elf.Target):
     if #em.tf_pos > 0:
         foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
             assert(delta >= ⁻1048576 and delta < 1048576, "a local jump inside jal's reach")
-            em.patch32(pos, machine.code_word(&em, pos) + rv_jimm(delta))
+            em.patch32(pos, machine.code_word(em, pos) + rv_jimm(delta))
     while #em.tf_pos > 0:
         _ ← em.tf_pos.pop() ?? 0
         _ ← em.tf_lab.pop() ?? 0
         _ ← em.tf_form.pop() ?? 0
 
 @export
-fn rvg_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
+fn rvg_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):
     let hi : i64 = (v + 2048) » 12
-    em.patch32(pos, machine.code_word(&em, pos) + ((hi & 1048575) « 12))
-    em.patch32(pos + 4, machine.code_word(&em, pos + 4) + (((v - (hi « 12)) & 4095) « 20))
+    em.patch32(pos, machine.code_word(em, pos) + ((hi & 1048575) « 12))
+    em.patch32(pos + 4, machine.code_word(em, pos + 4) + (((v - (hi « 12)) & 4095) « 20))
 
 @export
-fn rvg_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
+fn rvg_patch_call(em : &mut emit.Emit, tg : &elf.Target, pos : i64, dest : i64):
     let delta : i64 = dest - pos
     let hi : i64 = (delta + 2048) » 12
-    em.patch32(pos, machine.code_word(&em, pos) + ((hi & 1048575) « 12))
-    em.patch32(pos + 4, machine.code_word(&em, pos + 4) + (((delta - (hi « 12)) & 4095) « 20))
+    em.patch32(pos, machine.code_word(em, pos) + ((hi & 1048575) « 12))
+    em.patch32(pos + 4, machine.code_word(em, pos + 4) + (((delta - (hi « 12)) & 4095) « 20))
 
 // the same door, spelled in RV64
 @export
-fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : &elf.Target, args_off : i64,
               stack_size : i64, guard_size : i64, ginit : i64,
               tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
@@ -554,7 +554,7 @@ fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_
     rv_I(&em, 0, RV_T, 3, RV_S1, 3)              // ld t5, 0(t3)
     rv_I(&em, 8, RV_T, 0, RV_T, 19)
     rv_bshort(&em, 0, RV_S1, 0, 8)               // beq t5, x0, +8
-    rvg_jmp(&em, tg, 0)
+    rvg_jmp(&em, &tg, 0)
     rv_S(&em, 24, RV_T, RV_RB, 3)                // auxv
     rv_movimm(&em, 10, 0)
     rv_movimm(&em, 11, guard_size + stack_size)
@@ -562,29 +562,29 @@ fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_
     rv_movimm(&em, 13, 147490)
     rv_movimm(&em, 14, ⁻1)
     rv_movimm(&em, 15, 0)
-    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MMAP))
+    rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.mmap))
     em.aw(115)
     rv_bshort(&em, 5, 10, 0, 8)                  // bge a0, x0, +8
-    rvg_jmp(&em, tg, 1)                          // the kernel refused
+    rvg_jmp(&em, &tg, 1)                          // the kernel refused
     rv_mv(&em, RV_RB, 10)                        // the region's foot
     rv_movimm(&em, 10, guard_size)
     rv_R(&em, 0, RV_RB, 10, 0, 10, 51)
     rv_movimm(&em, 11, stack_size)
     rv_movimm(&em, 12, 3)
-    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MPROT))
+    rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.mprot))
     em.aw(115)
     rv_bshort(&em, 5, 10, 0, 8)
-    rvg_jmp(&em, tg, 1)
+    rvg_jmp(&em, &tg, 1)
     rv_movimm(&em, RV_RA, guard_size + stack_size)
     rv_R(&em, 0, RV_RB, RV_RA, 0, 2, 51)         // sp = foot + whole
-    rvg_jmp(&em, tg, 2)
+    rvg_jmp(&em, &tg, 2)
     em.set_label(1)
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
     let spos : i64 = rv_absref(&em, 10)
     em.sf_pos.push(spos)
     em.sf_str.push(smsg)
     rv_movimm(&em, 11, emit.str_len("the stack could not be reserved\n"))
-    rvg_call(&em, tg, emit.RT_ABORT)
+    rvg_call(&em, &tg, emit.RT_ABORT)
     em.set_label(2)
     // Where the guard is, for the handler to compare a faulting
     // address against, and then the handler itself.  Both before the
@@ -599,15 +599,15 @@ fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_
     rv_movimm(&em, RV_RC, guard_size + stack_size)
     rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
     rv_S(&em, emit.KB_STOP, RV_RC, RV_RA, 3)
-    rvg_call(&em, tg, emit.RT_SIGINIT)
+    rvg_call(&em, &tg, emit.RT_SIGINIT)
     if ginit >= 0:
-        rvg_call(&em, tg, ginit)
-    rvg_call(&em, tg, emit.RT_RELRO)
-    rvg_call(&em, tg, tdriver)
+        rvg_call(&em, &tg, ginit)
+    rvg_call(&em, &tg, emit.RT_RELRO)
+    rvg_call(&em, &tg, tdriver)
     if start_fn >= 0:
-        rvg_call(&em, tg, start_fn)
+        rvg_call(&em, &tg, start_fn)
     if not sret:
         rv_movimm(&em, 10, 0)
-    rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.exit))
     em.aw(115)
-    rvg_resolve(&em, tg)
+    rvg_resolve(&em, &tg)

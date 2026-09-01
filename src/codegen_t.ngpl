@@ -37,7 +37,7 @@ let types := @import("types")
 // convention is worth most exactly there.
 
 
-fn abi_argregs(tg : elf.Target) → i64:
+fn abi_argregs(tg : &elf.Target) → i64:
     match tg.id:
         elf.Tgt.a64: 8
         elf.Tgt.rv64: 8
@@ -53,7 +53,7 @@ fn abi_argregs(tg : elf.Target) → i64:
 // frame: eax:edx is the only pair a body touches, so ecx, ebx, esi and
 // edi are free from one end of a function to the other, and nothing
 // needs preserving because a caller keeps nothing across a call.
-fn abi_spent(tg : elf.Target) → i64:
+fn abi_spent(tg : &elf.Target) → i64:
     match tg.id:
         elf.Tgt.i386: 3         // eax:edx, ecx:ebx, esi:edi
         elf.Tgt.a32: 2          // r0:r1, r2:r3
@@ -62,10 +62,10 @@ fn abi_spent(tg : elf.Target) → i64:
 
 @export
 @pre(olevel >= 0)
-fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : elf.Target,
+fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt : &elf.Target,
              stack_size : i64, guard_size : i64, olevel : i64, want_log : bool,
-             incr : incr_m.Incr) → codegen.Compiled:
-    let ab : abi.Abi = abi.analyze_abi(a, toks, abi_argregs(tgt), abi_spent(tgt), want_log)
+             incr : &incr_m.Incr) → codegen.Compiled:
+    let ab : abi.Abi = abi.analyze_abi(&a, &toks, abi_argregs(&tgt), abi_spent(&tgt), want_log)
     // What the driver routes through the private convention, per
     // function.  Zero says the architecture's own path carries every
     // argument, which is what every target but i386 still does.
@@ -76,7 +76,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             // convention it had, and the convention is decided over the
             // whole program; under --incremental every function keeps
             // the architecture's own path, which no build moves
-            nregs.push(if abi_spent(tgt) = 0 or incr.mode ≠ 0: 0 else: ab.nreg[i])
+            nregs.push(if abi_spent(&tgt) = 0 or incr.mode ≠ 0: 0 else: ab.nreg[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -159,7 +159,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
     lw.shimbase ← lw.lambase + @dropunit(#chk.lams)
     let tdriver : i64 = nfns + g1 + 1
     let sret : bool = start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ types.TY_UNIT
-    dispatch.g_startup(&em, &lw, tgt, args_off, stack_size, guard_size,
+    dispatch.g_startup(&em, &lw, &tgt, args_off, stack_size, guard_size,
               if ninit > 0: nfns else: ⁻1, tdriver, start_fn, sret)
     // the program's own code, then the whole runtime: nothing is
     // trimmed here yet, since the IR-built routines call each other
@@ -177,7 +177,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
     // and its offset is the one no call may land on, so a call that
     // somehow reaches for it is caught where the calls are resolved
     // rather than jumping into whatever stands at the front.
-    let live : bool[] = incr_m.reached_fns(a, toks, src)
+    let live : bool[] = incr_m.reached_fns(&a, &toks, src)
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         if not live[i]:
@@ -191,20 +191,20 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             continue
         // the space for a sized answer arrives as one more argument
         let np : i64 = a.extra[a.fns[i].params_off] + (if check.farr_is_packed(a, a.fns[i].ret): 1 else: 0)
-        let symnm : str = symbols.fn_symbol(a, toks, src, f)
+        let symnm : str = symbols.fn_symbol(&a, &toks, src, f)
         // lowered whether or not it is emitted: see the same loop in
         // codegen.ngpl for why the string table has to be complete
-        let ir := if chk.skipfn[i] = 1: lower.lower_stub_fn(&lw, np) else: lower.lower_fn(&lw, a, chk, f)
+        let ir := if chk.skipfn[i] = 1: lower.lower_stub_fn(&lw, np) else: lower.lower_fn(&lw, &a, &chk, f)
         // a function an earlier build moved lives past .text, which is
         // past where the runtime goes: it is written with the rest of
         // the overflow, and emitted here only to find out what it
         // calls while that can still be answered
-        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_m.incr_text_size(incr)
+        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_m.incr_text_size(&incr)
         if away:
             if incr.fresh[i]:
                 let mk0 := em.mark()
-                tdriver_m.t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
-                incr_m.incr_harvest(&em, mk0, &dfr_rt)
+                tdriver_m.t_emit_fn(&em, &tgt, ir, np, lw.strs, nregs[i], nregs)
+                incr_m.incr_harvest(em, mk0, &dfr_rt)
                 em.rewind(mk0)
             dfr_fn.push(f)
             dfr_at.push(incr.at_of(symnm))
@@ -212,61 +212,61 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             dfr_ir.push(ir)
             em.fn_off.push(0)
             continue
-        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, symnm))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, symnm))
         em.fn_off.push(em.here())
         let began : i64 = em.here()
         if incr.mode = 2 and incr_why = "" and not incr.fresh[i]:
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, incr, symnm))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, &incr, symnm))
         else:
             let mk := em.mark()
-            tdriver_m.t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
+            tdriver_m.t_emit_fn(&em, &tgt, ir, np, lw.strs, nregs[i], nregs)
             if incr.mode = 2 and em.here() > incr.end_of(symnm):
-                incr_m.incr_harvest(&em, mk, &dfr_rt)
+                incr_m.incr_harvest(em, mk, &dfr_rt)
                 em.rewind(mk)
                 dfr_fn.push(f)
                 dfr_at.push(⁻1)
                 dfr_np.push(np)
                 dfr_ir.push(ir)
                 em.fn_off[i] ← 0
-        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, symnm, began))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, symnm, began))
     if ninit > 0:
-        let gir := codegen.lower_ginit(&lw, a, chk)
-        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<globals>"))
+        let gir := codegen.lower_ginit(&lw, &a, &chk)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, "<globals>"))
         em.fn_off.push(em.here())
         let b1 : i64 = em.here()
-        tdriver_m.t_emit_fn(&em, tgt, gir, 0, lw.strs, 0, nregs)
-        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<globals>", b1))
+        tdriver_m.t_emit_fn(&em, &tgt, gir, 0, lw.strs, 0, nregs)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, "<globals>", b1))
     let fir := codegen.lower_argsfilter(&lw)
-    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<args>"))
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, "<args>"))
     em.fn_off.push(em.here())
     let b2 : i64 = em.here()
-    tdriver_m.t_emit_fn(&em, tgt, fir, 0, lw.strs, 0, nregs)
-    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<args>", b2))
-    let dir := codegen.lower_testdriver(&lw, a)
-    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, "<tests>"))
+    tdriver_m.t_emit_fn(&em, &tgt, fir, 0, lw.strs, 0, nregs)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, "<args>", b2))
+    let dir := codegen.lower_testdriver(&lw, &a)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, "<tests>"))
     em.fn_off.push(em.here())
     let b3 : i64 = em.here()
-    tdriver_m.t_emit_fn(&em, tgt, dir, 0, lw.strs, 0, nregs)
-    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, "<tests>", b3))
+    tdriver_m.t_emit_fn(&em, &tgt, dir, 0, lw.strs, 0, nregs)
+    incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, "<tests>", b3))
     if #chk.lams > 0:
         foreach j := 0…#chk.lams:
-            let lir := lower.lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            let lir := lower.lower_lambda_fn(&lw, &a, &chk, @dropunit(j))
             let lnm : str = "λ#" ⧺ tokens.i64_str(@dropunit(j))
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, lnm))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, lnm))
             em.fn_off.push(em.here())
             let b4 : i64 = em.here()
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
-            tdriver_m.t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs, 0, nregs)
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, lnm, b4))
+            tdriver_m.t_emit_fn(&em, &tgt, lir, lnp + 1, lw.strs, 0, nregs)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, lnm, b4))
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn:
-            let sir := lower.lower_shim_fn(&lw, chk, @dropunit(j))
+            let sir := lower.lower_shim_fn(&lw, &chk, @dropunit(j))
             let pnm : str = "partial#" ⧺ tokens.i64_str(@dropunit(j))
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, pnm))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, pnm))
             em.fn_off.push(em.here())
             let b5 : i64 = em.here()
-            tdriver_m.t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, pnm, b5))
+            tdriver_m.t_emit_fn(&em, &tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, pnm, b5))
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What is emitted so far is the program's own, and the calls it
     // made name the runtime it reaches for.  Emitting those reveals
@@ -342,7 +342,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
                 em.rt_off[id0] ← em.here()
                 let rid : i64 = 0 - @dropunit(id0) - 1
                 let np9 : i64 = rt_nargs(rid)
-                tdriver_m.t_emit_fn(&em, tgt, rt_portable.rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
+                tdriver_m.t_emit_fn(&em, &tgt, rt_portable.rt_build(rid, &tgt, &lw), np9, lw.strs, 0, nregs)
                 more ← true
 
     // The overflow: what would not fit where it stood.  See the same
@@ -370,35 +370,35 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
         foreach ov_kk := ov_ord:
             let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
             let ov_f : i64 = dfr_fn[ov_i]
-            let ov_nm : str = symbols.fn_symbol(a, toks, src, ov_f)
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, incr, ov_nm))
+            let ov_nm : str = symbols.fn_symbol(&a, &toks, src, ov_f)
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, ov_nm))
             em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
             let ov_beg : i64 = em.here()
             if not incr.fresh[ov_f × 1¤ptrdiff]:
-                incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, incr, ov_nm))
+                incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_copy(&em, &incr, ov_nm))
             else:
                 let ov_mark := em.mark()
-                tdriver_m.t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                tdriver_m.t_emit_fn(&em, &tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
                 if em.here() > incr.end_of(ov_nm):
                     em.rewind(ov_mark)
                     ov_late.push(ov_kk)
                     em.fn_off[ov_f × 1¤ptrdiff] ← 0
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, incr, ov_nm, ov_beg))
+            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, ov_nm, ov_beg))
             if em.fn_off[ov_f × 1¤ptrdiff] ≠ 0:
                 placed.push(ov_f)
         foreach ov_k := 0…#dfr_fn:
             if dfr_at[ov_k] < 0:
                 ov_late.push(@dropunit(ov_k))
         if #ov_late > 0:
-            assert(em.here() <= incr_m.incr_text_end(incr), "the overflow begins past what the last build used")
-            while em.here() < incr_m.incr_text_end(incr):
+            assert(em.here() <= incr_m.incr_text_end(&incr), "the overflow begins past what the last build used")
+            while em.here() < incr_m.incr_text_end(&incr):
                 em.b1(incr.fill)
             foreach ov_kk := ov_late:
                 let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
                 let ov_f : i64 = dfr_fn[ov_i]
                 em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
                 let ov_beg2 : i64 = em.here()
-                tdriver_m.t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                tdriver_m.t_emit_fn(&em, &tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
                 let ov_pad : i64 = @dropunit(incr_m.incr_padding((em.here() - ov_beg2) × 1¤byte))
                 foreach _ := 0…ov_pad:
                     em.b1(incr.fill)
@@ -411,20 +411,20 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             let t : i64 = em.cf_target[i]
             let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
             assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
-            dispatch.g_patch_call(&em, tgt, pos, dest)
+            dispatch.g_patch_call(&em, &tgt, pos, dest)
     // a function's address, taken as a value
     if #em.ff_pos > 0:
         foreach i := 0…#em.ff_pos:
             let ff : i64 = em.ff_fn[i]
             let fat : i64 = if ff >= 0: em.fn_off[ff × 1¤ptrdiff] else: em.rt_off[(0 - ff - 1) × 1¤ptrdiff]
             assert(fat ≠ ⁻1, "the address taken is of a routine that was emitted")
-            dispatch.g_patch_abs(&em, tgt, em.ff_pos[i], elf.IMAGE_BASE + elf.PAGE + fat)
+            dispatch.g_patch_abs(&em, &tgt, em.ff_pos[i], elf.IMAGE_BASE + elf.PAGE + fat)
     // rodata: the strings' bytes, then their descriptors, then the
     // tables -- the same layout the x86-64 path writes
     let text_size : i64 = em.here()
     // What the text region is given, which is where the read-only
     // data begins; see incr_room_text for why this is not #code.
-    let text_room : i64 ¤byte = incr_m.incr_room_text(incr, text_size × 1¤byte)
+    let text_room : i64 ¤byte = incr_m.incr_room_text(&incr, text_size × 1¤byte)
     let ro_vaddr : i64 = elf.IMAGE_BASE + elf.align_up(elf.PAGE + @dropunit(text_room), elf.PAGE)
     // only the strings something reads reach the image; see str_uses
     let used : i64[] = if incr.mode = 0: emit.str_uses(&em, @dropunit(#lw.strs)) else: incr_m.incr_all_used(#lw.strs)
@@ -442,10 +442,10 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
     let descbase : i64 = elf.align_up(acc, 8)
     if #em.sf_pos > 0:
         foreach i := 0…#em.sf_pos:
-            dispatch.g_patch_abs(&em, tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, &tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
         foreach i := 0…#em.sd_pos:
-            dispatch.g_patch_abs(&em, tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, &tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
     let rodata : mut u8[] = []
     if #lw.strs > 0:
         foreach i := 0…#lw.strs:
@@ -473,16 +473,16 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
         while @dropunit(#rodata) < bt_base:
             rodata.push(0)
         bt_at ← bt_base
-        let bt_nm0 : str[] = incr_m.incr_reorder_names(rt_backtrace.bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
+        let bt_nm0 : str[] = incr_m.incr_reorder_names(rt_backtrace.bt_fn_names(&a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
         let bt_of0 : i64[] = incr_m.incr_reorder(em.fn_off, placed)
         let bt_nm : str[] = incr_m.bt_keep_names(bt_nm0, bt_of0)
         let bt_of : i64[] = incr_m.bt_keep_offs(bt_of0)
-        foreach c := rt_backtrace.bt_bytes(tgt, elf.IMAGE_BASE + elf.PAGE, bt_nm, bt_of,
+        foreach c := rt_backtrace.bt_bytes(&tgt, elf.IMAGE_BASE + elf.PAGE, bt_nm, bt_of,
                               rt_backtrace.bt_sizes(bt_of, @dropunit(#placed),
-                                       rt_backtrace.bt_text_end(&em, text_size), text_size)):
+                                       rt_backtrace.bt_text_end(em, text_size), text_size)):
             rodata.push(c)
         foreach i := 0…#em.bt_pos:
-            dispatch.g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
+            dispatch.g_patch_abs(&em, &tgt, em.bt_pos[i], ro_vaddr + bt_base)
         bt_to ← @dropunit(#rodata)
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
@@ -492,17 +492,17 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
     let gro_end : i64 = @dropunit(#rodata)
     if #em.gr_pos > 0:
         foreach i := 0…#em.gr_pos:
-            dispatch.g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+            dispatch.g_patch_abs(&em, &tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
     // A jump table holds code addresses, a value table its data, and
     // both come last: see incr_jt_prefix for why the end is where they
     // have to be.
     let jt_base : i64 = elf.align_up(@dropunit(#rodata), 8)
     while @dropunit(#rodata) < jt_base:
         rodata.push(0)
-    let jt_kept : i64 = incr_m.incr_jt_prefix(&rodata, incr, jt_base)
+    let jt_kept : i64 = incr_m.incr_jt_prefix(&rodata, &incr, jt_base)
     if #em.jt_pos > 0:
         foreach i := 0…#em.jt_pos:
-            dispatch.g_patch_abs(&em, tgt, em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+            dispatch.g_patch_abs(&em, &tgt, em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     if #em.jt_starts > 0:
         foreach t := 0…#em.jt_starts:
             let lo2 : i64 = em.jt_starts[t]
@@ -510,11 +510,11 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             let base2 : i64 = if em.jt_is_code[t] = 1: elf.IMAGE_BASE + elf.PAGE else: 0
             foreach e3 := lo2…hi2:
                 elf.push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
-    let ro_room : i64 ¤byte = incr_m.incr_room_ro(incr, #rodata)
+    let ro_room : i64 ¤byte = incr_m.incr_room_ro(&incr, #rodata)
     let d_vaddr : i64 = elf.IMAGE_BASE + elf.align_up(ro_vaddr - elf.IMAGE_BASE + @dropunit(ro_room), elf.PAGE)
     if #em.df_pos > 0:
         foreach i := 0…#em.df_pos:
-            dispatch.g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
+            dispatch.g_patch_abs(&em, &tgt, em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
         foreach i := 0…nglobals:
@@ -560,7 +560,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
         // a function nothing reached is in no binary, and so is no
         // symbol either -- as a runtime routine nobody reached is not
         if not incr_m.incr_moved(placed, @dropunit(i)) and em.fn_off[i] ≠ ⁻1:
-            sname.push(symbols.fn_symbol(a, toks, src, @dropunit(i)))
+            sname.push(symbols.fn_symbol(&a, &toks, src, @dropunit(i)))
             soffs.push(em.fn_off[i])
             sglob.push(a.fns[i].is_export)
     let synth : mut str[] = []
@@ -605,7 +605,7 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
             soffs.push(roff[i])
             sglob.push(false)
     foreach mv := placed:
-        sname.push(symbols.fn_symbol(a, toks, src, mv))
+        sname.push(symbols.fn_symbol(&a, &toks, src, mv))
         soffs.push(em.fn_off[mv × 1¤ptrdiff])
         sglob.push(a.fns[mv × 1¤ptrdiff].is_export)
     let syms : mut elf.Sym[] = []

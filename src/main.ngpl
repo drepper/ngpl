@@ -34,7 +34,7 @@ fn tok_name(k : tokens.Tk) → str:
     "op"
 
 @impure
-fn dump_tokens(t : lex.Toks, src : byte[], files : diag.Files):
+fn dump_tokens(t : &lex.Toks, src : byte[], files : &diag.Files):
     // a token's line is counted over the whole text, so it is turned
     // back into the file it came from, as a diagnostic's is
     let starts := diag.file_lines(files, src)
@@ -58,7 +58,7 @@ fn any_refusal(diags : diag.Diag[], werror : bool) → bool:
     false
 
 @impure
-fn report(diags : diag.Diag[], files : diag.Files, as_json : bool, src : byte[]):
+fn report(diags : diag.Diag[], files : &diag.Files, as_json : bool, src : byte[]):
     // one walk of the text, here where something is being reported
     // anyway, rather than on every compile that has nothing to say
     let starts := diag.file_lines(files, src)
@@ -273,11 +273,11 @@ fn read_build(path : str, json : bool, output : str, target : str,
     let files := diag.Files{names: [path], off: [0]}
     let toks := lex.lex(src)
     if #toks.diags > 0:
-        report(toks.diags, files, json, src)
+        report(toks.diags, &files, json, src)
         recipe_failed()
-    let ast := parse.parse_recipe(toks, src)
+    let ast := parse.parse_recipe(&toks, src)
     if #ast.diags > 0:
-        report(ast.diags, files, json, src)
+        report(ast.diags, &files, json, src)
         recipe_failed()
     if #ast.builds = 0:
         std.println("ngplc: '{}' carries no @build function, so there is no recipe to read", path)
@@ -285,9 +285,9 @@ fn read_build(path : str, json : bool, output : str, target : str,
     // The recipe runs without the checker having seen the file: what it
     // may contain is settled by the evaluator's own first pass, and no
     // global has been folded, so it reads none.
-    let plan := comptime_m.build_recipe(ast, toks, src, [], output, target, host, optimize, searched)
+    let plan := comptime_m.build_recipe(&ast, &toks, src, [], output, target, host, optimize, searched)
     if #plan.diags > 0:
-        report(plan.diags, files, json, src)
+        report(plan.diags, &files, json, src)
         recipe_failed()
     plan
 
@@ -384,7 +384,7 @@ struct Options:
 // Compile the program rooted in `inputs` and write it to `outname`.
 // Answers what the compiler answers: 0 where it wrote the file.
 @impure
-fn compile_one(inputs : str[], outname : str, o : Options) → u8:
+fn compile_one(inputs : str[], outname : str, o : &Options) → u8:
     // One program, read from the file it is rooted in: what a file is
     // written against comes in ahead of it, however deep that goes.
     // The lexer sees one text and counts one set of line numbers over
@@ -400,10 +400,10 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
 
     let toks := lex.lex(src)
     if #toks.diags > 0:
-        report(toks.diags, files, o.json, src)
+        report(toks.diags, &files, o.json, src)
         return 1
     if o.want_tokens:
-        dump_tokens(toks, src, files)
+        dump_tokens(&toks, src, &files)
         return 0
 
     let mtab : ast_m.Mods = ast_m.Mods{offs: prog.offs, fmod: prog.fmod,
@@ -411,17 +411,17 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
                            roots: prog.mroot,
                            bname: prog.bname, bmod: prog.bmod,
                            bowner: prog.bowner}
-    let ast := parse.parse_mods(toks, src, mtab)
+    let ast := parse.parse_mods(&toks, src, mtab)
     if #ast.diags > 0:
-        report(ast.diags, files, o.json, src)
+        report(ast.diags, &files, o.json, src)
         return 1
     if o.want_ast:
-        dumpast.dump_ast(ast, src, toks)
+        dumpast.dump_ast(&ast, src, &toks)
         return 0
 
-    let chk := check.check(ast, toks, src)
+    let chk := check.check(&ast, &toks, src)
     if #chk.diags > 0:
-        report(chk.diags, files, o.json, src)
+        report(chk.diags, &files, o.json, src)
         if any_refusal(chk.diags, o.werror):
             return 1
 
@@ -441,8 +441,8 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
                      hash: sha256.sha256_hex(std.bytes(sbom.sbom_compiler_name()))})
     // what this build is writing, which the bill names and the code
     // generator emits -- worked out once and handed to both
-    let live : bool[] = incr_m.reached_fns(ast, toks, src)
-    foreach r := sbom.sbom_sources(ast, toks, src, files, live):
+    let live : bool[] = incr_m.reached_fns(&ast, &toks, src)
+    foreach r := sbom.sbom_sources(&ast, &toks, src, &files, live):
         bom.push(r)
 
     // The recipe is read whenever the program carries one, not only
@@ -453,9 +453,9 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // What the recipe says here is not acted on -- --build is where a
     // recipe is read for what it declares -- so it is handed nothing
     // the command line said, and reads it only to be held to the rules.
-    let recipe := comptime_m.build_recipe(ast, toks, src, chk.gvals, "", "", "", ⁻1, "")
+    let recipe := comptime_m.build_recipe(&ast, &toks, src, chk.gvals, "", "", "", ⁻1, "")
     if #recipe.diags > 0:
-        report(recipe.diags, files, o.json, src)
+        report(recipe.diags, &files, o.json, src)
         return 1
 
     let tgt := elf.targets()[o.tgt_index × 1¤ptrdiff]
@@ -470,28 +470,30 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     let fill : i64 = if tgt.id = elf.Tgt.x64: incr_m.INCR_FILL_X86 else: incr_m.INCR_FILL_ANY
     let incr : mut incr_m.Incr = incr_m.incr_off()
     if o.incremental:
-        incr ← incr_m.incr_prev(ast, toks, src, prev, bom, fill,
+        incr ← incr_m.incr_prev(&ast, &toks, src, &prev, bom, fill,
                          tgt.machine.ord(), tgt.is64, tgt.eflags)
-    let first := codegen.codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, incr)
+    let first := codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, &incr)
     // A rebuild that could not be laid over the old file says why and
     // is done again whole, which is always right.  The whole build
     // still leaves padding, so the build after it is incremental.
     let why : mut str = ""
     if incr.mode = 2 and #first.diags = 0:
-        why ← if first.incr_why = "": codegen.incr_lines_up(prev, incr, first) else: first.incr_why
+        why ← if first.incr_why = "": codegen.incr_lines_up(&prev, &incr, first) else: first.incr_why
     let compiled := if why = "":
         first
     else:
-        codegen.codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, incr_m.incr_first(fill))
+        // a borrow is written on a name, so the fresh schedule gets one
+        let afresh : incr_m.Incr = incr_m.incr_first(fill)
+        codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, &afresh)
     if o.incremental and o.want_log:
         if incr.mode ≠ 2:
             std.println("{}", "{\"decision\": \"incremental-first\", \"functions\": " ⧺ tokens.i64_str(@dropunit(#ast.fns)) ⧺ "}")
         elif why = "":
-            std.println("{}", "{\"decision\": \"incremental\", \"read\": \"" ⧺ outname ⧺ "\", \"functions\": " ⧺ tokens.i64_str(@dropunit(#ast.fns)) ⧺ ", \"regenerated\": " ⧺ tokens.i64_str(incr_m.incr_fresh_count(incr)) ⧺ "}")
+            std.println("{}", "{\"decision\": \"incremental\", \"read\": \"" ⧺ outname ⧺ "\", \"functions\": " ⧺ tokens.i64_str(@dropunit(#ast.fns)) ⧺ ", \"regenerated\": " ⧺ tokens.i64_str(incr_m.incr_fresh_count(&incr)) ⧺ "}")
         else:
             std.println("{}", "{\"decision\": \"incremental-fallback\", \"why\": \"" ⧺ why ⧺ "\"}")
     if #compiled.diags > 0:
-        report(compiled.diags, files, o.json, src)
+        report(compiled.diags, &files, o.json, src)
         return 1
     if o.want_log:
         std.println("{}", "{\"decision\": \"optimize\", \"level\": " ⧺ tokens.i64_str(o.optimize) ⧺ "}")
@@ -511,7 +513,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // when it patched the addresses, not something worked out again
     // here: a second opinion about where .rodata begins is a second
     // chance to disagree with the instructions that name it.
-    let pl := elf.plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
+    let pl := elf.plan_elf(&tgt, compiled.code, compiled.rodata, compiled.data,
                        o.stack_size × 1¤byte, compiled.relro_size × 1¤byte,
                        compiled.syms, bom, compiled.text_room, compiled.ro_room,
                        compiled.tx_ends)
@@ -715,7 +717,7 @@ fn main() → u8:
                                  werror: werror, json: json,
                                  incremental: incremental}
     if build_file = "":
-        return compile_one(inputs, if output ≠ "": output else: "a.out", opts)
+        return compile_one(inputs, if output ≠ "": output else: "a.out", &opts)
     foreach i := 0¤ptrdiff…#plan.names:
         // What it is built for: what the executable named, else what
         // --target named, else the machine underfoot.
@@ -747,7 +749,7 @@ fn main() → u8:
                                     werror: opts.werror, json: opts.json,
                                     incremental: opts.incremental}
         let rc : u8 = compile_one([resolve_source(plan.roots[i], imports.dir_of(build_file), plan.paths)],
-                                  where, one)
+                                  where, &one)
         if rc ≠ 0:
             return rc
     0

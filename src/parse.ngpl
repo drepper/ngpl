@@ -3101,13 +3101,13 @@ fn parse_bare(whole : str) → str:
         return whole
     whole[cut + 1¤ptrdiff…#whole]
 
-fn parse(toks : lex.Toks, src : byte[]) → ast.Ast:
-    parse_mode(toks, src, false, ast.no_mods())
+fn parse(toks : &lex.Toks, src : byte[]) → ast.Ast:
+    parse_mode(&toks, src, false, ast.no_mods())
 
 // The same, told what the reader worked out about the modules.
 @export
-fn parse_mods(toks : lex.Toks, src : byte[], mods : ast.Mods) → ast.Ast:
-    parse_mode(toks, src, false, mods)
+fn parse_mods(toks : &lex.Toks, src : byte[], mods : ast.Mods) → ast.Ast:
+    parse_mode(&toks, src, false, mods)
 
 // A recipe's own file, read before the sources it names are known.
 // Most of what is written beside the recipe cannot be understood yet --
@@ -3119,10 +3119,10 @@ fn parse_mods(toks : lex.Toks, src : byte[], mods : ast.Mods) → ast.Ast:
 // parse is not dropped: that is reported, since there is then nothing
 // to run.
 @export
-fn parse_recipe(toks : lex.Toks, src : byte[]) → ast.Ast:
-    parse_mode(toks, src, true, ast.no_mods())
+fn parse_recipe(toks : &lex.Toks, src : byte[]) → ast.Ast:
+    parse_mode(&toks, src, true, ast.no_mods())
 
-fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) → ast.Ast:
+fn parse_mode(toks : &lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) → ast.Ast:
     let p : mut Parser = Parser{mtab: mods, udecl: [], edecl: [], toks: toks, src: src, pos: 0, blets: [],
                                 nkind: [], ntok: [], na: [], nb: [], nc: [],
                                 extra: [], fns: [], qmods: [],

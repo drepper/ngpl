@@ -259,7 +259,7 @@ fn a64_resolve(em : &mut emit.Emit):
         foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            let word : i64 = machine.code_word(&em, pos)
+            let word : i64 = machine.code_word(em, pos)
             if em.tf_form[i] = A64F_B26:
                 em.patch32(pos, word + (((delta » 2) & 67108863)))
             else:
@@ -281,68 +281,68 @@ fn a64_ar(r : i64) → i64:
     A64_T0
 
 @export
-fn a64g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn a64g_lds(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     a64_ldslot(&em, a64_ar(r), slot)
 
 @export
-fn a64g_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn a64g_sts(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     a64_stslot(&em, a64_ar(r), slot)
 
 @export
-fn a64g_const(em : &mut emit.Emit, tg : elf.Target, r : i64, v : i64):
+fn a64g_const(em : &mut emit.Emit, tg : &elf.Target, r : i64, v : i64):
     a64_movimm(&em, a64_ar(r), v)
 
 @export
-fn a64g_mov2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn a64g_mov2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     a64_movr(&em, a64_ar(rd), a64_ar(rs))
 
 @export
-fn a64g_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_add3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_addr_(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_sub3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_sub3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_subr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_mul3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_mulr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_and3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_and3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_andr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_or3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_or3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_orrr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_xor3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_xor3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_eorr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_not2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn a64g_not2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     a64_mvn(&em, a64_ar(rd), a64_ar(rs))
 
 @export
-fn a64g_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn a64g_neg2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     a64_negr(&em, a64_ar(rd), a64_ar(rs))
 
 @export
-fn a64g_shl3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_shl3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_lslv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_shr3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_shr3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_lsrv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 @export
-fn a64g_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn a64g_sar3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     a64_asrv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
 
 // rd ← rs « imm, the shift written into the instruction
 @export
-fn a64g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
+fn a64g_shl3i(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64, imm : i64):
     // ubfm rd, rs, #(64-imm), #(63-imm)
     em.aw(3544186880 + (((64 - imm) & 63) « 16) + ((63 - imm) « 10) + (a64_ar(rs) « 5) + a64_ar(rd))
 
@@ -366,18 +366,18 @@ fn a64_cc(cond : i64, sgn : i64) → i64:
 // narrower widths have no compare of their own and are compared whole,
 // which is why they are not among the widths the driver calls free.
 @export
-fn a64g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+fn a64g_cmp3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     a64_cmprw(&em, a64_ar(rx), a64_ar(ry), if bits = 32: 0 else: 1)
     a64_cset(&em, a64_ar(rd), a64_cc(cond, sgn))
 
 // rd ← rc ≠ 0 ? rx : ry
 @export
-fn a64g_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
+fn a64g_sel4(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
     em.aw(4043309087 + (a64_ar(rc) « 5))     // cmp rc, #0
     a64_csel(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), A64_NE)
 
 @export
-fn a64g_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn a64g_div3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     let sf : i64 = if bits = 32: 0 else: 1
     if sgn = 1:
         a64_sdivw(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), sf)
@@ -388,7 +388,7 @@ fn a64g_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64,
 // that turn it into a remainder are right in their lower bits whatever
 // stands above them, so they are left whole.
 @export
-fn a64g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn a64g_mod3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     let sf : i64 = if bits = 32: 0 else: 1
     if sgn = 1:
         a64_sdivw(&em, A64_T1, a64_ar(rx), a64_ar(ry), sf)
@@ -400,28 +400,28 @@ fn a64g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64,
 // VC where a signed one did not overflow; for an unsigned add a clear
 // carry says so, and for an unsigned subtract a set one does.
 @export
-fn a64g_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+fn a64g_addchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     a64_addsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
     a64_bcond(&em, if sgn = 1: 7 else: A64_CC, lab)
 
 @export
-fn a64g_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+fn a64g_subchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
     a64_subsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
     a64_bcond(&em, if sgn = 1: 7 else: A64_CS, lab)
 
 @export
-fn a64g_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn a64g_addov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a64_addsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
     a64_cset(&em, a64_ar(rf), if sgn = 1: A64_VS else: A64_CS)
 
 @export
-fn a64g_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn a64g_subov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a64_subsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
     // on ARM a clear carry is the borrow
     a64_cset(&em, a64_ar(rf), if sgn = 1: A64_VS else: A64_CC)
 
 @export
-fn a64g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn a64g_mulov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     if sgn = 1:
         a64_mulr(&em, A64_T1, a64_ar(rx), a64_ar(ry))
         a64_smulh(&em, A64_T0, a64_ar(rx), a64_ar(ry))
@@ -439,7 +439,7 @@ fn a64g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64
 
 // r ← r as its width says, sign or zero carried through
 @export
-fn a64g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64):
+fn a64g_ext2(em : &mut emit.Emit, tg : &elf.Target, r : i64, bits : i64, sgn : i64):
     if bits >= 64:
         return
     if sgn = 1:
@@ -449,7 +449,7 @@ fn a64g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i6
 
 // rd ← mem[rbase + off]; width 0 is the target's pointer, zero-extended
 @export
-fn a64g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+fn a64g_ldo(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     if off = 0:
         a64_ldw(&em, a64_ar(rd), a64_ar(rbase), wd, sgn)
@@ -461,7 +461,7 @@ fn a64g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i
         a64_ldw(&em, a64_ar(rd), A64_T1, wd, sgn)
 
 @export
-fn a64g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
+fn a64g_sto(em : &mut emit.Emit, tg : &elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     if off = 0:
         a64_stw(&em, a64_ar(rs), a64_ar(rbase), wd)
@@ -473,31 +473,31 @@ fn a64g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i
         a64_stw(&em, a64_ar(rs), A64_T1, wd)
 
 @export
-fn a64g_jmp(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn a64g_jmp(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     a64_jmp(&em, lab)
 
 @export
-fn a64g_jz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn a64g_jz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     a64_cbz(&em, a64_ar(r), lab)
 
 @export
-fn a64g_jnz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn a64g_jnz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     a64_cbnz(&em, a64_ar(r), lab)
 
 @export
-fn a64g_label(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn a64g_label(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     em.set_label(lab)
 
 @export
-fn a64g_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
+fn a64g_call(em : &mut emit.Emit, tg : &elf.Target, target : i64):
     a64_call(&em, target)
 
 @export
-fn a64g_calli(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn a64g_calli(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     a64_blr(&em, a64_ar(r))
 
 @export
-fn a64g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn a64g_ijmp(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     a64_br(&em, a64_ar(r))
 
 // arguments travel in x0…x7; the ninth onward in the outgoing slots
@@ -505,11 +505,11 @@ fn a64g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
 // this puts the argument where the architecture's own convention
 // says and the two agree.
 @export
-fn a64g_argreg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
-    a64g_argld(&em, tg, k, slot)
+fn a64g_argreg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
+    a64g_argld(&em, &tg, k, slot)
 
 @export
-fn a64g_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn a64g_argld(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     if k < 8:
         a64_ldslot(&em, k, slot)
     else:
@@ -517,26 +517,26 @@ fn a64g_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
         a64_sto(&em, A64_T1, 31, 8 × (k - 8))
 
 @export
-fn a64g_argconst(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn a64g_argconst(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     assert(k < 8, "a constant argument rides a register")
     a64_movimm(&em, k, v)
 
 @export
-fn a64g_argmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn a64g_argmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     assert(k < 8, "a moved argument rides a register")
     a64_movr(&em, k, a64_ar(r))
 
 // the returned value's two directions
 @export
-fn a64g_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn a64g_retst(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     a64_stslot(&em, 0, slot)
 
 @export
-fn a64g_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn a64g_retld(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     a64_ldslot(&em, 0, slot)
 
 @export
-fn a64g_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn a64g_retmov(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     a64_movr(&em, 0, a64_ar(r))
 
 // an absolute address, materialized into an abstract register or an
@@ -545,38 +545,38 @@ fn a64g_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
 // x29 is the frame pointer the prologue set, and it is a register
 // like any other to read
 @export
-fn a64g_fptr(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn a64g_fptr(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     a64_movr(&em, a64_ar(r), 29)
 
 @export
-fn a64g_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
+fn a64g_absref(em : &mut emit.Emit, tg : &elf.Target, r : i64) → i64:
     a64_absref(&em, a64_ar(r))
 
 @export
-fn a64g_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
+fn a64g_absref_arg(em : &mut emit.Emit, tg : &elf.Target, k : i64) → i64:
     assert(k < 8, "an address argument rides a register")
     a64_absref(&em, k)
 
 // the kernel: arguments from slots, the number, the trap
 @export
-fn a64g_sysarg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn a64g_sysarg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     a64_ldslot(&em, k, slot)
 
 @export
-fn a64g_sysimm(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn a64g_sysimm(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     a64_movimm(&em, k, v)
 
 @export
-fn a64g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn a64g_sysmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     a64_movr(&em, k, a64_ar(r))
 
 @export
-fn a64g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    a64_movimm(&em, 8, machine.sc_number(tg, scid))
+fn a64g_syscall(em : &mut emit.Emit, tg : &elf.Target, scid : i64):
+    a64_movimm(&em, 8, machine.sc_at(&tg, scid))
     a64_svc(&em)
 
 @export
-fn a64g_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn a64g_sysret(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     a64_movr(&em, a64_ar(r), 0)
 
 // the frame: save the caller's, claim the slots and the outgoing
@@ -586,14 +586,14 @@ fn a64g_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
 // slot s sits at sp + 8×(4+s), and the region begins at slot nvregs.
 @export
 @pre(off >= 0)
-fn a64g_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+fn a64g_frameaddr(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
     _ ← nobj
     let at : i64 = 32 + 8 × nvregs + off
     assert(at >= 0 and at < 4096, "the frame offset fits the immediate")
     em.aw(2432696320 + (at « 10) + (31 « 5) + a64_ar(r))   // add xr, sp, #at
 
 @export
-fn a64g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nreg : i64):
+fn a64g_prologue(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = elf.align_up(32 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.aw(2847898621)                            // stp x29, x30, [sp, #-16]!
@@ -612,22 +612,22 @@ fn a64g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, n
             a64_stslot(&em, A64_T1, j)
 
 @export
-fn a64g_epilogue(em : &mut emit.Emit, tg : elf.Target):
+fn a64g_epilogue(em : &mut emit.Emit, tg : &elf.Target):
     em.aw(2432697279)                            // mov sp, x29: drop the frame
     em.aw(2831252477)                            // ldp x29, x30, [sp], #16
     a64_ret(&em)
 
 @export
-fn a64g_resolve(em : &mut emit.Emit, tg : elf.Target):
+fn a64g_resolve(em : &mut emit.Emit, tg : &elf.Target):
     a64_resolve(&em)
 
 @export
-fn a64g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
+fn a64g_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):
     a64_patch_abs(&em, pos, v)
 
 @export
-fn a64g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
-    let word : i64 = machine.code_word(&em, pos)
+fn a64g_patch_call(em : &mut emit.Emit, tg : &elf.Target, pos : i64, dest : i64):
+    let word : i64 = machine.code_word(em, pos)
     em.patch32(pos, word + (((dest - pos) » 2) & 67108863))
 
 // the door of the program: keep what the kernel handed over, stand up
@@ -637,7 +637,7 @@ fn a64g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
 // seventh would have been given; a match wants every arm to name
 // something, so it names this.
 @export
-fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,
+fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : &elf.Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
@@ -665,7 +665,7 @@ fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args
     a64_movimm(&em, 3, 147490)
     a64_movimm(&em, 4, ⁻1)
     a64_movimm(&em, 5, 0)
-    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_MMAP))
+    a64_movimm(&em, 8, machine.sc_number(&tg, machine.Sc.mmap))
     a64_svc(&em)
     a64_cmpr(&em, 0, 31)                         // the flags of x0 - xzr
     a64_bcond(&em, A64_MI, 1)                    // the kernel refused
@@ -674,7 +674,7 @@ fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args
     a64_addr_(&em, 0, 0, A64_RB)
     a64_movimm(&em, 1, stack_size)
     a64_movimm(&em, 2, 3)
-    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_MPROT))
+    a64_movimm(&em, 8, machine.sc_number(&tg, machine.Sc.mprot))
     a64_svc(&em)
     a64_cmpr(&em, 0, 31)
     a64_bcond(&em, A64_MI, 1)
@@ -712,6 +712,6 @@ fn a64_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args
         a64_call(&em, start_fn)
     if not sret:
         a64_movimm(&em, 0, 0)
-    a64_movimm(&em, 8, machine.sc_number(tg, machine.SC_EXIT))
+    a64_movimm(&em, 8, machine.sc_number(&tg, machine.Sc.exit))
     a64_svc(&em)
     a64_resolve(&em)

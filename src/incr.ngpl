@@ -375,14 +375,14 @@ fn names_new(want : i64) → Names:
 
 // The name the bill knows a function by: the module it was written in,
 // then its own.
-fn incr_fn_name(a : ast.Ast, f : i64) → str:
+fn incr_fn_name(a : &ast.Ast, f : i64) → str:
     let d := a.fns[f × 1¤ptrdiff]
     if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
 
 // Which functions to generate again, one bool per function.  Answers
 // them all where the previous build cannot be lined up with this one;
 // the caller then compiles whole, which is what a fallback is.
-fn incr_regenerate(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
+fn incr_regenerate(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
                    rows : sbom.SbomRow[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
     // what the previous build said each function was
@@ -420,7 +420,7 @@ fn incr_regenerate(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
     let moved : mut bool[] = []
     let fnames : mut Names = names_new(@dropunit(nf))
     foreach i := 0¤ptrdiff…nf:
-        let nm : str = incr_fn_name(a, @dropunit(i))
+        let nm : str = incr_fn_name(&a, @dropunit(i))
         fnames.add(nm)
         let w : i64 = was.find(nm)
         let n : i64 = now.find(nm)
@@ -498,7 +498,7 @@ fn name_holds_dot(nm : str) → bool:
 
 @export
 @post(r: #r = #a.fns)
-fn reached_fns(a : ast.Ast, toks : lex.Toks, src : byte[]) → bool[]:
+fn reached_fns(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
     let byname : mut Names = names_new(@dropunit(nf) + 1)
     foreach i := 0¤ptrdiff…nf:
@@ -614,7 +614,7 @@ fn incr_first(fill : i64) → Incr:
 // built for another machine -- code copied out of it would be that
 // machine's code.
 @export
-fn incr_prev(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
+fn incr_prev(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
              rows : sbom.SbomRow[], fill : i64, machine : i64, is64 : bool,
              eflags : i64) → Incr:
     if not prev.ok or prev.machine ≠ machine or prev.is64 ≠ is64 or prev.eflags ≠ eflags:
@@ -636,7 +636,7 @@ fn incr_prev(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
         if at[k × 1¤ptrdiff] < 0:
             at[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i])
             end[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i] + prev.sym_size[i])
-    let hi : i64 ¤byte = incr_prev_text_end(prev)
+    let hi : i64 ¤byte = incr_prev_text_end(&prev)
     let text : mut u8[] = []
     if hi <= #prev.raw and hi > prev.text_off:
         text ← prev.raw[prev.text_off…hi]
@@ -648,15 +648,15 @@ fn incr_prev(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
     if rhi <= #prev.raw:
         ro ← prev.raw[prev.ro_off…rhi]
     Incr{mode: 2, fill: fill,
-         fresh: incr_regenerate(a, toks, src, prev, rows),
+         fresh: incr_regenerate(&a, &toks, src, &prev, rows),
          sym: sym, sym_at: at, sym_end: end,
-         text_room: incr_text_room(prev), ro_room: incr_ro_room(prev),
+         text_room: incr_text_room(&prev), ro_room: incr_ro_room(&prev),
          tx_ends: rel, text: text, ro: ro}
 
 // How many functions a rebuild has to write again, for the line the
 // driver prints about what it decided.
 @export
-fn incr_fresh_count(incr : Incr) → i64:
+fn incr_fresh_count(incr : &Incr) → i64:
     let n : mut i64 = 0
     foreach v := incr.fresh:
         n ← n + (if v: 1 else: 0)
@@ -708,7 +708,7 @@ fn incr_all_used(n : i64 ¤ptrdiff) → i64[]:
 // resolved are the only ones that name them.  The cost is the tables
 // of functions that were regenerated, which stay in the file unread.
 @export
-fn incr_jt_prefix(rodata : &mut u8[], incr : Incr, jt_base : i64) → i64:
+fn incr_jt_prefix(rodata : &mut u8[], incr : &Incr, jt_base : i64) → i64:
     if incr.mode ≠ 2 or @dropunit(#incr.ro) <= jt_base:
         return 0
     let keep : i64 = @dropunit(#incr.ro) - jt_base
@@ -727,7 +727,7 @@ fn incr_room(mode : i64, size : i64 ¤byte) → i64 ¤byte:
 
 // Where the previous build's text region ended: the last of its
 // sections, or nothing at all where it had none this could read.
-fn incr_prev_text_end(prev : Prev) → i64 ¤byte:
+fn incr_prev_text_end(prev : &Prev) → i64 ¤byte:
     let n : i64 ¤ptrdiff = #prev.tx_end
     if n = 0¤ptrdiff: return prev.text_off
     prev.tx_end[n - 1¤ptrdiff]
@@ -737,11 +737,11 @@ fn incr_prev_text_end(prev : Prev) → i64 ¤byte:
 // ends and .data where .rodata's does, so reserving anything else
 // would move an address the copied code names.
 @export
-fn incr_text_room(prev : Prev) → i64 ¤byte:
+fn incr_text_room(prev : &Prev) → i64 ¤byte:
     prev.ro_off - prev.text_off
 
 @export
-fn incr_ro_room(prev : Prev) → i64 ¤byte:
+fn incr_ro_room(prev : &Prev) → i64 ¤byte:
     prev.d_off - prev.ro_off
 
 // Where .rodata begins is settled by the room the text is given, and
@@ -752,23 +752,23 @@ fn incr_ro_room(prev : Prev) → i64 ¤byte:
 // arithmetic is one copy too many -- it was two, and the second was
 // wrong the moment the first reserved anything.
 @export
-fn incr_room_text(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
+fn incr_room_text(incr : &Incr, size : i64 ¤byte) → i64 ¤byte:
     if incr.mode = 2: incr.text_room else: incr_room(incr.mode, size)
 
 @export
-fn incr_room_ro(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
+fn incr_room_ro(incr : &Incr, size : i64 ¤byte) → i64 ¤byte:
     if incr.mode = 2: incr.ro_room else: incr_room(incr.mode, size)
 
 // Where .text itself ends, counted from the start of the text region,
 // which is where the overflow sections begin.
 @export
-fn incr_text_size(incr : Incr) → i64:
+fn incr_text_size(incr : &Incr) → i64:
     if #incr.tx_ends = 0¤ptrdiff: 0 else: incr.tx_ends[0¤ptrdiff]
 
 // And where the whole region the previous build used ends, which is
 // where a function this build has to move goes.
 @export
-fn incr_text_end(incr : Incr) → i64:
+fn incr_text_end(incr : &Incr) → i64:
     let n : i64 ¤ptrdiff = #incr.tx_ends
     if n = 0¤ptrdiff: 0 else: incr.tx_ends[n - 1¤ptrdiff]
 
@@ -778,7 +778,7 @@ fn incr_text_end(incr : Incr) → i64:
 // closed and the routines are written before it -- so they are taken
 // from the emission that measured it and kept until the set is built.
 @export
-fn incr_harvest(em : &emit.Emit, m : emit.Emark, into : &mut i64[]):
+fn incr_harvest(em : emit.Emit, m : emit.Emark, into : &mut i64[]):
     foreach k := m.cf…@dropunit(#em.cf_target):
         let t : i64 = em.cf_target[k × 1¤ptrdiff]
         if t < 0:
@@ -832,7 +832,7 @@ fn incr_first_reason(had : str, got : str) → str:
 // the code has already run past, means the layout is not the same
 // layout and there is nothing to line up with.
 @export
-fn incr_before(em : &mut emit.Emit, incr : Incr, nm : str) → str:
+fn incr_before(em : &mut emit.Emit, incr : &Incr, nm : str) → str:
     if incr.mode ≠ 2:
         return ""
     let want : i64 = incr.at_of(nm)
@@ -849,7 +849,7 @@ fn incr_before(em : &mut emit.Emit, incr : Incr, nm : str) → str:
 // padding -- and on a later one it is the slot the old file gave it,
 // which the function has just overrun if it did not fit.
 @export
-fn incr_after(em : &mut emit.Emit, incr : Incr, nm : str, began : i64) → str:
+fn incr_after(em : &mut emit.Emit, incr : &Incr, nm : str, began : i64) → str:
     if incr.mode = 1:
         let grown : i64 ¤byte = (em.here() - began) × 1¤byte
         let pad : i64 = @dropunit(incr_padding(grown))
@@ -873,7 +873,7 @@ fn incr_after(em : &mut emit.Emit, incr : Incr, nm : str, began : i64) → str:
 // string's, a global's -- is at the address it was at, which is the
 // condition the caller checks before and after.
 @export
-fn incr_copy(em : &mut emit.Emit, incr : Incr, nm : str) → str:
+fn incr_copy(em : &mut emit.Emit, incr : &Incr, nm : str) → str:
     let at : i64 = incr.at_of(nm)
     let end : i64 = incr.end_of(nm)
     if at < 0 or end < at:

@@ -45,20 +45,20 @@ fn r32_movimm(em : &mut emit.Emit, rd : i64, v : i64):
         arch_rv64.rv_movimm(&em, rd, w)
 
 @export
-fn r32g_lds(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn r32g_lds(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     r32_ldpair(&em, 10, 11, r32_sloto(slot))
     r32_stpair(&em, 10, 11, r32_cello(r))
 @export
-fn r32g_sts(em : &mut emit.Emit, tg : elf.Target, r : i64, slot : i64):
+fn r32g_sts(em : &mut emit.Emit, tg : &elf.Target, r : i64, slot : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
     r32_stpair(&em, 10, 11, r32_sloto(slot))
 @export
-fn r32g_const(em : &mut emit.Emit, tg : elf.Target, r : i64, v : i64):
+fn r32g_const(em : &mut emit.Emit, tg : &elf.Target, r : i64, v : i64):
     r32_movimm(&em, 10, v & 4294967295)
     r32_movimm(&em, 11, @wrap(v » 32) & 4294967295)
     r32_stpair(&em, 10, 11, r32_cello(r))
 @export
-fn r32g_mov2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn r32g_mov2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rs))
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
@@ -67,7 +67,7 @@ fn r32_binprep(em : &mut emit.Emit, rx : i64, ry : i64):
     r32_ldpair(&em, 12, 13, r32_cello(ry))
 
 @export
-fn r32g_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_add3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_binprep(&em, rx, ry)
     arch_rv64.rv_R(&em, 0, 12, 10, 0, 10, 51)             // add a0, a0, a2
     arch_rv64.rv_R(&em, 0, 12, 10, 3, 5, 51)              // sltu t0, a0, a2: carry
@@ -75,7 +75,7 @@ fn r32g_add3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64)
     arch_rv64.rv_R(&em, 0, 5, 11, 0, 11, 51)              // add a1, a1, t0
     r32_stpair(&em, 10, 11, r32_cello(rd))
 @export
-fn r32g_sub3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_sub3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_binprep(&em, rx, ry)
     arch_rv64.rv_R(&em, 0, 12, 10, 3, 5, 51)              // sltu t0, a0, a2: borrow
     arch_rv64.rv_R(&em, 32, 12, 10, 0, 10, 51)            // sub a0, a0, a2
@@ -88,22 +88,22 @@ fn r32_bitwise(em : &mut emit.Emit, rd : i64, rx : i64, ry : i64, f3 : i64):
     arch_rv64.rv_R(&em, 0, 13, 11, f3, 11, 51)
     r32_stpair(&em, 10, 11, r32_cello(rd))
 @export
-fn r32g_and3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_and3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_bitwise(&em, rd, rx, ry, 7)
 @export
-fn r32g_or3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_or3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_bitwise(&em, rd, rx, ry, 6)
 @export
-fn r32g_xor3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_xor3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_bitwise(&em, rd, rx, ry, 4)
 @export
-fn r32g_not2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn r32g_not2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rs))
     arch_rv64.rv_I(&em, ⁻1, 10, 4, 10, 19)
     arch_rv64.rv_I(&em, ⁻1, 11, 4, 11, 19)
     r32_stpair(&em, 10, 11, r32_cello(rd))
 @export
-fn r32g_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
+fn r32g_neg2(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rs))
     arch_rv64.rv_R(&em, 0, 10, 0, 3, 5, 51)               // sltu t0, x0, a0: borrow if lo≠0
     arch_rv64.rv_R(&em, 32, 10, 0, 0, 10, 51)             // sub a0, x0, a0
@@ -111,7 +111,7 @@ fn r32g_neg2(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64):
     arch_rv64.rv_R(&em, 32, 5, 11, 0, 11, 51)             // sub a1, a1, t0
     r32_stpair(&em, 10, 11, r32_cello(rd))
 @export
-fn r32g_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_mul3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_binprep(&em, rx, ry)
     arch_rv64.rv_R(&em, 1, 12, 10, 3, 5, 51)              // mulhu t0, a0, a2
     arch_rv64.rv_R(&em, 1, 13, 10, 0, 6, 51)              // mul t1, a0, a3
@@ -127,13 +127,13 @@ fn r32g_mul3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64)
 // at c=0, which is what the near case needs.  The far case (c≥32) is
 // chosen by a mask, so nothing branches.
 @export
-fn r32g_shl3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_shl3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_shift(&em, rd, rx, ry, 0)
 @export
-fn r32g_shr3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_shr3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_shift(&em, rd, rx, ry, 1)
 @export
-fn r32g_sar3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64):
+fn r32g_sar3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64):
     r32_shift(&em, rd, rx, ry, 2)
 
 // registers: a0:a1 = x, t0 = c, t1 = c&31, t2 = 31-(c&31), t3 = near
@@ -192,7 +192,7 @@ fn r32_pick(em : &mut emit.Emit, cond : i64, ra : i64, rb : i64, rd : i64):
 
 // rd ← cond ? ra : rb, cond a 0/1 already in a register
 @export
-fn r32g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i64):
+fn r32g_shl3i(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rs : i64, imm : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rs))
     arch_rv64.rv_I(&em, imm, 11, 1, 11, 19)               // slli a1, a1, imm
     arch_rv64.rv_I(&em, 32 - imm, 10, 5, 5, 19)           // srli t0, a0, 32-imm
@@ -201,7 +201,7 @@ fn r32g_shl3i(em : &mut emit.Emit, tg : elf.Target, rd : i64, rs : i64, imm : i6
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 @export
-fn r32g_cmp3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+fn r32g_cmp3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     r32_binprep(&em, rx, ry)
     if cond = machine.CC_EQ or cond = machine.CC_NE:
         arch_rv64.rv_R(&em, 0, 12, 10, 4, 5, 51)          // xor t0, lo, lo'
@@ -242,7 +242,7 @@ fn r32_finish(em : &mut emit.Emit, rd : i64):
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 @export
-fn r32g_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
+fn r32g_sel4(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rc : i64, rx : i64, ry : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rc))
     arch_rv64.rv_R(&em, 0, 11, 10, 6, 5, 51)              // t0 = lo | hi
     arch_rv64.rv_R(&em, 0, 5, 0, 3, 5, 51)                // t0 = (t0≠0)
@@ -259,10 +259,10 @@ fn r32g_sel4(em : &mut emit.Emit, tg : elf.Target, rd : i64, rc : i64, rx : i64,
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 @export
-fn r32g_div3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn r32g_div3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_helper2(&em, rd, rx, ry, if sgn = 1: emit.RT_DIVS64 else: emit.RT_DIVU64)
 @export
-fn r32g_mod3(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn r32g_mod3(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_helper2(&em, rd, rx, ry, if sgn = 1: emit.RT_MODS64 else: emit.RT_MODU64)
 fn r32_helper2(em : &mut emit.Emit, rd : i64, rx : i64, ry : i64, target : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rx))
@@ -275,20 +275,20 @@ fn r32_helper2(em : &mut emit.Emit, rd : i64, rx : i64, ry : i64, target : i64):
 // No flags on this machine: the answer is a value, so it is made and
 // tested exactly as it was before there was another way.
 @export
-fn r32g_addchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    r32g_addov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
-    r32g_jz(&em, tg, machine.RG_C, lab)
+fn r32g_addchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    r32g_addov(&em, &tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, &tg, machine.RG_C, lab)
 
 @export
-fn r32g_subchk(em : &mut emit.Emit, tg : elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
-    r32g_subov(&em, tg, rd, machine.RG_C, rx, ry, sgn, bits)
-    r32g_jz(&em, tg, machine.RG_C, lab)
+fn r32g_subchk(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    r32g_subov(&em, &tg, rd, machine.RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, &tg, machine.RG_C, lab)
 
 @export
-fn r32g_addov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn r32g_addov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_ovhelper(&em, rd, rf, rx, ry, sgn, 0)
 @export
-fn r32g_subov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn r32g_subov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_ovhelper(&em, rd, rf, rx, ry, sgn, 1)
 fn r32_ovhelper(em : &mut emit.Emit, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, issub : i64):
     // do the 64-bit op in pairs, then read overflow from the operands
@@ -323,7 +323,7 @@ fn r32_ovhelper(em : &mut emit.Emit, rd : i64, rf : i64, rx : i64, ry : i64, sgn
     r32_stpair(&em, 10, 11, r32_cello(rf))
 
 @export
-fn r32g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+fn r32g_mulov(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rx))
     r32_stpair(&em, 10, 11, 0)
     r32_ldpair(&em, 10, 11, r32_cello(ry))
@@ -332,7 +332,7 @@ fn r32g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64
     arch_rv64.rv_movimm(&em, 11, 0)
     r32_stpair(&em, 10, 11, 16)
     // the wrapped product parked at 24
-    r32g_mul3(&em, tg, rd, rx, ry)
+    r32g_mul3(&em, &tg, rd, rx, ry)
     r32_ldpair(&em, 10, 11, r32_cello(rd))
     r32_stpair(&em, 10, 11, 24)
     r32_call(&em, emit.RT_MULOV64)
@@ -341,7 +341,7 @@ fn r32g_mulov(em : &mut emit.Emit, tg : elf.Target, rd : i64, rf : i64, rx : i64
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 @export
-fn r32g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i64):
+fn r32g_ext2(em : &mut emit.Emit, tg : &elf.Target, r : i64, bits : i64, sgn : i64):
     if bits >= 64:
         return
     r32_ldpair(&em, 10, 11, r32_cello(r))
@@ -357,7 +357,7 @@ fn r32g_ext2(em : &mut emit.Emit, tg : elf.Target, r : i64, bits : i64, sgn : i6
     r32_stpair(&em, 10, 11, r32_cello(r))
 
 @export
-fn r32g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+fn r32g_ldo(em : &mut emit.Emit, tg : &elf.Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     r32_ld(&em, 12, r32_cello(rbase))
     if off ≠ 0:
@@ -376,7 +376,7 @@ fn r32g_ldo(em : &mut emit.Emit, tg : elf.Target, rd : i64, rbase : i64, off : i
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 @export
-fn r32g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
+fn r32g_sto(em : &mut emit.Emit, tg : &elf.Target, rs : i64, rbase : i64, off : i64, width : i64):
     let wd : i64 = if width = 0: tg.ptr else: width
     r32_ld(&em, 12, r32_cello(rbase))
     if off ≠ 0:
@@ -391,22 +391,22 @@ fn r32g_sto(em : &mut emit.Emit, tg : elf.Target, rs : i64, rbase : i64, off : i
         arch_rv64.rv_S(&em, 0, 10, 12, f3)
 
 @export
-fn r32g_jmp(em : &mut emit.Emit, tg : elf.Target, lab : i64):
-    arch_rv64.rvg_jmp(&em, tg, lab)
+fn r32g_jmp(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
+    arch_rv64.rvg_jmp(&em, &tg, lab)
 @export
-fn r32g_jz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn r32g_jz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
     arch_rv64.rv_R(&em, 0, 11, 10, 6, 5, 51)              // t0 = lo | hi
     arch_rv64.rv_bshort(&em, 1, 5, 0, 8)                  // bne t0, x0, +8
-    arch_rv64.rvg_jmp(&em, tg, lab)
+    arch_rv64.rvg_jmp(&em, &tg, lab)
 @export
-fn r32g_jnz(em : &mut emit.Emit, tg : elf.Target, r : i64, lab : i64):
+fn r32g_jnz(em : &mut emit.Emit, tg : &elf.Target, r : i64, lab : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
     arch_rv64.rv_R(&em, 0, 11, 10, 6, 5, 51)
     arch_rv64.rv_bshort(&em, 0, 5, 0, 8)                  // beq t0, x0, +8
-    arch_rv64.rvg_jmp(&em, tg, lab)
+    arch_rv64.rvg_jmp(&em, &tg, lab)
 @export
-fn r32g_label(em : &mut emit.Emit, tg : elf.Target, lab : i64):
+fn r32g_label(em : &mut emit.Emit, tg : &elf.Target, lab : i64):
     em.set_label(lab)
 
 @export
@@ -418,14 +418,14 @@ fn r32_call(em : &mut emit.Emit, target : i64):
     em.aw((1 « 7) + 23)                         // auipc ra, 0
     arch_rv64.rv_I(&em, 0, 1, 0, 1, 103)                  // jalr ra, ra, 0
 @export
-fn r32g_call(em : &mut emit.Emit, tg : elf.Target, target : i64):
+fn r32g_call(em : &mut emit.Emit, tg : &elf.Target, target : i64):
     r32_call(&em, target)
 @export
-fn r32g_calli(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn r32g_calli(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     r32_ld(&em, 5, r32_cello(r))
     arch_rv64.rv_I(&em, 0, 5, 0, 1, 103)
 @export
-fn r32g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn r32g_ijmp(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     r32_ld(&em, 5, r32_cello(r))
     arch_rv64.rv_I(&em, 0, 5, 0, 0, 103)
 
@@ -435,41 +435,41 @@ fn r32g_ijmp(em : &mut emit.Emit, tg : elf.Target, r : i64):
 // free the whole way through and none of them has to be put back.
 @export
 @pre(k >= 0 and k < 4)
-fn r32g_argreg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn r32g_argreg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     r32_ldpair(&em, 10 + 2 × k, 11 + 2 × k, r32_sloto(slot))
 
 @export
-fn r32g_argld(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn r32g_argld(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     r32_ldpair(&em, 10, 11, r32_sloto(slot))
     r32_stpair(&em, 10, 11, 8 × k)
 @export
-fn r32g_argconst(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn r32g_argconst(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     r32_movimm(&em, 10, v & 4294967295)
     r32_movimm(&em, 11, @wrap(v » 32) & 4294967295)
     r32_stpair(&em, 10, 11, 8 × k)
 @export
-fn r32g_argmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn r32g_argmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
     r32_stpair(&em, 10, 11, 8 × k)
 @export
-fn r32g_retst(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn r32g_retst(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     r32_stpair(&em, 10, 11, r32_sloto(slot))
 @export
-fn r32g_retld(em : &mut emit.Emit, tg : elf.Target, slot : i64):
+fn r32g_retld(em : &mut emit.Emit, tg : &elf.Target, slot : i64):
     r32_ldpair(&em, 10, 11, r32_sloto(slot))
 @export
-fn r32g_retmov(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn r32g_retmov(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
 
 // s0 is the frame pointer, and the high half of the pair is zero
 @export
-fn r32g_fptr(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn r32g_fptr(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     arch_rv64.rv_I(&em, 0, 8, 0, 10, 19)                  // mv a0, s0
     arch_rv64.rv_movimm(&em, 11, 0)
     r32_stpair(&em, 10, 11, r32_cello(r))
 
 @export
-fn r32g_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
+fn r32g_absref(em : &mut emit.Emit, tg : &elf.Target, r : i64) → i64:
     let pos : i64 = em.here()
     arch_rv64.rv_U(&em, 0, 10, 55)                        // lui
     arch_rv64.rv_I(&em, 0, 10, 0, 10, 19)                 // addi
@@ -477,7 +477,7 @@ fn r32g_absref(em : &mut emit.Emit, tg : elf.Target, r : i64) → i64:
     r32_stpair(&em, 10, 11, r32_cello(r))
     pos
 @export
-fn r32g_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
+fn r32g_absref_arg(em : &mut emit.Emit, tg : &elf.Target, k : i64) → i64:
     let pos : i64 = em.here()
     arch_rv64.rv_U(&em, 0, 10, 55)
     arch_rv64.rv_I(&em, 0, 10, 0, 10, 19)
@@ -486,28 +486,28 @@ fn r32g_absref_arg(em : &mut emit.Emit, tg : elf.Target, k : i64) → i64:
     pos
 
 @export
-fn r32g_sysarg(em : &mut emit.Emit, tg : elf.Target, k : i64, slot : i64):
+fn r32g_sysarg(em : &mut emit.Emit, tg : &elf.Target, k : i64, slot : i64):
     r32_ld(&em, 10 + k, r32_sloto(slot))
 @export
-fn r32g_sysimm(em : &mut emit.Emit, tg : elf.Target, k : i64, v : i64):
+fn r32g_sysimm(em : &mut emit.Emit, tg : &elf.Target, k : i64, v : i64):
     r32_movimm(&em, 10 + k, v)
 @export
-fn r32g_sysmov(em : &mut emit.Emit, tg : elf.Target, k : i64, r : i64):
+fn r32g_sysmov(em : &mut emit.Emit, tg : &elf.Target, k : i64, r : i64):
     r32_ld(&em, 10 + k, r32_cello(r))
 @export
-fn r32g_syscall(em : &mut emit.Emit, tg : elf.Target, scid : i64):
-    r32_movimm(&em, 17, machine.sc_number(tg, scid))
+fn r32g_syscall(em : &mut emit.Emit, tg : &elf.Target, scid : i64):
+    r32_movimm(&em, 17, machine.sc_at(&tg, scid))
     em.aw(115)
     // sign-extend the 32-bit answer into the high half of the cell
     arch_rv64.rv_I(&em, 31 + 1024, 10, 5, 11, 19)         // srai a1, a0, 31
 @export
-fn r32g_sysret(em : &mut emit.Emit, tg : elf.Target, r : i64):
+fn r32g_sysret(em : &mut emit.Emit, tg : &elf.Target, r : i64):
     r32_stpair(&em, 10, 11, r32_cello(r))
 
 // see i3g_frameaddr; a slot sits at sp + 160 + 8×s, upward
 @export
 @pre(off >= 0)
-fn r32g_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+fn r32g_frameaddr(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, nobj : i64, off : i64, r : i64):
     _ ← nobj
     let at : i64 = 160 + 8 × nvregs + off
     r32_movimm(&em, 11, at)
@@ -516,7 +516,7 @@ fn r32g_frameaddr(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, nobj : i64
     r32_stpair(&em, 10, 11, r32_cello(r))
 
 @export
-fn r32g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, nreg : i64):
+fn r32g_prologue(em : &mut emit.Emit, tg : &elf.Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = elf.align_up(160 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     arch_rv64.rv_I(&em, ⁻16, 2, 0, 2, 19)
@@ -541,7 +541,7 @@ fn r32g_prologue(em : &mut emit.Emit, tg : elf.Target, nvregs : i64, np : i64, n
             arch_rv64.rv_I(&em, 20 + 8 × j, 8, 2, 11, 3)
             r32_stpair(&em, 10, 11, r32_sloto(j))
 @export
-fn r32g_epilogue(em : &mut emit.Emit, tg : elf.Target):
+fn r32g_epilogue(em : &mut emit.Emit, tg : &elf.Target):
     arch_rv64.rv_I(&em, 0, 8, 0, 2, 19)                    // mv sp, s0
     arch_rv64.rv_I(&em, 8, 2, 2, 1, 3)                     // lw ra, 8(sp)
     arch_rv64.rv_I(&em, 4, 2, 2, 8, 3)                     // lw s0, 4(sp)
@@ -549,18 +549,18 @@ fn r32g_epilogue(em : &mut emit.Emit, tg : elf.Target):
     arch_rv64.rv_I(&em, 0, 1, 0, 0, 103)
 
 @export
-fn r32g_resolve(em : &mut emit.Emit, tg : elf.Target):
-    arch_rv64.rvg_resolve(&em, tg)
+fn r32g_resolve(em : &mut emit.Emit, tg : &elf.Target):
+    arch_rv64.rvg_resolve(&em, &tg)
 @export
-fn r32g_patch_abs(em : &mut emit.Emit, tg : elf.Target, pos : i64, v : i64):
-    arch_rv64.rvg_patch_abs(&em, tg, pos, v)
+fn r32g_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):
+    arch_rv64.rvg_patch_abs(&em, &tg, pos, v)
 @export
-fn r32g_patch_call(em : &mut emit.Emit, tg : elf.Target, pos : i64, dest : i64):
-    arch_rv64.rvg_patch_call(&em, tg, pos, dest)
+fn r32g_patch_call(em : &mut emit.Emit, tg : &elf.Target, pos : i64, dest : i64):
+    arch_rv64.rvg_patch_call(&em, &tg, pos, dest)
 
 // the door on RV32
 @export
-fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off : i64,
+fn r32_startup(em : &mut emit.Emit, lw : lower.Lower, tg : &elf.Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
@@ -585,7 +585,7 @@ fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off
     arch_rv64.rv_I(&em, 0, arch_rv64.RV_T, 2, arch_rv64.RV_S0, 3)              // lw t4, 0(t3)
     arch_rv64.rv_I(&em, 4, arch_rv64.RV_T, 0, arch_rv64.RV_T, 19)
     arch_rv64.rv_bshort(&em, 0, arch_rv64.RV_S0, 0, 8)
-    arch_rv64.rvg_jmp(&em, tg, 0)
+    arch_rv64.rvg_jmp(&em, &tg, 0)
     arch_rv64.rv_S(&em, 24, arch_rv64.RV_T, arch_rv64.RV_RB, 2)                // auxv
     arch_rv64.rv_movimm(&em, arch_rv64.RV_S1, 0)
     arch_rv64.rv_S(&em, 28, arch_rv64.RV_S1, arch_rv64.RV_RB, 2)
@@ -595,25 +595,25 @@ fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off
     arch_rv64.rv_movimm(&em, 13, 147490)
     arch_rv64.rv_movimm(&em, 14, ⁻1)
     arch_rv64.rv_movimm(&em, 15, 0)
-    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MMAP))
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.mmap))
     em.aw(115)
     arch_rv64.rv_movimm(&em, 5, ⁻4096)
     arch_rv64.rv_R(&em, 0, 5, 10, 3, 6, 51)                // sltu t1, a0, -4096(unsigned): fits→1
     arch_rv64.rv_bshort(&em, 1, 6, 0, 8)                   // bne t1, x0, +8 (ok)
-    arch_rv64.rvg_jmp(&em, tg, 1)
+    arch_rv64.rvg_jmp(&em, &tg, 1)
     arch_rv64.rv_mv(&em, arch_rv64.RV_RB, 10)
     arch_rv64.rv_movimm(&em, 10, guard_size)
     arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, 10, 0, 10, 51)
     arch_rv64.rv_movimm(&em, 11, stack_size)
     arch_rv64.rv_movimm(&em, 12, 3)
-    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_MPROT))
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.mprot))
     em.aw(115)
     arch_rv64.rv_movimm(&em, arch_rv64.RV_RA, guard_size + stack_size)
     arch_rv64.rv_R(&em, 0, arch_rv64.RV_RB, arch_rv64.RV_RA, 0, 2, 51)
-    arch_rv64.rvg_jmp(&em, tg, 2)
+    arch_rv64.rvg_jmp(&em, &tg, 2)
     em.set_label(1)
     arch_rv64.rv_movimm(&em, 10, 1)
-    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.exit))
     em.aw(115)
     em.set_label(2)
     // No handler here yet.  A handler is entered with the kernel's own
@@ -633,6 +633,6 @@ fn r32_startup(em : &mut emit.Emit, lw : &lower.Lower, tg : elf.Target, args_off
         r32_call(&em, start_fn)
     if not sret:
         arch_rv64.rv_movimm(&em, 10, 0)
-    arch_rv64.rv_movimm(&em, 17, machine.sc_number(tg, machine.SC_EXIT))
+    arch_rv64.rv_movimm(&em, 17, machine.sc_number(&tg, machine.Sc.exit))
     em.aw(115)
-    arch_rv64.rvg_resolve(&em, tg)
+    arch_rv64.rvg_resolve(&em, &tg)

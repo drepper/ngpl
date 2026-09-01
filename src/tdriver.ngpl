@@ -16,27 +16,27 @@ let ir_m := @import("ir")
 // scratch labels the caller hands out
 
 
-fn t_range_check(em : &mut emit.Emit, tg : elf.Target, w : i64, lok : i64):
+fn t_range_check(em : &mut emit.Emit, tg : &elf.Target, w : i64, lok : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8
     if sgn = 0:
-        dispatch.g_const(&em, tg, machine.RG_B, (1 « bits) - 1)
-        dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
-        dispatch.g_jnz(&em, tg, machine.RG_C, lok)
-        dispatch.g_call(&em, tg, emit.RT_OV)
+        dispatch.g_const(&em, &tg, machine.RG_B, (1 « bits) - 1)
+        dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
+        dispatch.g_jnz(&em, &tg, machine.RG_C, lok)
+        dispatch.g_call(&em, &tg, emit.RT_OV)
     else:
-        dispatch.g_mov2(&em, tg, machine.RG_B, machine.RG_A)
-        dispatch.g_ext2(&em, tg, machine.RG_B, bits, 1)
-        dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_EQ, 0, 64)
-        dispatch.g_jnz(&em, tg, machine.RG_C, lok)
-        dispatch.g_call(&em, tg, emit.RT_OV)
-    dispatch.g_label(&em, tg, lok)
+        dispatch.g_mov2(&em, &tg, machine.RG_B, machine.RG_A)
+        dispatch.g_ext2(&em, &tg, machine.RG_B, bits, 1)
+        dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_EQ, 0, 64)
+        dispatch.g_jnz(&em, &tg, machine.RG_C, lok)
+        dispatch.g_call(&em, &tg, emit.RT_OV)
+    dispatch.g_label(&em, &tg, lok)
 
 // the canonical form of a wrapped result
-fn t_canon(em : &mut emit.Emit, tg : elf.Target, w : i64):
+fn t_canon(em : &mut emit.Emit, tg : &elf.Target, w : i64):
     let bits : i64 = w & 255
     if bits < 64:
-        dispatch.g_ext2(&em, tg, machine.RG_A, bits, w » 8)
+        dispatch.g_ext2(&em, &tg, machine.RG_A, bits, w » 8)
 
 // nreg is what this function itself takes in registers; nreg_of says
 // the same for every function it might call, indexed as a call target
@@ -60,7 +60,7 @@ fn t_least(bits : i64) → i64:
 // which is the work being avoided; the three whose word is thirty-two
 // bits hold a thirty-two bit value canonical for nothing, so freeing
 // it there would say only what is already true.
-fn t_freecmp(tg : elf.Target) → i64:
+fn t_freecmp(tg : &elf.Target) → i64:
     match tg.id:
         elf.Tgt.a64: 4
         elf.Tgt.rv64: 0
@@ -76,7 +76,7 @@ fn t_freecmp(tg : elf.Target) → i64:
 // two constants this machine must build a piece at a time.  Measured
 // at 160 bytes on a division probe and 60 on t07_widths against the
 // range check it would replace, so it keeps the range check.
-fn t_freediv(tg : elf.Target) → i64:
+fn t_freediv(tg : &elf.Target) → i64:
     match tg.id:
         elf.Tgt.a64: 0
         elf.Tgt.rv64: 0
@@ -109,18 +109,18 @@ fn td_can_drop(ir : ir_m.IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[]
     cnt[d × 1¤ptrdiff] - ir_m.se_here(ir, i, d) = ir_m.se_here(ir, i + 1, d) and ir_m.se_here(ir, i + 1, d) = 1
 
 @export
-fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, strs : str[],
+fn t_emit_fn(em : &mut emit.Emit, tg : &elf.Target, ir : ir_m.IrFn, np : i64, strs : str[],
              nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     let n : i64 ¤ptrdiff = #ir.op
     let secnt : i64[] = ir_m.se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
-    let cwant : i64[] = ir_m.canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
+    let cwant : i64[] = ir_m.canon_wanted(ir, ir.nvregs, t_freecmp(&tg), t_freediv(&tg))
     em.begin_fn(ir.nlabels + @dropunit(6 × n) + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
-    dispatch.g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
+    dispatch.g_prologue(&em, &tg, ir.nvregs + nobj, np, nreg)
     foreach i := 0¤ptrdiff…n:
         let o : ir_m.Ir = ir.op[i]
         let a : i64 = ir.ia[i]
@@ -135,203 +135,203 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
         // bits above it be anything.  Everywhere else the value is
         // canonical and the whole register is the right place to work.
         let wb9 : i64 = (bits ÷ 8) ?? 0
-        let cwid : i64 = if (t_freecmp(tg) & wb9) ≠ 0: bits else: 64
-        let dwid : i64 = if (t_freediv(tg) & wb9) ≠ 0: bits else: 64
+        let cwid : i64 = if (t_freecmp(&tg) & wb9) ≠ 0: bits else: 64
+        let dwid : i64 = if (t_freediv(&tg) & wb9) ≠ 0: bits else: 64
         em.drop_slot ← if td_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
         if o = ir_m.Ir.const:
-            dispatch.g_const(&em, tg, machine.RG_A, a)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_const(&em, &tg, machine.RG_A, a)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.mov:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.add or o = ir_m.Ir.addw or o = ir_m.Ir.sub or o = ir_m.Ir.subw:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
             if o = ir_m.Ir.add or o = ir_m.Ir.sub:
                 // Where the machine can settle it at this width, it
                 // does; otherwise the arithmetic is done at a word and
                 // the range asked afterwards.
-                if dispatch.g_narrow_ok(tg, bits):
+                if dispatch.g_narrow_ok(&tg, bits):
                     // the target says whether it can branch on what the
                     // arithmetic set or has to make a value of it first
                     if o = ir_m.Ir.add:
-                        dispatch.g_addchk(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, bits, sl)
+                        dispatch.g_addchk(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, bits, sl)
                     else:
-                        dispatch.g_subchk(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, bits, sl)
-                    dispatch.g_call(&em, tg, emit.RT_OV)
-                    dispatch.g_label(&em, tg, sl)
+                        dispatch.g_subchk(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, bits, sl)
+                    dispatch.g_call(&em, &tg, emit.RT_OV)
+                    dispatch.g_label(&em, &tg, sl)
                     sl ← sl + 1
                     // a narrow result comes back in the shape its width
                     // leaves it; a word-wide one is already canonical
                     if arch_x86_64.want_canon(cwant, d, w):
-                        t_canon(&em, tg, w)
+                        t_canon(&em, &tg, w)
                 else:
                     if o = ir_m.Ir.add:
-                        dispatch.g_add3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                        dispatch.g_add3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
                     else:
-                        dispatch.g_sub3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-                    t_range_check(&em, tg, w, sl)
+                        dispatch.g_sub3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                    t_range_check(&em, &tg, w, sl)
                     sl ← sl + 1
             else:
                 if o = ir_m.Ir.addw:
-                    dispatch.g_add3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                    dispatch.g_add3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
                 else:
-                    dispatch.g_sub3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                    dispatch.g_sub3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
-                    t_canon(&em, tg, w)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                    t_canon(&em, &tg, w)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.mul or o = ir_m.Ir.mulw:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
             if o = ir_m.Ir.mulw:
-                dispatch.g_mul3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                dispatch.g_mul3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
-                    t_canon(&em, tg, w)
+                    t_canon(&em, &tg, w)
             elif bits = 64:
-                dispatch.g_mulov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, sgn, bits)
-                dispatch.g_jz(&em, tg, machine.RG_C, sl)
-                dispatch.g_call(&em, tg, emit.RT_OV)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_mulov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, sgn, bits)
+                dispatch.g_jz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_call(&em, &tg, emit.RT_OV)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
             else:
-                dispatch.g_mul3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-                t_range_check(&em, tg, w, sl)
+                dispatch.g_mul3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                t_range_check(&em, &tg, w, sl)
                 sl ← sl + 1
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.neg or o = ir_m.Ir.negw:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
             if o = ir_m.Ir.neg and sgn = 1 and bits = 64:
                 // the one signed value with no negation
-                dispatch.g_const(&em, tg, machine.RG_B, ⁻9223372036854775807 - 1)
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_NE, 0, 64)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-                dispatch.g_call(&em, tg, emit.RT_OV)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_const(&em, &tg, machine.RG_B, ⁻9223372036854775807 - 1)
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_NE, 0, 64)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_call(&em, &tg, emit.RT_OV)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
-                dispatch.g_neg2(&em, tg, machine.RG_A, machine.RG_A)
+                dispatch.g_neg2(&em, &tg, machine.RG_A, machine.RG_A)
             elif o = ir_m.Ir.neg and sgn = 0:
                 // a negated unsigned is only 0
-                dispatch.g_jz(&em, tg, machine.RG_A, sl)
-                dispatch.g_call(&em, tg, emit.RT_OV)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_jz(&em, &tg, machine.RG_A, sl)
+                dispatch.g_call(&em, &tg, emit.RT_OV)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
-                dispatch.g_neg2(&em, tg, machine.RG_A, machine.RG_A)
+                dispatch.g_neg2(&em, &tg, machine.RG_A, machine.RG_A)
             else:
-                dispatch.g_neg2(&em, tg, machine.RG_A, machine.RG_A)
+                dispatch.g_neg2(&em, &tg, machine.RG_A, machine.RG_A)
                 if o = ir_m.Ir.neg:
-                    t_range_check(&em, tg, w, sl)
+                    t_range_check(&em, &tg, w, sl)
                     sl ← sl + 1
                 elif arch_x86_64.want_canon(cwant, d, w):
-                    t_canon(&em, tg, w)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                    t_canon(&em, &tg, w)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.band or o = ir_m.Ir.borr or o = ir_m.Ir.bxorr:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
             if o = ir_m.Ir.band:
-                dispatch.g_and3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                dispatch.g_and3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
             elif o = ir_m.Ir.borr:
-                dispatch.g_or3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                dispatch.g_or3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
             else:
-                dispatch.g_xor3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_xor3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.bnott:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_not2(&em, tg, machine.RG_A, machine.RG_A)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_not2(&em, &tg, machine.RG_A, machine.RG_A)
             if arch_x86_64.want_canon(cwant, d, w):
-                t_canon(&em, tg, w)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                t_canon(&em, &tg, w)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.shll or o = ir_m.Ir.shrr:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_const(&em, tg, machine.RG_C, bits - sgn)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-            dispatch.g_call(&em, tg, emit.RT_SHIFT)
-            dispatch.g_label(&em, tg, sl)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_const(&em, &tg, machine.RG_C, bits - sgn)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_call(&em, &tg, emit.RT_SHIFT)
+            dispatch.g_label(&em, &tg, sl)
             sl ← sl + 1
             if o = ir_m.Ir.shll:
-                dispatch.g_shl3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                dispatch.g_shl3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
-                    t_canon(&em, tg, w)
+                    t_canon(&em, &tg, w)
             elif sgn = 1:
-                dispatch.g_sar3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+                dispatch.g_sar3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
             else:
-                dispatch.g_shr3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_shr3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o.ord() >= ir_m.Ir.ceq.ord() and o.ord() <= ir_m.Ir.cge.ord():
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, o.ord() - ir_m.Ir.ceq.ord(), sgn, cwid)
-            dispatch.g_mov2(&em, tg, machine.RG_A, machine.RG_C)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, o.ord() - ir_m.Ir.ceq.ord(), sgn, cwid)
+            dispatch.g_mov2(&em, &tg, machine.RG_A, machine.RG_C)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.maxx or o = ir_m.Ir.minn:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, if o = ir_m.Ir.maxx: machine.CC_GE else: machine.CC_LE, sgn, cwid)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, if o = ir_m.Ir.maxx: machine.CC_GE else: machine.CC_LE, sgn, cwid)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.sel:
-            dispatch.g_lds(&em, tg, machine.RG_C, a)
-            dispatch.g_lds(&em, tg, machine.RG_A, b)
-            dispatch.g_lds(&em, tg, machine.RG_B, c)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_C, a)
+            dispatch.g_lds(&em, &tg, machine.RG_A, b)
+            dispatch.g_lds(&em, &tg, machine.RG_B, c)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.divv or o = ir_m.Ir.modd:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
             let ldo9 : i64 = sl
             let lend9 : i64 = sl + 1
             sl ← sl + 2
-            dispatch.g_jnz(&em, tg, machine.RG_B, ldo9)
-            dispatch.g_lds(&em, tg, machine.RG_A, c)
-            dispatch.g_jmp(&em, tg, lend9)
-            dispatch.g_label(&em, tg, ldo9)
+            dispatch.g_jnz(&em, &tg, machine.RG_B, ldo9)
+            dispatch.g_lds(&em, &tg, machine.RG_A, c)
+            dispatch.g_jmp(&em, &tg, lend9)
+            dispatch.g_label(&em, &tg, ldo9)
             // Dividing at the width, the least value over minus one is
             // answered wrongly rather than refused, so the check that
             // stood only at the word now stands wherever the division
             // is made where the value is.
             let dfree : bool = dwid ≠ 64
             if sgn = 1 and (bits = 64 or dfree):
-                dispatch.g_const(&em, tg, machine.RG_C, t_least(bits))
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_C, machine.CC_NE, 0, dwid)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-                dispatch.g_const(&em, tg, machine.RG_C, ⁻1)
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_NE, 0, dwid)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
+                dispatch.g_const(&em, &tg, machine.RG_C, t_least(bits))
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_C, machine.CC_NE, 0, dwid)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_const(&em, &tg, machine.RG_C, ⁻1)
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_NE, 0, dwid)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
                 if o = ir_m.Ir.divv:
-                    dispatch.g_call(&em, tg, emit.RT_OV)
+                    dispatch.g_call(&em, &tg, emit.RT_OV)
                 else:
                     // the remainder is nought and always was; the
                     // machine faults only because it works the
                     // quotient out at the same time
-                    dispatch.g_const(&em, tg, machine.RG_A, 0)
-                    dispatch.g_jmp(&em, tg, lend9)
-                dispatch.g_label(&em, tg, sl)
+                    dispatch.g_const(&em, &tg, machine.RG_A, 0)
+                    dispatch.g_jmp(&em, &tg, lend9)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
             if o = ir_m.Ir.divv:
-                dispatch.g_div3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, dwid)
+                dispatch.g_div3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, dwid)
             else:
-                dispatch.g_mod3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, dwid)
+                dispatch.g_mod3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B, sgn, dwid)
             if sgn = 1 and bits ≠ 64 and not dfree:
-                t_range_check(&em, tg, w, sl)
+                t_range_check(&em, &tg, w, sl)
                 sl ← sl + 1
-            dispatch.g_label(&em, tg, lend9)
+            dispatch.g_label(&em, &tg, lend9)
             // Only a division made at the width leaves a value only
             // that wide.  Made whole, of operands that were canonical,
             // it answers canonically and there is nothing to put right.
             if dfree and arch_x86_64.want_canon(cwant, d, w):
-                t_canon(&em, tg, w)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                t_canon(&em, &tg, w)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.jmp:
-            dispatch.g_jmp(&em, tg, a)
+            dispatch.g_jmp(&em, &tg, a)
         elif o = ir_m.Ir.jz or o = ir_m.Ir.jnz:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
             if o = ir_m.Ir.jz:
-                dispatch.g_jz(&em, tg, machine.RG_A, b)
+                dispatch.g_jz(&em, &tg, machine.RG_A, b)
             else:
-                dispatch.g_jnz(&em, tg, machine.RG_A, b)
+                dispatch.g_jnz(&em, &tg, machine.RG_A, b)
         elif o = ir_m.Ir.label:
-            dispatch.g_label(&em, tg, a)
+            dispatch.g_label(&em, &tg, a)
         elif o = ir_m.Ir.call:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
             let cnr : i64 = if a >= 0 and a < @dropunit(#nreg_of): nreg_of[a × 1¤ptrdiff] else: 0
@@ -340,51 +340,51 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             // through the very register a later stack argument would
             // borrow, and going in this order the two never meet.
             foreach k := (cnr ⌊ argc)…argc:
-                dispatch.g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
+                dispatch.g_argld(&em, &tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
             foreach kr := 0…(argc ⌊ cnr):
-                dispatch.g_argreg(&em, tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
-            dispatch.g_call(&em, tg, a)
-            dispatch.g_retst(&em, tg, d)
+                dispatch.g_argreg(&em, &tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
+            dispatch.g_call(&em, &tg, a)
+            dispatch.g_retst(&em, &tg, d)
             // a returned value is only as wide as its type; where this
             // caller wants more, this caller is the one that says so
             if arch_x86_64.want_canon(cwant, d, w):
-                dispatch.g_lds(&em, tg, machine.RG_A, d)
-                t_canon(&em, tg, w)
-                dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_lds(&em, &tg, machine.RG_A, d)
+                t_canon(&em, &tg, w)
+                dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.calli:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
             foreach ki := 0…argci:
-                dispatch.g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
-            dispatch.g_lds(&em, tg, machine.RG_C, a)
-            dispatch.g_calli(&em, tg, machine.RG_C)
-            dispatch.g_retst(&em, tg, d)
+                dispatch.g_argld(&em, &tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
+            dispatch.g_lds(&em, &tg, machine.RG_C, a)
+            dispatch.g_calli(&em, &tg, machine.RG_C)
+            dispatch.g_retst(&em, &tg, d)
             if arch_x86_64.want_canon(cwant, d, w):
-                dispatch.g_lds(&em, tg, machine.RG_A, d)
-                t_canon(&em, tg, w)
-                dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_lds(&em, &tg, machine.RG_A, d)
+                t_canon(&em, &tg, w)
+                dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.ret:
             if a ≠ ⁻1:
-                dispatch.g_retld(&em, tg, a)
-            dispatch.g_epilogue(&em, tg)
+                dispatch.g_retld(&em, &tg, a)
+            dispatch.g_epilogue(&em, &tg)
         elif o = ir_m.Ir.prints or o = ir_m.Ir.eprints or o = ir_m.Ir.abort:
-            let pos : i64 = dispatch.g_absref_arg(&em, tg, 0)
+            let pos : i64 = dispatch.g_absref_arg(&em, &tg, 0)
             if em.skipping = 0:
                 em.sf_pos.push(pos)
                 em.sf_str.push(a)
-            dispatch.g_argconst(&em, tg, 1, emit.str_len(strs[a × 1¤ptrdiff]))
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.prints: emit.RT_WRITE1 else: (if o = ir_m.Ir.eprints: emit.RT_WRITE2 else: emit.RT_ABORT))
+            dispatch.g_argconst(&em, &tg, 1, emit.str_len(strs[a × 1¤ptrdiff]))
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.prints: emit.RT_WRITE1 else: (if o = ir_m.Ir.eprints: emit.RT_WRITE2 else: emit.RT_ABORT))
         elif o = ir_m.Ir.printi or o = ir_m.Ir.printu:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.printi: emit.RT_PRINTI else: emit.RT_PRINTU)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.printi: emit.RT_PRINTI else: emit.RT_PRINTU)
         elif o = ir_m.Ir.printsv:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_PRINTSTR)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_PRINTSTR)
         elif o = ir_m.Ir.exit:
-            dispatch.g_sysarg(&em, tg, 0, a)
-            dispatch.g_syscall(&em, tg, machine.SC_EXIT)
+            dispatch.g_sysarg(&em, &tg, 0, a)
+            dispatch.g_syscall(&em, &tg, machine.Sc.exit.ord())
         elif o = ir_m.Ir.gload or o = ir_m.Ir.gstore:
             let gg : i64 = if o = ir_m.Ir.gload: a else: a
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_B)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_B)
             if em.skipping = 0:
                 if em.gseg[gg × 1¤ptrdiff] = 0:
                     em.gr_pos.push(pos)
@@ -393,109 +393,109 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                     em.df_pos.push(pos)
                     em.df_off.push(em.gmap[gg × 1¤ptrdiff])
             if o = ir_m.Ir.gload:
-                dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_B, 0, 8, 0)
-                dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_B, 0, 8, 0)
+                dispatch.g_sts(&em, &tg, machine.RG_A, d)
             else:
-                dispatch.g_lds(&em, tg, machine.RG_A, b)
-                dispatch.g_sto(&em, tg, machine.RG_A, machine.RG_B, 0, 8)
+                dispatch.g_lds(&em, &tg, machine.RG_A, b)
+                dispatch.g_sto(&em, &tg, machine.RG_A, machine.RG_B, 0, 8)
         elif o = ir_m.Ir.anew:
-            dispatch.g_argconst(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_ARRNEW)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argconst(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_ARRNEW)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.giveback:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_FREE)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_FREE)
         elif o = ir_m.Ir.snew:
-            dispatch.g_argconst(&em, tg, 0, 8 × a)
-            dispatch.g_call(&em, tg, emit.RT_ALLOC)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argconst(&em, &tg, 0, 8 × a)
+            dispatch.g_call(&em, &tg, emit.RT_ALLOC)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.apush:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_ARRPUSH)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_ARRPUSH)
         elif o = ir_m.Ir.aidx or o = ir_m.Ir.aref:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 8, 8, 0)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-            dispatch.g_call(&em, tg, emit.RT_BOUNDS)
-            dispatch.g_label(&em, tg, sl)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_call(&em, &tg, emit.RT_BOUNDS)
+            dispatch.g_label(&em, &tg, sl)
             sl ← sl + 1
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 0, 8, 0)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_B, 3)
-            dispatch.g_add3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_T)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_B, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_T)
             if o = ir_m.Ir.aidx:
-                dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_C, 0, 8, 0)
+                dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_C, 0, 8, 0)
             else:
-                dispatch.g_mov2(&em, tg, machine.RG_A, machine.RG_C)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_mov2(&em, &tg, machine.RG_A, machine.RG_C)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.asto:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 8, 8, 0)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-            dispatch.g_call(&em, tg, emit.RT_BOUNDS)
-            dispatch.g_label(&em, tg, sl)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_LT, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_call(&em, &tg, emit.RT_BOUNDS)
+            dispatch.g_label(&em, &tg, sl)
             sl ← sl + 1
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 0, 8, 0)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_B, 3)
-            dispatch.g_add3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_T)
-            dispatch.g_lds(&em, tg, machine.RG_B, c)
-            dispatch.g_sto(&em, tg, machine.RG_B, machine.RG_C, 0, 8)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_B, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_T)
+            dispatch.g_lds(&em, &tg, machine.RG_B, c)
+            dispatch.g_sto(&em, &tg, machine.RG_B, machine.RG_C, 0, 8)
         elif o = ir_m.Ir.apop:
             let lem : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_ldo(&em, tg, machine.RG_B, machine.RG_A, 8, 8, 0)
-            dispatch.g_jz(&em, tg, machine.RG_B, lem)
-            dispatch.g_const(&em, tg, machine.RG_C, 1)
-            dispatch.g_sub3(&em, tg, machine.RG_B, machine.RG_B, machine.RG_C)
-            dispatch.g_sto(&em, tg, machine.RG_B, machine.RG_A, 8, 8)
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 0, 8, 0)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_B, 3)
-            dispatch.g_add3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_T)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_C, 0, 8, 0)
-            dispatch.g_jmp(&em, tg, ldn)
-            dispatch.g_label(&em, tg, lem)
-            dispatch.g_lds(&em, tg, machine.RG_A, b)
-            dispatch.g_label(&em, tg, ldn)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_ldo(&em, &tg, machine.RG_B, machine.RG_A, 8, 8, 0)
+            dispatch.g_jz(&em, &tg, machine.RG_B, lem)
+            dispatch.g_const(&em, &tg, machine.RG_C, 1)
+            dispatch.g_sub3(&em, &tg, machine.RG_B, machine.RG_B, machine.RG_C)
+            dispatch.g_sto(&em, &tg, machine.RG_B, machine.RG_A, 8, 8)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_B, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_T)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_C, 0, 8, 0)
+            dispatch.g_jmp(&em, &tg, ldn)
+            dispatch.g_label(&em, &tg, lem)
+            dispatch.g_lds(&em, &tg, machine.RG_A, b)
+            dispatch.g_label(&em, &tg, ldn)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.aget:
             let ldf : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, b)
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 8, 8, 0)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_GE, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, ldf)
-            dispatch.g_ldo(&em, tg, machine.RG_C, machine.RG_A, 0, 8, 0)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_B, 3)
-            dispatch.g_add3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_T)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_C, 0, 8, 0)
-            dispatch.g_jmp(&em, tg, ldn)
-            dispatch.g_label(&em, tg, ldf)
-            dispatch.g_lds(&em, tg, machine.RG_A, c)
-            dispatch.g_label(&em, tg, ldn)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, b)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 8, 8, 0)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_B, machine.RG_C, machine.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, ldf)
+            dispatch.g_ldo(&em, &tg, machine.RG_C, machine.RG_A, 0, 8, 0)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_B, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_T)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_C, 0, 8, 0)
+            dispatch.g_jmp(&em, &tg, ldn)
+            dispatch.g_label(&em, &tg, ldf)
+            dispatch.g_lds(&em, &tg, machine.RG_A, c)
+            dispatch.g_label(&em, &tg, ldn)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.alen:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_A, 8, 8, 0)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_A, 8, 8, 0)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.hlen:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_A, 16, 8, 0)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_A, 16, 8, 0)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.sc:
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_A)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_A)
             if em.skipping = 0:
                 em.sd_pos.push(pos)
                 em.sd_str.push(a)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.faddr:
             // Whatever this address reaches will be called indirectly,
             // by the architecture's convention.  A function taking a
@@ -504,215 +504,215 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             // this is where a way it missed would show.
             assert(a < 0 or a >= @dropunit(#nreg_of) or nreg_of[a × 1¤ptrdiff] = 0,
                    "no private convention is reached through an address")
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_A)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_A)
             if em.skipping = 0:
                 em.ff_pos.push(pos)
                 em.ff_fn.push(a)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.fld:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_A, 8 × b, 8, 0)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_A, 8 × b, 8, 0)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.fsto:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, c)
-            dispatch.g_sto(&em, tg, machine.RG_B, machine.RG_A, 8 × b, 8)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, c)
+            dispatch.g_sto(&em, &tg, machine.RG_B, machine.RG_A, 8 × b, 8)
         elif o = ir_m.Ir.hnew:
-            dispatch.g_argconst(&em, tg, 0, a)
-            dispatch.g_argconst(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_HNEW)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argconst(&em, &tg, 0, a)
+            dispatch.g_argconst(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_HNEW)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.hput:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_argld(&em, tg, 2, c)
-            dispatch.g_call(&em, tg, emit.RT_HPUT)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_argld(&em, &tg, 2, c)
+            dispatch.g_call(&em, &tg, emit.RT_HPUT)
         elif o = ir_m.Ir.hget or o = ir_m.Ir.helem:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.hget: emit.RT_HGET else: emit.RT_HELEM)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.hget: emit.RT_HGET else: emit.RT_HELEM)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.chr:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_const(&em, tg, machine.RG_B, 1114111)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-            dispatch.g_call(&em, tg, emit.RT_BADCHAR)
-            dispatch.g_label(&em, tg, sl)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_const(&em, &tg, machine.RG_B, 1114111)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_call(&em, &tg, emit.RT_BADCHAR)
+            dispatch.g_label(&em, &tg, sl)
             sl ← sl + 1
-            dispatch.g_mov2(&em, tg, machine.RG_C, machine.RG_A)
-            dispatch.g_const(&em, tg, machine.RG_B, 55296)
-            dispatch.g_sub3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_B)
-            dispatch.g_const(&em, tg, machine.RG_B, 2048)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_C, machine.RG_B, machine.CC_GE, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-            dispatch.g_call(&em, tg, emit.RT_BADCHAR)
-            dispatch.g_label(&em, tg, sl)
+            dispatch.g_mov2(&em, &tg, machine.RG_C, machine.RG_A)
+            dispatch.g_const(&em, &tg, machine.RG_B, 55296)
+            dispatch.g_sub3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_B)
+            dispatch.g_const(&em, &tg, machine.RG_B, 2048)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_C, machine.RG_B, machine.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_call(&em, &tg, emit.RT_BADCHAR)
+            dispatch.g_label(&em, &tg, sl)
             sl ← sl + 1
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.sidx:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_STRIDX)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_STRIDX)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.sccat or o = ir_m.Ir.seqv:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.sccat: emit.RT_CONCAT else: emit.RT_STREQ)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.sccat: emit.RT_CONCAT else: emit.RT_STREQ)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.hfinal:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_HFINAL)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_HFINAL)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.fidp:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_FIDP)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_FIDP)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.fthere:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_FTHERE)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_FTHERE)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.fident:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_FIDENT)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_FIDENT)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.slenv or o = ir_m.Ir.chars or o = ir_m.Ir.charstr or o = ir_m.Ir.sbytes or o = ir_m.Ir.hstart or o = ir_m.Ir.toraw or o = ir_m.Ir.fread or o = ir_m.Ir.fopen:
-            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_argld(&em, &tg, 0, a)
             if o = ir_m.Ir.slenv:
-                dispatch.g_call(&em, tg, emit.RT_STRCHARS)
+                dispatch.g_call(&em, &tg, emit.RT_STRCHARS)
             elif o = ir_m.Ir.chars:
-                dispatch.g_call(&em, tg, emit.RT_CHARS)
+                dispatch.g_call(&em, &tg, emit.RT_CHARS)
             elif o = ir_m.Ir.charstr:
-                dispatch.g_call(&em, tg, emit.RT_CHARSTR)
+                dispatch.g_call(&em, &tg, emit.RT_CHARSTR)
             elif o = ir_m.Ir.sbytes:
-                dispatch.g_call(&em, tg, emit.RT_SBYTES)
+                dispatch.g_call(&em, &tg, emit.RT_SBYTES)
             elif o = ir_m.Ir.hstart:
-                dispatch.g_call(&em, tg, emit.RT_HSTART)
+                dispatch.g_call(&em, &tg, emit.RT_HSTART)
             elif o = ir_m.Ir.toraw:
-                dispatch.g_call(&em, tg, emit.RT_TORAW)
+                dispatch.g_call(&em, &tg, emit.RT_TORAW)
             elif o = ir_m.Ir.fread:
-                dispatch.g_call(&em, tg, emit.RT_FREAD)
+                dispatch.g_call(&em, &tg, emit.RT_FREAD)
             else:
-                dispatch.g_call(&em, tg, emit.RT_FOPEN)
-            dispatch.g_retst(&em, tg, d)
+                dispatch.g_call(&em, &tg, emit.RT_FOPEN)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.sdec:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_STRNEXT)
-            dispatch.g_retst(&em, tg, d)
-            dispatch.g_lds(&em, tg, machine.RG_A, d)
-            dispatch.g_const(&em, tg, machine.RG_B, 32)
-            dispatch.g_shr3(&em, tg, machine.RG_B, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_B, c)
-            dispatch.g_const(&em, tg, machine.RG_C, 4294967295)
-            dispatch.g_and3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_C)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_STRNEXT)
+            dispatch.g_retst(&em, &tg, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, d)
+            dispatch.g_const(&em, &tg, machine.RG_B, 32)
+            dispatch.g_shr3(&em, &tg, machine.RG_B, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_B, c)
+            dispatch.g_const(&em, &tg, machine.RG_C, 4294967295)
+            dispatch.g_and3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_C)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.auxv:
-            dispatch.g_argconst(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_AUXV)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argconst(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_AUXV)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.execfn or o = ir_m.Ir.envn or o = ir_m.Ir.args or o = ir_m.Ir.dents:
             if o = ir_m.Ir.execfn:
-                dispatch.g_call(&em, tg, emit.RT_EXECFN)
+                dispatch.g_call(&em, &tg, emit.RT_EXECFN)
             elif o = ir_m.Ir.envn:
-                dispatch.g_call(&em, tg, emit.RT_ENVN)
+                dispatch.g_call(&em, &tg, emit.RT_ENVN)
             elif o = ir_m.Ir.args:
-                dispatch.g_call(&em, tg, emit.RT_ARGS)
+                dispatch.g_call(&em, &tg, emit.RT_ARGS)
             else:
-                dispatch.g_call(&em, tg, emit.RT_DENTS)
-            dispatch.g_retst(&em, tg, d)
+                dispatch.g_call(&em, &tg, emit.RT_DENTS)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.envg:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, emit.RT_ENVG)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_call(&em, &tg, emit.RT_ENVG)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.fcreate:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, emit.RT_FCREATE)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, emit.RT_FCREATE)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.fwrite or o = ir_m.Ir.writev or o = ir_m.Ir.hupdate:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.hupdate: emit.RT_HUPDATE else: (if o = ir_m.Ir.fwrite: emit.RT_FWRITE else: emit.RT_WRITEV))
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.hupdate: emit.RT_HUPDATE else: (if o = ir_m.Ir.fwrite: emit.RT_FWRITE else: emit.RT_WRITEV))
         elif o = ir_m.Ir.fclose:
-            dispatch.g_sysarg(&em, tg, 0, a)
-            dispatch.g_syscall(&em, tg, machine.SC_CLOSE)
+            dispatch.g_sysarg(&em, &tg, 0, a)
+            dispatch.g_syscall(&em, &tg, machine.Sc.close.ord())
         elif o = ir_m.Ir.ext:
             // asked for canonical, so it arrives canonical
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.narrow:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
             if bits = 64:
-                dispatch.g_const(&em, tg, machine.RG_B, 0)
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_GE, 1, 64)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-                dispatch.g_call(&em, tg, emit.RT_BADFIT)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_const(&em, &tg, machine.RG_B, 0)
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_GE, 1, 64)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_call(&em, &tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
             elif sgn = 0:
-                dispatch.g_const(&em, tg, machine.RG_B, (1 « bits) - 1)
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-                dispatch.g_call(&em, tg, emit.RT_BADFIT)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_const(&em, &tg, machine.RG_B, (1 « bits) - 1)
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LE, 0, 64)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_call(&em, &tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
             else:
-                dispatch.g_mov2(&em, tg, machine.RG_B, machine.RG_A)
-                dispatch.g_ext2(&em, tg, machine.RG_B, bits, 1)
-                dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_EQ, 0, 64)
-                dispatch.g_jnz(&em, tg, machine.RG_C, sl)
-                dispatch.g_call(&em, tg, emit.RT_BADFIT)
-                dispatch.g_label(&em, tg, sl)
+                dispatch.g_mov2(&em, &tg, machine.RG_B, machine.RG_A)
+                dispatch.g_ext2(&em, &tg, machine.RG_B, bits, 1)
+                dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_EQ, 0, 64)
+                dispatch.g_jnz(&em, &tg, machine.RG_C, sl)
+                dispatch.g_call(&em, &tg, emit.RT_BADFIT)
+                dispatch.g_label(&em, &tg, sl)
                 sl ← sl + 1
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.acat or o = ir_m.Ir.afill or o = ir_m.Ir.acyc:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
             if o = ir_m.Ir.acat:
-                dispatch.g_call(&em, tg, emit.RT_ACAT)
+                dispatch.g_call(&em, &tg, emit.RT_ACAT)
             elif o = ir_m.Ir.afill:
-                dispatch.g_call(&em, tg, emit.RT_AFILL)
+                dispatch.g_call(&em, &tg, emit.RT_AFILL)
             else:
-                dispatch.g_call(&em, tg, emit.RT_ACYC)
-            dispatch.g_retst(&em, tg, d)
+                dispatch.g_call(&em, &tg, emit.RT_ACYC)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.afind:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_argconst(&em, tg, 2, c)
-            dispatch.g_call(&em, tg, emit.RT_AFIND)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_argconst(&em, &tg, 2, c)
+            dispatch.g_call(&em, &tg, emit.RT_AFIND)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.aslice or o = ir_m.Ir.sslice:
-            dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_argld(&em, tg, 2, c)
-            dispatch.g_call(&em, tg, if o = ir_m.Ir.aslice: emit.RT_ASLICE else: emit.RT_SSLICE)
-            dispatch.g_retst(&em, tg, d)
+            dispatch.g_argld(&em, &tg, 0, a)
+            dispatch.g_argld(&em, &tg, 1, b)
+            dispatch.g_argld(&em, &tg, 2, c)
+            dispatch.g_call(&em, &tg, if o = ir_m.Ir.aslice: emit.RT_ASLICE else: emit.RT_SSLICE)
+            dispatch.g_retst(&em, &tg, d)
         elif o = ir_m.Ir.satadd or o = ir_m.Ir.satsub or o = ir_m.Ir.satmul:
-            t_emit_sat(&em, tg, o, w, a, b, d, sl)
+            t_emit_sat(&em, &tg, o, w, a, b, d, sl)
             sl ← sl + 2
         elif o = ir_m.Ir.jtab:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_const(&em, tg, machine.RG_B, jmin)
-            dispatch.g_sub3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-            dispatch.g_const(&em, tg, machine.RG_B, span)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_GE, 0, 64)
-            dispatch.g_jnz(&em, tg, machine.RG_C, ldef)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_const(&em, &tg, machine.RG_B, jmin)
+            dispatch.g_sub3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_const(&em, &tg, machine.RG_B, span)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_GE, 0, 64)
+            dispatch.g_jnz(&em, &tg, machine.RG_C, ldef)
             let id : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_B)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_B)
             if em.skipping = 0:
                 em.jt_pos.push(pos)
                 em.jt_id.push(id)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_A, 3)
-            dispatch.g_add3(&em, tg, machine.RG_B, machine.RG_B, machine.RG_T)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_B, 0, 8, 0)
-            dispatch.g_ijmp(&em, tg, machine.RG_A)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_A, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_B, machine.RG_B, machine.RG_T)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_B, 0, 8, 0)
+            dispatch.g_ijmp(&em, &tg, machine.RG_A)
             em.pj_id.push(id)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(span)
@@ -722,27 +722,27 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             let vmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_const(&em, tg, machine.RG_B, vmin)
-            dispatch.g_sub3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
-            dispatch.g_const(&em, tg, machine.RG_B, span)
-            dispatch.g_cmp3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LT, 0, 64)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_const(&em, &tg, machine.RG_B, vmin)
+            dispatch.g_sub3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_const(&em, &tg, machine.RG_B, span)
+            dispatch.g_cmp3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B, machine.CC_LT, 0, 64)
             // the load is clamped inside the table; the answer is
             // chosen after
-            dispatch.g_const(&em, tg, machine.RG_B, 0)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
+            dispatch.g_const(&em, &tg, machine.RG_B, 0)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
             let id2 : i64 = em.jt_count
             em.jt_count ← em.jt_count + 1
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_B)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_B)
             if em.skipping = 0:
                 em.jt_pos.push(pos)
                 em.jt_id.push(id2)
-            dispatch.g_shl3i(&em, tg, machine.RG_T, machine.RG_A, 3)
-            dispatch.g_add3(&em, tg, machine.RG_B, machine.RG_B, machine.RG_T)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_B, 0, 8, 0)
-            dispatch.g_const(&em, tg, machine.RG_B, defv)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_shl3i(&em, &tg, machine.RG_T, machine.RG_A, 3)
+            dispatch.g_add3(&em, &tg, machine.RG_B, machine.RG_B, machine.RG_T)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_B, 0, 8, 0)
+            dispatch.g_const(&em, &tg, machine.RG_B, defv)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(0 - span)
@@ -751,111 +751,111 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
         elif o = ir_m.Ir.sysc:
             let sargc : i64 = ir.extra[b × 1¤ptrdiff]
             foreach sk := 0…sargc:
-                dispatch.g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
-            dispatch.g_syscall(&em, tg, a)
+                dispatch.g_sysarg(&em, &tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
+            dispatch.g_syscall(&em, &tg, a)
             if d ≠ ⁻1:
-                dispatch.g_sysret(&em, tg, machine.RG_A)
-                dispatch.g_sts(&em, tg, machine.RG_A, d)
+                dispatch.g_sysret(&em, &tg, machine.RG_A)
+                dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.ldn:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_ldo(&em, tg, machine.RG_A, machine.RG_A, b, bits, sgn)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_ldo(&em, &tg, machine.RG_A, machine.RG_A, b, bits, sgn)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.stn:
-            dispatch.g_lds(&em, tg, machine.RG_A, a)
-            dispatch.g_lds(&em, tg, machine.RG_B, c)
-            dispatch.g_sto(&em, tg, machine.RG_B, machine.RG_A, b, bits)
+            dispatch.g_lds(&em, &tg, machine.RG_A, a)
+            dispatch.g_lds(&em, &tg, machine.RG_B, c)
+            dispatch.g_sto(&em, &tg, machine.RG_B, machine.RG_A, b, bits)
         elif o = ir_m.Ir.frame:
-            dispatch.g_frameaddr(&em, tg, ir.nvregs, nobj, a, machine.RG_A)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_frameaddr(&em, &tg, ir.nvregs, nobj, a, machine.RG_A)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.kaddr:
-            let pos : i64 = dispatch.g_absref(&em, tg, machine.RG_A)
+            let pos : i64 = dispatch.g_absref(&em, &tg, machine.RG_A)
             if em.skipping = 0:
                 em.df_pos.push(pos)
                 em.df_off.push((if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.fptr:
-            dispatch.g_fptr(&em, tg, machine.RG_A)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_fptr(&em, &tg, machine.RG_A)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         elif o = ir_m.Ir.btaddr:
-            let bpos : i64 = dispatch.g_absref(&em, tg, machine.RG_A)
+            let bpos : i64 = dispatch.g_absref(&em, &tg, machine.RG_A)
             if em.skipping = 0:
                 em.bt_pos.push(bpos)
-            dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_sts(&em, &tg, machine.RG_A, d)
         else:
             assert(false, "an IR op the driver knows")
-    dispatch.g_resolve(&em, tg)
+    dispatch.g_resolve(&em, &tg)
     em.resolve_jtabs()
 
 // saturating arithmetic, held at the type's edge; two scratch labels
-fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : ir_m.Ir, w : i64, a : i64, b : i64, d : i64, sl : i64):
+fn t_emit_sat(em : &mut emit.Emit, tg : &elf.Target, o : ir_m.Ir, w : i64, a : i64, b : i64, d : i64, sl : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8
-    dispatch.g_lds(&em, tg, machine.RG_A, a)
-    dispatch.g_lds(&em, tg, machine.RG_B, b)
+    dispatch.g_lds(&em, &tg, machine.RG_A, a)
+    dispatch.g_lds(&em, &tg, machine.RG_B, b)
     if bits < 64:
         if o = ir_m.Ir.satadd:
-            dispatch.g_add3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_add3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
         elif o = ir_m.Ir.satsub:
-            dispatch.g_sub3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_sub3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
         else:
-            dispatch.g_mul3(&em, tg, machine.RG_A, machine.RG_A, machine.RG_B)
+            dispatch.g_mul3(&em, &tg, machine.RG_A, machine.RG_A, machine.RG_B)
         if sgn = 1:
-            dispatch.g_const(&em, tg, machine.RG_C, 0 - (1 « (bits - 1)))
-            dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_LT, 1, 64)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
-            dispatch.g_const(&em, tg, machine.RG_C, (1 « (bits - 1)) - 1)
-            dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_GT, 1, 64)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
+            dispatch.g_const(&em, &tg, machine.RG_C, 0 - (1 « (bits - 1)))
+            dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_LT, 1, 64)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
+            dispatch.g_const(&em, &tg, machine.RG_C, (1 « (bits - 1)) - 1)
+            dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_GT, 1, 64)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
         elif o = ir_m.Ir.satsub:
-            dispatch.g_const(&em, tg, machine.RG_C, 0)
-            dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_LT, 1, 64)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
+            dispatch.g_const(&em, &tg, machine.RG_C, 0)
+            dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_LT, 1, 64)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
         else:
-            dispatch.g_const(&em, tg, machine.RG_C, (1 « bits) - 1)
-            dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_GT, 0, 64)
-            dispatch.g_sel4(&em, tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
-        dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_const(&em, &tg, machine.RG_C, (1 « bits) - 1)
+            dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_A, machine.RG_C, machine.CC_GT, 0, 64)
+            dispatch.g_sel4(&em, &tg, machine.RG_A, machine.RG_T, machine.RG_C, machine.RG_A)
+        dispatch.g_sts(&em, &tg, machine.RG_A, d)
         return
     if sgn = 0:
         if o = ir_m.Ir.satadd:
-            dispatch.g_addov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
-            dispatch.g_jz(&em, tg, machine.RG_C, sl)
-            dispatch.g_const(&em, tg, machine.RG_A, ⁻1)
+            dispatch.g_addov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
+            dispatch.g_jz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_const(&em, &tg, machine.RG_A, ⁻1)
         elif o = ir_m.Ir.satsub:
-            dispatch.g_subov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
-            dispatch.g_jz(&em, tg, machine.RG_C, sl)
-            dispatch.g_const(&em, tg, machine.RG_A, 0)
+            dispatch.g_subov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
+            dispatch.g_jz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_const(&em, &tg, machine.RG_A, 0)
         else:
-            dispatch.g_mulov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
-            dispatch.g_jz(&em, tg, machine.RG_C, sl)
-            dispatch.g_const(&em, tg, machine.RG_A, ⁻1)
-        dispatch.g_label(&em, tg, sl)
-        dispatch.g_sts(&em, tg, machine.RG_A, d)
+            dispatch.g_mulov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 0, 64)
+            dispatch.g_jz(&em, &tg, machine.RG_C, sl)
+            dispatch.g_const(&em, &tg, machine.RG_A, ⁻1)
+        dispatch.g_label(&em, &tg, sl)
+        dispatch.g_sts(&em, &tg, machine.RG_A, d)
         return
     // signed, full width: the direction of the clamp follows the
     // operands, read before they are lost
     if o = ir_m.Ir.satmul:
-        dispatch.g_xor3(&em, tg, machine.RG_C, machine.RG_A, machine.RG_B)
-        dispatch.g_mulov(&em, tg, machine.RG_A, machine.RG_B, machine.RG_A, machine.RG_B, 1, 64)
-        dispatch.g_jz(&em, tg, machine.RG_B, sl + 1)
-        dispatch.g_const(&em, tg, machine.RG_B, 0)
-        dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_C, machine.RG_B, machine.CC_LT, 1, 64)
-        dispatch.g_const(&em, tg, machine.RG_A, 9223372036854775807)
-        dispatch.g_jz(&em, tg, machine.RG_T, sl + 1)
-        dispatch.g_const(&em, tg, machine.RG_A, ⁻9223372036854775807 - 1)
-        dispatch.g_label(&em, tg, sl + 1)
-        dispatch.g_sts(&em, tg, machine.RG_A, d)
+        dispatch.g_xor3(&em, &tg, machine.RG_C, machine.RG_A, machine.RG_B)
+        dispatch.g_mulov(&em, &tg, machine.RG_A, machine.RG_B, machine.RG_A, machine.RG_B, 1, 64)
+        dispatch.g_jz(&em, &tg, machine.RG_B, sl + 1)
+        dispatch.g_const(&em, &tg, machine.RG_B, 0)
+        dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_C, machine.RG_B, machine.CC_LT, 1, 64)
+        dispatch.g_const(&em, &tg, machine.RG_A, 9223372036854775807)
+        dispatch.g_jz(&em, &tg, machine.RG_T, sl + 1)
+        dispatch.g_const(&em, &tg, machine.RG_A, ⁻9223372036854775807 - 1)
+        dispatch.g_label(&em, &tg, sl + 1)
+        dispatch.g_sts(&em, &tg, machine.RG_A, d)
         return
     if o = ir_m.Ir.satadd:
-        dispatch.g_addov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 1, 64)
+        dispatch.g_addov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 1, 64)
     else:
-        dispatch.g_subov(&em, tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 1, 64)
-    dispatch.g_jz(&em, tg, machine.RG_C, sl + 1)
-    dispatch.g_const(&em, tg, machine.RG_C, 0)
+        dispatch.g_subov(&em, &tg, machine.RG_A, machine.RG_C, machine.RG_A, machine.RG_B, 1, 64)
+    dispatch.g_jz(&em, &tg, machine.RG_C, sl + 1)
+    dispatch.g_const(&em, &tg, machine.RG_C, 0)
     // an overflowed add went the way of b; a subtract the other way
-    dispatch.g_cmp3(&em, tg, machine.RG_T, machine.RG_B, machine.RG_C, if o = ir_m.Ir.satadd: machine.CC_LT else: machine.CC_GT, 1, 64)
-    dispatch.g_const(&em, tg, machine.RG_A, 9223372036854775807)
-    dispatch.g_jz(&em, tg, machine.RG_T, sl + 1)
-    dispatch.g_const(&em, tg, machine.RG_A, ⁻9223372036854775807 - 1)
-    dispatch.g_label(&em, tg, sl + 1)
-    dispatch.g_sts(&em, tg, machine.RG_A, d)
+    dispatch.g_cmp3(&em, &tg, machine.RG_T, machine.RG_B, machine.RG_C, if o = ir_m.Ir.satadd: machine.CC_LT else: machine.CC_GT, 1, 64)
+    dispatch.g_const(&em, &tg, machine.RG_A, 9223372036854775807)
+    dispatch.g_jz(&em, &tg, machine.RG_T, sl + 1)
+    dispatch.g_const(&em, &tg, machine.RG_A, ⁻9223372036854775807 - 1)
+    dispatch.g_label(&em, &tg, sl + 1)
+    dispatch.g_sts(&em, &tg, machine.RG_A, d)

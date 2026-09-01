@@ -60,7 +60,7 @@ fn abi_why(f : ast.FnDef, taken : i64) → str:
 
 @export
 @post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
-fn analyze_abi(a : ast.Ast, toks : lex.Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
+fn analyze_abi(a : &ast.Ast, toks : &lex.Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
     let nfns : i64 ¤ptrdiff = #a.fns
 
     // A name taken as a value reaches its function through a register
