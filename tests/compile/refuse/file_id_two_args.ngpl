@@ -1,0 +1,7 @@
+// file_id asks about one name.  What comes back is the pair the name
+// answers to; there is no second thing to say about it.
+@start
+@impure
+fn main():
+    let (d, k) : (i64, i64) = std.fs.cwd().file_id("CLAUDE.md", 1)
+    std.println("{} {}", d, k)

@@ -1520,6 +1520,40 @@ fn rt_build3(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         b.lab(lno)
         b.ret(ans)
         return rtb_fn(b)
+    if id = emit.RT_FIDP:
+        // (str) → two slots holding the device the path is on and its
+        // number there, which the caller reads as the tuple it is, and
+        // (0, 0) where the path answers to no file to read.  The two
+        // together are what says a name reaches a file already held:
+        // no file's number is 0, so the pair says which happened
+        // without an optional to carry it.
+        let b : mut RtB = rtb(1)
+        let n : i64 = b.ldn(0, 8, 8)
+        let one : i64 = b.cst(1)
+        let p : i64 = b.call1(emit.RT_ALLOC, b.add(n, one))
+        let src : i64 = b.ldn(0, 0, 8)
+        rt_copy_bytes(&b, src, p, n)
+        let z : i64 = b.cst(0)
+        b.stn(b.add(p, n), 0, z, 1)
+        let st : i64 = b.call1(emit.RT_ALLOC, b.cst(STATX_BYTES))
+        let r : i64 = b.sys5(arch_a64.SC_STATX, b.cst(AT_FDCWD), p, z,
+                             b.cst(STATX_BASIC_STATS), st)
+        // two slots, the shape a tuple of two numbers has
+        let out : i64 = b.call1(emit.RT_ALLOC, b.cst(16))
+        b.stn(out, 0, z, 8)
+        b.stn(out, 8, z, 8)
+        let bad : i64 = b.clts(r, z)
+        let lno : i64 = b.l()
+        b.jnz(bad, lno)
+        let reg : i64 = b.ceq(b.band(b.ldn(st, STX_MODE, 2), b.cst(S_IFMT)), b.cst(S_IFREG))
+        b.jz(reg, lno)
+        let maj : i64 = b.ldn(st, STX_DEV_MAJOR, 4)
+        let mnr : i64 = b.ldn(st, STX_DEV_MINOR, 4)
+        b.stn(out, 0, rt_makedev(&b, maj, mnr), 8)
+        b.stn(out, 8, b.ldn(st, STX_INO, 8), 8)
+        b.lab(lno)
+        b.ret(out)
+        return rtb_fn(b)
     if id = emit.RT_FIDENT:
         // (fd, which) → the device the file is on where which is 0, its
         // number on that device where which is 1.  statx answers both

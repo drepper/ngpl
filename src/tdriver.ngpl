@@ -565,6 +565,10 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_HFINAL)
             dispatch.g_retst(&em, tg, d)
+        elif o = ir_m.Ir.fidp:
+            dispatch.g_argld(&em, tg, 0, a)
+            dispatch.g_call(&em, tg, emit.RT_FIDP)
+            dispatch.g_retst(&em, tg, d)
         elif o = ir_m.Ir.fthere:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_call(&em, tg, emit.RT_FTHERE)

@@ -81,6 +81,7 @@ enum Ir : u8:
     fread = 83   // d ← file a's bytes, a u8[]
     fident = 120   // d ← what says which file a is: b picks the
     fthere = 121   // d ← whether the path a answers to a file to read
+    fidp = 122   // d ← the pair (device, number) the path a is, or (0, 0)
     fwrite = 84   // file a takes the bytes of array b
     fclose = 85   // file a closes
     narrow = 86   // d ← a, stopped unless it fits width w

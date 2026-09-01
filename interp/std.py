@@ -424,6 +424,38 @@ class DirFD:
             return mk_bool(False)
         return mk_bool((st.st_mode & 0o170000) == 0o100000)
 
+    def file_id(self, name):
+        """What says which file a name in this directory is: the device
+        it is on and its number there, asked without opening it.
+
+        Two names answer for one file exactly when both numbers agree.
+        The pair is what a reader compares a name against the files it
+        already holds, and asking here rather than through an open
+        descriptor is what lets it recognize a file it has before it
+        opens it a second time.
+
+        Args:
+            name: filename (str or bytes).
+
+        Returns:
+            (device, inode), and (0, 0) where the name answers to no
+            file to read -- nothing is there, it is a directory, or
+            this process may not ask.  No file has the number 0, so the
+            pair says which of the two happened without an optional.
+        """
+        from interp.value import TupleValue, mk_int
+
+        self._check_open("file_id")
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        try:
+            st = os.stat(name, dir_fd=self._fd)
+        except OSError:
+            return TupleValue([mk_int(0, "i64"), mk_int(0, "i64")])
+        if (st.st_mode & 0o170000) != 0o100000:
+            return TupleValue([mk_int(0, "i64"), mk_int(0, "i64")])
+        return TupleValue([mk_int(st.st_dev, "i64"), mk_int(st.st_ino, "i64")])
+
     def create_file(self, name, mode=None):
         """Create (or truncate) a file relative to this directory, for writing.
 

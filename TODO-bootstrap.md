@@ -303,3 +303,12 @@ Outstanding
     operation, so a runtime routine written once as portable IR now serves all six machines
     rather than being hand-written for the pioneer as well.  tests/compile/t80_has_file and
     refuse/has_file_{pure,two_args}; spec, "Asking Without Opening".
+
+[x] `std.fs.cwd().file_id(p)` answers the pair (device, number on it) a name is, from one
+    statx and without opening it, and (0, 0) where the name answers to no file to read --
+    no file has the number 0, so the pair carries the absence without an optional.  The
+    import reader resolves a name to that pair together with the path, and consults the
+    files it already holds before opening: a file reached under a second name is
+    recognized before a descriptor is spent on it, where it used to be recognized from the
+    descriptor's own statx afterwards.  tests/compile/t81_file_id checks that the two ways
+    of asking -- the name and a descriptor opened from it -- answer the same file.

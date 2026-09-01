@@ -848,6 +848,10 @@ fn emit_fn(em : &mut emit.Emit, ir : ir_m.IrFn, np : i64, strs : str[],
             em.b2(15, 5)                     // syscall
             if d ≠ ⁻1:
                 em.store(emit.R_AX, d)
+        elif o = ir_m.Ir.fidp:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_FIDP)
+            em.store(emit.R_AX, d)
         elif o = ir_m.Ir.fthere:
             em.load(emit.R_DI, a)
             em.jglobal(232, ⁻1, emit.RT_FTHERE)

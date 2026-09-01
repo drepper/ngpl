@@ -2013,6 +2013,11 @@ fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, all
     em.rt_begin(emit.RT_FTHERE)
     arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FTHERE, tg, &lw), 1, lw.strs, 0, [])
 
+    // and what the name is, when what is wanted is not whether it is
+    // there but which file it is
+    em.rt_begin(emit.RT_FIDP)
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FIDP, tg, &lw), 1, lw.strs, 0, [])
+
     // ------------------------------------------------------------------
     // The stack running out
     // ------------------------------------------------------------------

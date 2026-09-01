@@ -1,0 +1,3 @@
+tests/compile/refuse/file_id_two_args.ngpl:6:31: error: file_id takes the path alone
+  6 |     let (d, k) : (i64, i64) = std.fs.cwd().file_id("CLAUDE.md", 1)
+    |                               ^

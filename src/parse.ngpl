@@ -1278,8 +1278,14 @@ impl Parser:
                     if fm = "has_file":
                         let hoff : i64 = self.parse_args()
                         return self.mknode(ast.Nk.scall, at, ast.Sb.hasfile.ord(), hoff, 0)
-                    self.err("'" ⧺ fm ⧺ """' is not core-2; cwd() answers open_file, create_file
-                                          " and has_file""")
+                    if fm = "file_id":
+                        let ioff : i64 = self.parse_args()
+                        // the pair's type is interned here, where the
+                        // shape table is, and the node carries it
+                        let pair : i64 = types.mk_tty(self.tup_intern([types.TY_I64, types.TY_I64]))
+                        return self.mknode(ast.Nk.scall, at, ast.Sb.fileid.ord(), ioff, pair)
+                    self.err("'" ⧺ fm ⧺ """' is not core-2; cwd() answers open_file, create_file,
+                                          " has_file and file_id""")
                     return 0
                 if m = "filetype":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.filetype")

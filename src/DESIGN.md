@@ -154,7 +154,9 @@ Attempt 3 grows core-1 to **core-2** with structs:
   absence composes with `??` and a `@noreturn` default, `has_file(p)`
   answering whether a name is a plain file without opening it (one
   statx, no descriptor, so a resolver that tries many names pays for
-  the one it finds), `create_file`
+  the one it finds), `file_id(p)` answering `(device, inode)` from the
+  same statx — `(0, 0)` where nothing is there — so a reader knows
+  which file a name is before it opens it, `create_file`
   aborting rather than answering, `read_file` (fstat + read loop +
   widening into slots), `write` (narrowing + write loop), `close`,
   and `std.arena.allocator()` as an accepted token — the bump

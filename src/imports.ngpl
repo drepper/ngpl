@@ -241,47 +241,66 @@ fn imp_join(base : str, name : str) → str:
     let bare : str = if "./" ⊑ name: name[2¤ptrdiff…#name] else: name
     if base = "": bare else: base ⧺ "/" ⧺ bare
 
-// Whether there is a file there to be read.  The name is asked about
-// rather than opened: a candidate that is not there -- which is most
-// of them, since a bare name is tried in every directory on the path
-// and with two spellings in each -- costs one statx and no descriptor,
-// where an open would have taken one and handed it straight back.  A
-// directory answers no, where an open for reading would have answered
-// yes to something that reads as nothing.
+// What a name was found to be: the path that answered to it, and what
+// says which file that path is.  Finding it and asking which file it
+// is are one question, asked once: the identity comes back with the
+// name, so a file already in the program is known before it is opened
+// rather than after.  `path` is "" where the name answered to nothing,
+// and `ino` is 0 with it, since no file has the number 0.
+@export
+struct Found:
+    path : str
+    dev : i64
+    ino : i64
+
+@export
+fn imp_nowhere() → Found:
+    (Found{path: "", dev: 0, ino: 0})
+
+// What a path is, as one call: the pair is (0, 0) where the path
+// answers to no file to read, and a candidate that is not there --
+// which is most of them, since a bare name is tried in every directory
+// on the path and with two spellings in each -- costs one statx and no
+// descriptor, where an open would have taken one and handed it back.
+// A directory answers to nothing, where an open for reading would have
+// answered yes to something that reads as nothing.
+@export
 @impure
-fn imp_readable(p : str) → bool:
-    std.fs.cwd().has_file(p)
+fn imp_ident(p : str) → Found:
+    let (d, k) : (i64, i64) = std.fs.cwd().file_id(p)
+    if k = 0:
+        return imp_nowhere()
+    (Found{path: p, dev: d, ino: k})
 
 // A name looked for in one directory, as written and then with the
-// suffix a source file has.  "" where neither is there.
+// suffix a source file has.  Nowhere where neither is there.
 @impure
-fn imp_try(base : str, name : str) → str:
+fn imp_try(base : str, name : str) → Found:
     let p : str = imp_join(base, name)
-    if imp_readable(p):
-        return p
-    let q : str = p ⧺ ".ngpl"
-    if imp_readable(q):
-        return q
-    ""
+    let f : Found = imp_ident(p)
+    if f.ino ≠ 0:
+        return f
+    imp_ident(p ⧺ ".ngpl")
 
-// The file a name asks for, or "" where nothing answers to it.  What
+// The file a name asks for, and what says which file it is; nowhere
+// where nothing answers to it.  What
 // the name says decides where it is looked for: one that begins with a
 // slash says where it is, one that holds a slash says where it is
 // beside this file, and one that says neither is looked for beside this
 // file, then along the search path the command line gave, then where
 // the library lives.
 @impure
-fn imp_resolve(name : str, base : str, paths : str[]) → str:
+fn imp_resolve(name : str, base : str, paths : str[]) → Found:
     if "/" ⊑ name:
         return imp_try("", name)
     if imp_has_slash(name):
         return imp_try(base, name)
-    let here : str = imp_try(base, name)
-    if here ≠ "":
+    let here : Found = imp_try(base, name)
+    if here.ino ≠ 0:
         return here
     foreach d := paths:
-        let p : str = imp_try(d, name)
-        if p ≠ "":
+        let p : Found = imp_try(d, name)
+        if p.ino ≠ 0:
             return p
     imp_try(import_lib_dir(), name)
 
@@ -350,20 +369,24 @@ impl Reader:
     // gives up: one reason is what a caller can act on, and the first
     // is the one that explains the rest.
     @impure
-    fn take(&mut self, path : str, asked : str) → i64:
+    fn take(&mut self, found : Found, asked : str) → i64:
         if self.why ≠ "":
             return ⁻1
+        let path : str = found.path
+        // Which file this is was settled when the name was found, so a
+        // file already in the program is recognized here -- before it
+        // is opened, not after -- whatever this name for it is.  What
+        // the name meant is what it meant then: between the finding and
+        // the reading nothing has looked again, and a file that is
+        // changed underneath a compiler was never going to be read
+        // twice into the same program anyway.
+        let known : i64 = self.seen_at(found.dev, found.ino)
+        if known ≠ ⁻1:
+            return self.cmod[known × 1¤ptrdiff]
         match std.fs.cwd().open_file(path):
             ⊨(file):
-                // which file this is, before it is read: a file
-                // already in the program is not read again, whatever
-                // this name for it is
-                let dev : i64 = file.device()
-                let ino : i64 = file.inode()
-                let known : i64 = self.seen_at(dev, ino)
-                if known ≠ ⁻1:
-                    file.close()
-                    return self.cmod[known × 1¤ptrdiff]
+                let dev : i64 = found.dev
+                let ino : i64 = found.ino
                 let alloc := std.arena.allocator()
                 let text : mut byte[] = file.read_file(alloc)
                 file.close()
@@ -413,17 +436,17 @@ impl Reader:
     // One module: the file it is rooted in.  Answers which module it
     // is, so that the name it was bound to can reach it.
     @impure
-    fn take_module(&mut self, root : str, asked : str) → i64:
+    fn take_module(&mut self, found : Found, asked : str) → i64:
         // A module is loaded once however many bindings name it, so
         // that its types are one type and its globals one storage.
         // Which file a name reaches is the file's to say, so the room
         // for a module is made first and given back where the reading
         // says the file was already in one.
         let me : i64 = @dropunit(#self.mroot)
-        self.mroot.push(root)
+        self.mroot.push(found.path)
         let outer : i64 = self.cur
         self.cur ← me
-        let landed : i64 = self.take(root, asked)
+        let landed : i64 = self.take(found, asked)
         self.cur ← outer
         if landed = me:
             return me
@@ -444,7 +467,11 @@ impl Reader:
         if #roots > 0¤ptrdiff:
             self.mroot.push(roots[0¤ptrdiff])
             foreach nm := roots:
-                _ ← self.take(nm, "")
+                // a name from the command line was not looked for, so
+                // what it is is asked here, where every other name has
+                // been asked already
+                let f0 : Found = imp_ident(nm)
+                _ ← self.take((Found{path: nm, dev: f0.dev, ino: f0.ino}), "")
                 if self.why ≠ "":
                     return
         let at : mut i64 ¤ptrdiff = 0¤ptrdiff
@@ -452,8 +479,8 @@ impl Reader:
             let nm : str = self.pend_file[at]
             let from : str = self.pend_from[at]
             let asked : str = from ⧺ ":" ⧺ tokens.i64_str(self.pend_line[at])
-            let where : str = imp_resolve(nm, dir_of(from), self.paths)
-            if where = "":
+            let where : Found = imp_resolve(nm, dir_of(from), self.paths)
+            if where.path = "":
                 self.why ← asked ⧺ ": cannot find '" ⧺ nm ⧺ "'" ⧺ imp_looked(nm)
                 return
             let target : i64 = self.take_module(where, asked)

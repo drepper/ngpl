@@ -1,0 +1,46 @@
+// What says which file a name is, asked of the name rather than of an
+// open descriptor.
+//
+// The pair is the device the file is on and its number there.  Two
+// names answer for one file exactly when both agree, which is how a
+// reader that follows imports recognizes a file it already holds --
+// and it recognizes it before opening it, because the pair came back
+// with the name.
+//
+// The two ways of asking must agree: what statx says about a name and
+// what it says about a descriptor opened from that name are the same
+// file, and this checks that rather than assuming it.
+
+// what to do when the file this test is reading is not there, which
+// says which file it was rather than stopping with a bare code
+@noreturn
+@impure
+fn vanished(n : str):
+    std.println("'{}' vanished", n)
+    std.exit(3)
+
+@start
+@impure
+fn main():
+    let name : str = "tests/compile/t81_file_id.ngpl"
+    let (dev, num) : (i64, i64) = std.fs.cwd().file_id(name)
+    std.println("there: {}", num ≠ 0)
+
+    // the same file under another name is the same pair
+    let (dev2, num2) : (i64, i64) = std.fs.cwd().file_id("./" ⧺ name)
+    std.println("one file, two names: {}", dev = dev2 and num = num2)
+
+    // and what the descriptor says about it agrees
+    let f := std.fs.cwd().open_file(name) ?? vanished(name)
+    std.println("name and descriptor agree: {}", f.device() = dev and f.inode() = num)
+    f.close()
+
+    // a different file is a different number
+    let (dev3, num3) : (i64, i64) = std.fs.cwd().file_id("tests/compile/t80_has_file.ngpl")
+    std.println("two files: {}", num3 ≠ num)
+
+    // nothing there, a directory, and neither is a file to read
+    let (dev4, num4) : (i64, i64) = std.fs.cwd().file_id("tests/compile/no_such_file.ngpl")
+    std.println("nowhere: {} {}", dev4, num4)
+    let (dev5, num5) : (i64, i64) = std.fs.cwd().file_id("tests/compile")
+    std.println("a directory: {} {}", dev5, num5)

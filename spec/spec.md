@@ -9313,6 +9313,18 @@ Only a plain file answers `true`.  A directory answers `false`, where opening on
 
 The asking costs one call to the system and no descriptor, which is what makes it worth having beside `open_file`: a program that looks for a name in several directories asks about many that are not there and opens the one that is.  A program that is then going to read the file still opens it and decides from that answer.  Between the asking and the opening the file may be gone, so `has_file` is how a program chooses among names, not how it establishes that a read will succeed.
 
+`file_id` asks the same way and answers more: which file the name is, as the device it is on and its number there.
+
+```
+let (dev, num) : (i64, i64) = std.fs.cwd().file_id(name)
+```
+
+Two names answer for one file exactly when both numbers agree.  A name is no answer to that question — one file has as many names as something cares to give it — so a program that must not read one file twice compares the pair, not the spelling.
+
+The pair is `(0, 0)` where the name answers to no file to read.  No file has the number 0, so the pair says both things at once and needs no optional to carry the absence.
+
+What it is for is the case where the question "is it there?" and the question "which file is it?" are the same question.  A reader that follows imports resolves a name to a path, and if the pair it comes back with is one it already holds, the file is one it has already read: it never opens it a second time.  Asking through an open descriptor answers the same pair — `file.device()` and `file.inode()` — and is what a program uses when it holds the file rather than the name.
+
 #### Order
 
 Bindings are destroyed in reverse order of definition.  A resource acquired by using an earlier one is therefore released before the thing it came from — above, `file` is closed before `dir`, never the other way round.

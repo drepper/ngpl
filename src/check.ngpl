@@ -4037,7 +4037,7 @@ impl Checker:
                 self.derr(tok, "std.arena.allocator takes nothing")
             self.set_type(id, types.TY_ALLOC)
             return
-        if sb = ast.Sb.open.ord() or sb = ast.Sb.create.ord() or sb = ast.Sb.hasfile.ord():
+        if sb = ast.Sb.open.ord() or sb = ast.Sb.create.ord() or sb = ast.Sb.hasfile.ord() or sb = ast.Sb.fileid.ord():
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                 self.derr(tok, "touching files is impure; the function wants @impure")
             if self.in_contract:
@@ -4048,6 +4048,8 @@ impl Checker:
                                       types.mk_oty(types.TY_FILE)
                                   elif sb = ast.Sb.hasfile.ord():
                                       types.TY_BOOL
+                                  elif sb = ast.Sb.fileid.ord():
+                                      self.a.nc[id × 1¤ptrdiff]
                                   else:
                                       types.TY_FILE)
                 return
@@ -4064,6 +4066,11 @@ impl Checker:
                 if argc ≠ 1:
                     self.derr(tok, "has_file takes the path alone")
                 self.set_type(id, types.TY_BOOL)
+                return
+            if sb = ast.Sb.fileid.ord():
+                if argc ≠ 1:
+                    self.derr(tok, "file_id takes the path alone")
+                self.set_type(id, self.a.nc[id × 1¤ptrdiff])
                 return
             if argc ≠ 2:
                 self.derr(tok, "create_file takes the path and the mode")
