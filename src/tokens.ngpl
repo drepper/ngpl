@@ -110,7 +110,7 @@ enum Tk : i64:
     rbrace = 80
     qmark = 81    // ? as a type's suffix
     kw_some = 82    // ⊨
-// The quantifiers.  f ∀ v asks whether f holds of every one of the
+    // The quantifiers.  f ∀ v asks whether f holds of every one of the
     // things v holds, f ∃ v whether it holds of any.
     forall = 107    // ∀
     exists = 108    // ∃
@@ -144,7 +144,7 @@ enum Tk : i64:
 // mapped to Tk.reserved, so it is refused wherever a name is expected
 // rather than quietly accepted -- the strict-subset rule.
 @export
-let KEYWORDS : std.dict(str, Tk) = (⸨
+let KEYWORDS : std.dict(str, Tk) = ⸨
     "fn": Tk.kw_fn, "let": Tk.kw_let, "mut": Tk.kw_mut, "if": Tk.kw_if, "elif": Tk.kw_elif, "else": Tk.kw_else,
     "while": Tk.kw_while, "foreach": Tk.kw_foreach, "return": Tk.kw_return, "break": Tk.kw_break, "continue": Tk.kw_continue,
     "true": Tk.kw_true, "false": Tk.kw_false, "and": Tk.kw_and, "or": Tk.kw_or, "not": Tk.kw_not,
@@ -153,51 +153,51 @@ let KEYWORDS : std.dict(str, Tk) = (⸨
     "start": Tk.reserved, "test": Tk.reserved, "expect": Tk.reserved, "wrap": Tk.reserved, "enum": Tk.kw_enum,
     "flag": Tk.reserved, "replaceable": Tk.reserved, "catch": Tk.reserved, "comptime": Tk.reserved,
     "type": Tk.kw_type, "unit": Tk.kw_unit, "module": Tk.reserved, "impure": Tk.reserved, "enumerate": Tk.reserved,
-    "macro": Tk.reserved⸩)
+    "macro": Tk.reserved⸩
 
 // The multi-byte glyphs, keyed by their UTF-8 bytes packed into one
 // number: b0×256+b1 for two-byte glyphs, b0×65536+b1×256+b2 for three.
 // One hash probe per glyph instead of a branch tree over byte values.
 @export
-let GLYPHS2 : std.dict(i32, Tk) = (⸨
-    49835: Tk.shl,      // « shl
-    49851: Tk.shr,      // » shr
+let GLYPHS2 : std.dict(i32, Tk) = ⸨
+    49835: Tk.shl,       // « shl
+    49851: Tk.shr,       // » shr
     49836: Tk.lnot,      // ¬
-    49828: Tk.currency,      // ¤
+    49828: Tk.currency,  // ¤
     50071: Tk.mult,      // ×
-    50103: Tk.divide,      // ÷
-    52923: Tk.lambda⸩)    // λ
+    50103: Tk.divide,    // ÷
+    52923: Tk.lambda⸩    // λ
 
 @export
-let GLYPHS3 : std.dict(i32, Tk) = (⸨
-    14847411: Tk.iota,   // ⍳
+let GLYPHS3 : std.dict(i32, Tk) = ⸨
+    14847411: Tk.iota,      // ⍳
     14847412: Tk.reshape,   // ⍴
-    14846622: Tk.satadd,   // ⊞
-    14846623: Tk.satsub,   // ⊟
-    14846624: Tk.satmul,   // ⊠
-    14846613: Tk.lxor,   // ⊕
-    14846652: Tk.lnand,   // ⊼
-    14846653: Tk.lnor,   // ⊽
-    14845584: Tk.assign,   // ←
-    14845586: Tk.arrow,   // →
-    14844347: Tk.neg,   // ⁻
-    14844070: Tk.ellipsis,   // …
-    14846368: Tk.ne,   // ≠
-    14846119: Tk.land,   // ∧
-    14846120: Tk.lor,   // ∨
-    14847112: Tk.max,   // ⌈
-    14847114: Tk.min,   // ⌊
-    14854074: Tk.concat,   // ⧺
+    14846622: Tk.satadd,    // ⊞
+    14846623: Tk.satsub,    // ⊟
+    14846624: Tk.satmul,    // ⊠
+    14846613: Tk.lxor,      // ⊕
+    14846652: Tk.lnand,     // ⊼
+    14846653: Tk.lnor,      // ⊽
+    14845584: Tk.assign,    // ←
+    14845586: Tk.arrow,     // →
+    14844347: Tk.neg,       // ⁻
+    14844070: Tk.ellipsis,  // …
+    14846368: Tk.ne,        // ≠
+    14846119: Tk.land,      // ∧
+    14846120: Tk.lor,       // ∨
+    14847112: Tk.max,       // ⌈
+    14847114: Tk.min,       // ⌊
+    14854074: Tk.concat,    // ⧺
     14846632: Tk.kw_some,   // ⊨
-    14846080: Tk.forall,  // ∀
-    14846083: Tk.exists,  // ∃
-    14846084: Tk.notex,  // ∄
-    14846609: Tk.prefix,  // ⊑
-    14846610: Tk.suffix,  // ⊒
-    14846085: Tk.empty,   // ∅
-    14858408: Tk.lhash,   // ⸨
-    14858409: Tk.rhash,   // ⸩
-    14846090: Tk.elem⸩)  // ∊
+    14846080: Tk.forall,    // ∀
+    14846083: Tk.exists,    // ∃
+    14846084: Tk.notex,     // ∄
+    14846609: Tk.prefix,    // ⊑
+    14846610: Tk.suffix,    // ⊒
+    14846085: Tk.empty,     // ∅
+    14858408: Tk.lhash,     // ⸨
+    14858409: Tk.rhash,     // ⸩
+    14846090: Tk.elem⸩      // ∊
 
 // ===========================================================================
 // Small helpers
@@ -234,4 +234,3 @@ fn run_str(src : byte[], off : i64, n : i64) → str:
         let b : i64 = src[(off + i) × 1¤byte]
         s ← s ⧺ b.chr()
     s
-
