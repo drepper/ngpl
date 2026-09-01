@@ -17,10 +17,12 @@ unit col
 // expectation names.  The level says whether the program is refused or
 // merely remarked on -- a warning is reported and the program still
 // compiles, unless --Werror says otherwise.
+// Whether the program is refused or merely remarked on.
 @export
-let DIAG_ERROR : i64 = 0
-@export
-let DIAG_WARNING : i64 = 1
+enum Level : u8:
+    error = 0
+    warning = 1
+
 @export
 let DIAG_NONE : i64 = 0      // no number yet
 
@@ -29,7 +31,7 @@ struct Diag:
     line : i64 ¤"line"
     col : i64 ¤"col"
     msg : str
-    level : i64
+    level : Level
     code : i64
 
 // Where the sources begin in the one text they were read into.  A

@@ -287,3 +287,10 @@ Outstanding
 [x] a newline inside a string literal is an error naming the unterminated string -- "string
     literal is not closed before the end of the line" -- where it used to advance nothing
     and hang the scanner until killed.  tests/output/string_newline.
+
+[x] a global may be an immutable array of constants, built by the same init function the
+    image runs before `@start` that builds a global dictionary: `let SQUARES : i64[] =
+    [0, 1, 4, 9]`, refused where it is `mut` and where an element is not a constant the
+    compiler can see.  A table read on every operation -- the IR's reads/canon/copies
+    masks -- is written once beside the program instead of being rebuilt by the function
+    that reads it.  tests/compile/t79_global_table and refuse/global_array_{mut,computed}.

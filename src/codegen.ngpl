@@ -72,7 +72,7 @@ struct Compiled:
 // a synthesized function starts from a clean sheet
 fn lw_reset(lw : &mut lower.Lower, fname : str):
     while #lw.op > 0:
-        _ ← lw.op.pop() ?? 0
+        _ ← lw.op.pop() ?? ir_m.Ir.const
         _ ← lw.ia.pop() ?? 0
         _ ← lw.ib.pop() ?? 0
         _ ← lw.ic.pop() ?? 0
@@ -92,7 +92,7 @@ fn lw_reset(lw : &mut lower.Lower, fname : str):
 
 // …and leaves its instructions behind as an IrFn
 fn lw_snapshot(lw : &lower.Lower) → ir_m.IrFn:
-    let opc : mut i64[] = []
+    let opc : mut ir_m.Ir[] = []
     let iac : mut i64[] = []
     let ibc : mut i64[] = []
     let icc : mut i64[] = []
@@ -124,42 +124,42 @@ fn lw_snapshot(lw : &lower.Lower) → ir_m.IrFn:
 fn lower_argsfilter(lw : &mut lower.Lower) → ir_m.IrFn:
     lw_reset(&lw, "the argument filter")
     let raw : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ARGS, 0, 0, 0, raw, 0)
+    lw.ir(ir_m.Ir.args, 0, 0, 0, raw, 0)
     let out : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ANEW, 4, 0, 0, out, 0)
+    lw.ir(ir_m.Ir.anew, 4, 0, 0, out, 0)
     let n : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ALEN, raw, 0, 0, n, 0)
+    lw.ir(ir_m.Ir.alen, raw, 0, 0, n, 0)
     let i : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 0, 0, 0, i, 0)
+    lw.ir(ir_m.Ir.const, 0, 0, 0, i, 0)
     let t1 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    lw.ir(ir_m.Ir.sc, lw.intern("--test"), 0, 0, t1, 0)
     let t2 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    lw.ir(ir_m.Ir.sc, lw.intern("--skip-tests"), 0, 0, t2, 0)
     let ltop : i64 = lw.label()
     let lskip : i64 = lw.label()
     let lend : i64 = lw.label()
-    lw.ir(ir_m.IR_LABEL, ltop, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, ltop, 0, 0, 0, 0)
     let c : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CLT, i, n, 0, c, 64 + 256)
-    lw.ir(ir_m.IR_JZ, c, lend, 0, 0, 0)
+    lw.ir(ir_m.Ir.clt, i, n, 0, c, 64 + 256)
+    lw.ir(ir_m.Ir.jz, c, lend, 0, 0, 0)
     let sv : i64 = lw.tmp()
-    lw.ir(ir_m.IR_AIDX, raw, i, 0, sv, 0)
+    lw.ir(ir_m.Ir.aidx, raw, i, 0, sv, 0)
     let e1 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SEQV, sv, t1, 0, e1, 64)
-    lw.ir(ir_m.IR_JNZ, e1, lskip, 0, 0, 0)
+    lw.ir(ir_m.Ir.seqv, sv, t1, 0, e1, 64)
+    lw.ir(ir_m.Ir.jnz, e1, lskip, 0, 0, 0)
     let e2 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SEQV, sv, t2, 0, e2, 64)
-    lw.ir(ir_m.IR_JNZ, e2, lskip, 0, 0, 0)
-    lw.ir(ir_m.IR_APUSH, out, sv, 0, 0, 0)
-    lw.ir(ir_m.IR_LABEL, lskip, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.seqv, sv, t2, 0, e2, 64)
+    lw.ir(ir_m.Ir.jnz, e2, lskip, 0, 0, 0)
+    lw.ir(ir_m.Ir.apush, out, sv, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, lskip, 0, 0, 0, 0)
     let one : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 1, 0, 0, one, 0)
+    lw.ir(ir_m.Ir.const, 1, 0, 0, one, 0)
     let ni : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ADDW, i, one, 0, ni, 64 + 256)
-    lw.ir(ir_m.IR_MOV, ni, 0, 0, i, 0)
-    lw.ir(ir_m.IR_JMP, ltop, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_LABEL, lend, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_RET, out, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.addw, i, one, 0, ni, 64 + 256)
+    lw.ir(ir_m.Ir.mov, ni, 0, 0, i, 0)
+    lw.ir(ir_m.Ir.jmp, ltop, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, lend, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.ret, out, 0, 0, 0, 0)
     lw_snapshot(&lw)
 
 // the test driver the image runs between the globals and @start: the
@@ -176,84 +176,84 @@ fn lower_testdriver(lw : &mut lower.Lower, a : ast.Ast) → ir_m.IrFn:
                 tests.push(@dropunit(fi))
     let total : i64 = @dropunit(#tests) + @dropunit(#a.igtests)
     let argv : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ARGS, 0, 0, 0, argv, 0)
+    lw.ir(ir_m.Ir.args, 0, 0, 0, argv, 0)
     let ton : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 0, 0, 0, ton, 0)
+    lw.ir(ir_m.Ir.const, 0, 0, 0, ton, 0)
     let skp : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 0, 0, 0, skp, 0)
+    lw.ir(ir_m.Ir.const, 0, 0, 0, skp, 0)
     let n : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ALEN, argv, 0, 0, n, 0)
+    lw.ir(ir_m.Ir.alen, argv, 0, 0, n, 0)
     let i : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 0, 0, 0, i, 0)
+    lw.ir(ir_m.Ir.const, 0, 0, 0, i, 0)
     let t1 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    lw.ir(ir_m.Ir.sc, lw.intern("--test"), 0, 0, t1, 0)
     let t2 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    lw.ir(ir_m.Ir.sc, lw.intern("--skip-tests"), 0, 0, t2, 0)
     let one : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CONST, 1, 0, 0, one, 0)
+    lw.ir(ir_m.Ir.const, 1, 0, 0, one, 0)
     let ltop : i64 = lw.label()
     let lnext : i64 = lw.label()
     let l2 : i64 = lw.label()
     let lscanned : i64 = lw.label()
     let lrun : i64 = lw.label()
     let lend : i64 = lw.label()
-    lw.ir(ir_m.IR_LABEL, ltop, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, ltop, 0, 0, 0, 0)
     let c : i64 = lw.tmp()
-    lw.ir(ir_m.IR_CLT, i, n, 0, c, 64 + 256)
-    lw.ir(ir_m.IR_JZ, c, lscanned, 0, 0, 0)
+    lw.ir(ir_m.Ir.clt, i, n, 0, c, 64 + 256)
+    lw.ir(ir_m.Ir.jz, c, lscanned, 0, 0, 0)
     let sv : i64 = lw.tmp()
-    lw.ir(ir_m.IR_AIDX, argv, i, 0, sv, 0)
+    lw.ir(ir_m.Ir.aidx, argv, i, 0, sv, 0)
     let e1 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SEQV, sv, t1, 0, e1, 64)
-    lw.ir(ir_m.IR_JZ, e1, l2, 0, 0, 0)
-    lw.ir(ir_m.IR_MOV, one, 0, 0, ton, 0)
-    lw.ir(ir_m.IR_LABEL, l2, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.seqv, sv, t1, 0, e1, 64)
+    lw.ir(ir_m.Ir.jz, e1, l2, 0, 0, 0)
+    lw.ir(ir_m.Ir.mov, one, 0, 0, ton, 0)
+    lw.ir(ir_m.Ir.label, l2, 0, 0, 0, 0)
     let e2 : i64 = lw.tmp()
-    lw.ir(ir_m.IR_SEQV, sv, t2, 0, e2, 64)
-    lw.ir(ir_m.IR_JZ, e2, lnext, 0, 0, 0)
-    lw.ir(ir_m.IR_MOV, one, 0, 0, skp, 0)
-    lw.ir(ir_m.IR_LABEL, lnext, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.seqv, sv, t2, 0, e2, 64)
+    lw.ir(ir_m.Ir.jz, e2, lnext, 0, 0, 0)
+    lw.ir(ir_m.Ir.mov, one, 0, 0, skp, 0)
+    lw.ir(ir_m.Ir.label, lnext, 0, 0, 0, 0)
     let ni : i64 = lw.tmp()
-    lw.ir(ir_m.IR_ADDW, i, one, 0, ni, 64 + 256)
-    lw.ir(ir_m.IR_MOV, ni, 0, 0, i, 0)
-    lw.ir(ir_m.IR_JMP, ltop, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_LABEL, lscanned, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_JZ, ton, lrun, 0, 0, 0)
+    lw.ir(ir_m.Ir.addw, i, one, 0, ni, 64 + 256)
+    lw.ir(ir_m.Ir.mov, ni, 0, 0, i, 0)
+    lw.ir(ir_m.Ir.jmp, ltop, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, lscanned, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.jz, ton, lrun, 0, 0, 0)
     // --test: report and count, then exit without @start
     if total = 0:
-        lw.ir(ir_m.IR_EPRINTS, lw.intern("""error: no tests: nothing in this file is marked @test or
+        lw.ir(ir_m.Ir.eprints, lw.intern("""error: no tests: nothing in this file is marked @test or
                                      " @expect\n"""), 0, 0, 0, 0)
         let z0 : i64 = lw.tmp()
-        lw.ir(ir_m.IR_CONST, 1, 0, 0, z0, 0)
-        lw.ir(ir_m.IR_EXIT, z0, 0, 0, 0, 0)
+        lw.ir(ir_m.Ir.const, 1, 0, 0, z0, 0)
+        lw.ir(ir_m.Ir.exit, z0, 0, 0, 0, 0)
     else:
         if #a.igtests > 0:
             foreach gname := a.igtests:
-                lw.ir(ir_m.IR_EPRINTS, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
-        lw.ir(ir_m.IR_EPRINTS, lw.intern("\nrunning " ⧺ tokens.i64_str(total) ⧺ " tests\n"), 0, 0, 0, 0)
+                lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
+        lw.ir(ir_m.Ir.eprints, lw.intern("\nrunning " ⧺ tokens.i64_str(total) ⧺ " tests\n"), 0, 0, 0, 0)
         if #tests > 0:
             foreach fi2 := tests:
-                lw.ir(ir_m.IR_EPRINTS, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
+                lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
                 let coff : i64 = @dropunit(#lw.extra)
                 lw.extra.push(0)
                 let d : i64 = lw.tmp()
-                lw.ir(ir_m.IR_CALL, fi2, coff, 0, d, 0)
-                lw.ir(ir_m.IR_EPRINTS, lw.intern("ok\n"), 0, 0, 0, 0)
-        lw.ir(ir_m.IR_EPRINTS, lw.intern("\ntest result: ok. " ⧺ tokens.i64_str(total) ⧺ " passed; 0 failed\n"), 0, 0, 0, 0)
+                lw.ir(ir_m.Ir.call, fi2, coff, 0, d, 0)
+                lw.ir(ir_m.Ir.eprints, lw.intern("ok\n"), 0, 0, 0, 0)
+        lw.ir(ir_m.Ir.eprints, lw.intern("\ntest result: ok. " ⧺ tokens.i64_str(total) ⧺ " passed; 0 failed\n"), 0, 0, 0, 0)
         let z1 : i64 = lw.tmp()
-        lw.ir(ir_m.IR_CONST, 0, 0, 0, z1, 0)
-        lw.ir(ir_m.IR_EXIT, z1, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_LABEL, lrun, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_JNZ, skp, lend, 0, 0, 0)
+        lw.ir(ir_m.Ir.const, 0, 0, 0, z1, 0)
+        lw.ir(ir_m.Ir.exit, z1, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.label, lrun, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.jnz, skp, lend, 0, 0, 0)
     // the ordinary run: every test, silently, before @start
     if #tests > 0:
         foreach fi3 := tests:
             let coff2 : i64 = @dropunit(#lw.extra)
             lw.extra.push(0)
             let d2 : i64 = lw.tmp()
-            lw.ir(ir_m.IR_CALL, fi3, coff2, 0, d2, 0)
-    lw.ir(ir_m.IR_LABEL, lend, 0, 0, 0, 0)
-    lw.ir(ir_m.IR_RET, ⁻1, 0, 0, 0, 0)
+            lw.ir(ir_m.Ir.call, fi3, coff2, 0, d2, 0)
+    lw.ir(ir_m.Ir.label, lend, 0, 0, 0, 0)
+    lw.ir(ir_m.Ir.ret, ⁻1, 0, 0, 0, 0)
     lw_snapshot(&lw)
 
 // the init function the image runs before @start: every marked
@@ -261,7 +261,7 @@ fn lower_testdriver(lw : &mut lower.Lower, a : ast.Ast) → ir_m.IrFn:
 @export
 fn lower_ginit(lw : &mut lower.Lower, a : ast.Ast, chk : check.Chk) → ir_m.IrFn:
     while #lw.op > 0:
-        _ ← lw.op.pop() ?? 0
+        _ ← lw.op.pop() ?? ir_m.Ir.const
         _ ← lw.ia.pop() ?? 0
         _ ← lw.ib.pop() ?? 0
         _ ← lw.ic.pop() ?? 0
@@ -281,9 +281,9 @@ fn lower_ginit(lw : &mut lower.Lower, a : ast.Ast, chk : check.Chk) → ir_m.IrF
     foreach g := chk.ginit:
         lw.tnext ← lw.tbase
         let v : i64 = lw.lower_expr(a.globals[g × 1¤ptrdiff].init)
-        lw.ir(ir_m.IR_GSTORE, g, v, 0, 0, 0)
-    lw.ir(ir_m.IR_RET, ⁻1, 0, 0, 0, 0)
-    let opc : mut i64[] = []
+        lw.ir(ir_m.Ir.gstore, g, v, 0, 0, 0)
+    lw.ir(ir_m.Ir.ret, ⁻1, 0, 0, 0, 0)
+    let opc : mut ir_m.Ir[] = []
     let iac : mut i64[] = []
     let ibc : mut i64[] = []
     let icc : mut i64[] = []
@@ -390,7 +390,7 @@ fn incr_lines_up(prev : incr_m.Prev, incr : incr_m.Incr, c : Compiled) → str:
 fn codegen(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : elf.Target,
            stack_size : i64, guard_size : i64, olevel : i64, want_log : bool,
            incr : incr_m.Incr) → Compiled:
-    if tgt.id ≠ elf.TGT_X64:
+    if tgt.id ≠ elf.Tgt.x64:
         // the shared driver and the target's instruction layer carry
         // every other architecture
         return codegen_t.codegen_t(a, toks, src, chk, tgt, stack_size, guard_size, olevel, want_log, incr)
@@ -1063,10 +1063,10 @@ fn codegen(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : el
     let cdiags : mut diag.Diag[] = []
     if em.max_frame > guard_size:
         cdiags.push(diag.Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ tokens.i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ tokens.i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size", level: diag.Level.error, code: diag.DIAG_NONE})
     if em.max_frame >= stack_size:
         cdiags.push(diag.Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ tokens.i64_str(stack_size) ⧺ "; raise --stack-size", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                         msg: "a function claims " ⧺ tokens.i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ tokens.i64_str(stack_size) ⧺ "; raise --stack-size", level: diag.Level.error, code: diag.DIAG_NONE})
     // The symbols, in the order the code lays them out: the entry
     // point, the program's own functions, the ones the compiler
     // synthesized behind them, and the runtime last, which is where

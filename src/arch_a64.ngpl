@@ -35,10 +35,6 @@ let CC_GT : i64 = 4
 @export
 let CC_GE : i64 = 5
 
-// IR the runtime builders use and the front end never writes
-@export
-let IR_SYSC : i64 = 108    // d ← syscall a (an SC_* index); extra b: [argc, arg vregs…]
-
 // what the runtime asks of the kernel, named so the builders stay
 // architecture-blind; the target row resolves each to its number
 @export

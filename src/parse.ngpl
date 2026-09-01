@@ -196,7 +196,7 @@ impl Parser:
         if not self.poisoned:
             let at : i64 ¤ptrdiff = tok
             self.diags.push(diag.Diag{line: self.toks.line[at],
-                                 col: self.toks.col[at], msg: m, level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                                 col: self.toks.col[at], msg: m, level: diag.Level.error, code: diag.DIAG_NONE})
         self.poisoned ← true
 
     // the same, saying which complaint it is; see Checker.derrc
@@ -205,14 +205,14 @@ impl Parser:
         if not self.poisoned:
             let at : i64 ¤ptrdiff = tok
             self.diags.push(diag.Diag{line: self.toks.line[at],
-                                 col: self.toks.col[at], msg: m, level: diag.DIAG_ERROR, code: code})
+                                 col: self.toks.col[at], msg: m, level: diag.Level.error, code: code})
         self.poisoned ← true
 
     fn err(&mut self, m : str):
         if not self.poisoned:
             let at : i64 ¤ptrdiff = self.pos
             self.diags.push(diag.Diag{line: self.toks.line[at],
-                                 col: self.toks.col[at], msg: m, level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                                 col: self.toks.col[at], msg: m, level: diag.Level.error, code: diag.DIAG_NONE})
         self.poisoned ← true
         if #self.diags >= 20:
             // enough; parking on the closing EOF stops everything
@@ -2902,7 +2902,7 @@ impl Parser:
         let is_lstb : mut bool = false
         let invs : mut i64[] = []
         let expects : mut i64 = 0
-        let exp_lvl : mut i64[] = []
+        let exp_lvl : mut diag.Level[] = []
         let exp_code : mut i64[] = []
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
@@ -2984,7 +2984,7 @@ impl Parser:
                 // @expect <level> <code> ["message"], or the older
                 // <level> "message"
                 if self.peek() = tokens.Tk.number:
-                    exp_lvl.push(if lvl = "warning": diag.DIAG_WARNING else: diag.DIAG_ERROR)
+                    exp_lvl.push(if lvl = "warning": diag.Level.warning else: diag.Level.error)
                     exp_code.push(self.toks.val[self.pos × 1¤ptrdiff])
                     self.pos ← self.pos + 1
                     if self.peek() = tokens.Tk.string:
@@ -3040,7 +3040,7 @@ impl Parser:
                 self.pending_exp ← @dropunit(#self.extra)
                 self.extra.push(@dropunit(#exp_code))
                 foreach i := 0…#exp_code:
-                    self.extra.push(exp_lvl[i])
+                    self.extra.push(exp_lvl[i].ord())
                     self.extra.push(exp_code[i])
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (if is_repl: 1 else: 0) + (if is_exp: 2 else: 0)
@@ -3207,7 +3207,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
             // nothing half-built is left where the recipe can call it
             if lenient and @dropunit(#p.diags) > d0 and @dropunit(#p.builds) = b0:
                 while @dropunit(#p.diags) > d0:
-                    _ ← p.diags.pop() ?? (diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                    _ ← p.diags.pop() ?? (diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.Level.error, code: diag.DIAG_NONE})
                 while @dropunit(#p.fns) > f0:
                     _ ← p.fns.pop() ?? p.fns[0¤ptrdiff]
                 while @dropunit(#p.globals) > g0:

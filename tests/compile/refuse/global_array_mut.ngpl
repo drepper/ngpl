@@ -1,0 +1,10 @@
+// A global array is built once, before @start, and read from there
+// ever after: nothing writes it, so a mut one would be a table the
+// program could change under the functions that read it.  A mut table
+// belongs to the function that wants it.
+let TABLE : mut i64[] = [1, 2, 3]
+
+@start
+@impure
+fn main():
+    std.println("{}", TABLE[0 × 1¤ptrdiff])

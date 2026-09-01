@@ -55,10 +55,10 @@ let BT_DIGITS : i64 = 16
 // because that is what the stack is aligned to, and it puts the return
 // address at eight and the saved frame pointer at four.
 fn bt_prev_off(tg : elf.Target) → i64:
-    if tg.id = elf.TGT_RV32: 4 else: 0
+    if tg.id = elf.Tgt.rv32: 4 else: 0
 
 fn bt_ret_off(tg : elf.Target) → i64:
-    if tg.id = elf.TGT_RV32: 8 else: tg.ptr
+    if tg.id = elf.Tgt.rv32: 8 else: tg.ptr
 
 // ---------------------------------------------------------------------------
 // The table

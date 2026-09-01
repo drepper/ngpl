@@ -10,54 +10,38 @@ let tokens := @import("tokens")
 let types := @import("types")
 
 // method ids the checker writes into an MCALL's nc
-
-
 @export
-let MID_PUSH : i64 = 1
-@export
-let MID_POP : i64 = 2
-@export
-let MID_GET : i64 = 3
-@export
-let MID_CHR : i64 = 4
-@export
-let MID_ORD : i64 = 5
-@export
-let MID_CHARS : i64 = 6
-@export
-let MID_READF : i64 = 7
-@export
-let MID_WRITEF : i64 = 8
-@export
-let MID_CLOSEF : i64 = 9
-@export
-let MID_ITER : i64 = 10
-@export
-let MID_NEXT : i64 = 11
-@export
-let MID_DIRITER : i64 = 12
-@export
-let MID_WRITEV : i64 = 13
-@export
-let MID_HUPDATE : i64 = 14   // h.update(x): another piece of the message
+enum Mid : u8:
+    push = 1
+    pop = 2
+    get = 3
+    chr = 4
+    ord = 5
+    chars = 6
+    readf = 7
+    writef = 8
+    closef = 9
+    iter = 10
+    next = 11
+    diriter = 12
+    writev = 13
+    hupdate = 14   // h.update(x): another piece of the message
+    hdigest = 15   // h.digest(): the answer, and the end of the handle
+    fdev = 16   // f.device(): which device the file is on
+    fino = 17   // f.inode(): its number on that device
 
 // What is left of a binding while something else borrows it.  A borrow
 // is a claim on the thing borrowed, and the binding is what the claim
 // is taken out of: while a shared borrow is outstanding the binding may
 // be read and not changed, and while a mutable one is outstanding the
 // binding is not a way to reach the thing at all, because the borrow is.
-let HOLD_FREE : i64 = 0
-let HOLD_READ : i64 = 1
-let HOLD_NONE : i64 = 2
+enum Hold : u8:
+    free = 0
+    read = 1
+    none = 2
 // the last-use table's size: a power of two, and more than the names
 // any one function has, so a probe ends
 let LU_SIZE : i64 = 8192
-@export
-let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handle
-@export
-let MID_FDEV : i64 = 16      // f.device(): which device the file is on
-@export
-let MID_FINO : i64 = 17      // f.inode(): its number on that device
 
 // an enum's own name, less the module it was written in
 fn enum_bare(whole : str) → str:
@@ -315,7 +299,7 @@ struct Checker:
     // had before, the line the lend runs to, and how it is lent
     lend_b : i64[]
     lend_o : i64[]
-    lend_back : i64[]
+    lend_back : Hold[]
     lend_until : i64 ¤"line"[]
     lend_how : i64[]
     // The last line each name in the function under check is read on,
@@ -382,17 +366,17 @@ struct Checker:
     smut : i64[]
     sslot : i64[]
     // What a binding has lent out, and so what is left of it:
-    // HOLD_FREE while nothing borrows it, HOLD_READ while something
-    // is reading it and it may only be read, HOLD_NONE while
+    // Hold.free while nothing borrows it, Hold.read while something
+    // is reading it and it may only be read, Hold.none while
     // something has it mutably and the name reaches nothing at all.
-    sheld : i64[]
+    sheld : Hold[]
     // Every hold taken, and what the binding said before it was taken,
     // so the scope that took a hold is the scope that gives it back.
     // A borrow ends where the thing borrowing it ends: a walk's at the
     // end of its body, an iterator's at the end of the block it was
     // made in, since nothing in the language says sooner.
     hslot : i64[]
-    hback : i64[]
+    hback : Hold[]
     hmark : i64[]
     marks : i64[]
     nslots : i64
@@ -418,7 +402,7 @@ struct Checker:
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
         self.diags.push(diag.Diag{line: self.toks.line[tok × 1¤ptrdiff],
-                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.Level.error, code: diag.DIAG_NONE})
 
     // The same complaint, saying which one it is.  A number is what an
     // @expect matches on and what a reader looks up; the words beside
@@ -426,13 +410,13 @@ impl Checker:
     @pre(code > 0)
     fn derrc(&mut self, tok : i64, code : i64, m : str):
         self.diags.push(diag.Diag{line: self.toks.line[tok × 1¤ptrdiff],
-                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.DIAG_ERROR, code: code})
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.Level.error, code: code})
 
     // A warning does not refuse the program; -Werror makes it one.
     @pre(code > 0)
     fn dwarn(&mut self, tok : i64, code : i64, m : str):
         self.diags.push(diag.Diag{line: self.toks.line[tok × 1¤ptrdiff],
-                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.DIAG_WARNING, code: code})
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: diag.Level.warning, code: code})
 
     fn text(&self, tok : i64) → str:
         tokens.run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
@@ -658,7 +642,7 @@ impl Checker:
         self.stype.push(ty)
         self.smut.push(is_mut)
         self.sslot.push(slot)
-        self.sheld.push(HOLD_FREE)
+        self.sheld.push(Hold.free)
         self.slend.push(⁻1)
         self.sborrow.push(0)
         self.life_born(slot, tok)
@@ -706,7 +690,7 @@ impl Checker:
         let hlow : i64 = self.hmark.pop() ?? 0
         while @dropunit(#self.hslot) > hlow:
             let hs : i64 = self.hslot.pop() ?? 0
-            let hb : i64 = self.hback.pop() ?? 0
+            let hb : Hold = self.hback.pop() ?? Hold.free
             self.sheld[hs × 1¤ptrdiff] ← hb
         let low : i64 = self.marks.pop() ?? 0
         // a lend ends with the scope of either side of it
@@ -717,7 +701,7 @@ impl Checker:
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
-            _ ← self.sheld.pop() ?? 0
+            _ ← self.sheld.pop() ?? Hold.free
             _ ← self.slend.pop() ?? 0
             _ ← self.sborrow.pop() ?? 0
 
@@ -1948,10 +1932,10 @@ impl Checker:
             return
         let s : i64 = self.lookup(name)
         if s ≠ ⁻1:
-            if self.sheld[s × 1¤ptrdiff] = HOLD_NONE and self.slend[s × 1¤ptrdiff] ≠ ⁻1:
+            if self.sheld[s × 1¤ptrdiff] = Hold.none and self.slend[s × 1¤ptrdiff] ≠ ⁻1:
                 let bi : i64 = self.slend[s × 1¤ptrdiff]
                 self.derrc(tok, 2431, "'" ⧺ name ⧺ "' is lent out to be changed to '" ⧺ self.snames[bi × 1¤ptrdiff] ⧺ "' until line " ⧺ tokens.i64_str(@dropunit(self.lend_line_of(bi))) ⧺ ", so the name reaches nothing until then")
-            elif self.sheld[s × 1¤ptrdiff] = HOLD_NONE:
+            elif self.sheld[s × 1¤ptrdiff] = Hold.none:
                 self.derrc(tok, 2401, "'" ⧺ name ⧺ """' is lent out to be changed, so the name
                                                     " reaches nothing until the borrow ends; what
                                                     " the walk binds is the way in""")
@@ -3270,7 +3254,7 @@ impl Checker:
         let sv_slot : mut i64[] = []
         foreach v := self.sslot:
             sv_slot.push(v)
-        let sv_held : mut i64[] = []
+        let sv_held : mut Hold[] = []
         foreach v := self.sheld:
             sv_held.push(v)
         let sv_marks : mut i64[] = []
@@ -3279,7 +3263,7 @@ impl Checker:
         let sv_hslot : mut i64[] = []
         foreach v := self.hslot:
             sv_hslot.push(v)
-        let sv_hback : mut i64[] = []
+        let sv_hback : mut Hold[] = []
         foreach v := self.hback:
             sv_hback.push(v)
         let sv_hmark : mut i64[] = []
@@ -4182,7 +4166,7 @@ impl Checker:
                 return
             if t = types.TY_UNT:
                 self.adopt(na, types.TY_I64)
-            self.a.nc[id × 1¤ptrdiff] ← MID_CHR
+            self.a.nc[id × 1¤ptrdiff] ← Mid.chr.ord()
             self.set_type(id, types.TY_CHAR)
             return
         if types.ty_is_enum(t) and m = "ord":
@@ -4202,7 +4186,7 @@ impl Checker:
                 self.a.nc[id × 1¤ptrdiff] ← 0
                 self.set_type(id, ew)
                 return
-            self.a.nc[id × 1¤ptrdiff] ← MID_ORD
+            self.a.nc[id × 1¤ptrdiff] ← Mid.ord.ord()
             self.set_type(id, ew)
             return
         if t = types.TY_CHAR and m = "ord":
@@ -4214,7 +4198,7 @@ impl Checker:
                 self.a.nb[id × 1¤ptrdiff] ← 0
                 self.set_type(id, types.TY_U32)
                 return
-            self.a.nc[id × 1¤ptrdiff] ← MID_ORD
+            self.a.nc[id × 1¤ptrdiff] ← Mid.ord.ord()
             self.set_type(id, types.TY_U32)
             return
         if t = types.TY_HASH and (m = "update" or m = "digest"):
@@ -4230,12 +4214,12 @@ impl Checker:
                     let ut : i64 = types.ty_strip_ref(self.ty_of(uv))
                     if ut ≠ types.mk_aty(types.TY_U8) and ut ≠ types.TY_STR:
                         self.derr(tok, "update adds a string or its bytes, not " ⧺ self.tn(ut))
-                self.a.nc[id × 1¤ptrdiff] ← MID_HUPDATE
+                self.a.nc[id × 1¤ptrdiff] ← Mid.hupdate.ord()
                 self.set_type(id, types.TY_UNIT)
                 return
             if argc0 ≠ 0:
                 self.derr(tok, "digest takes nothing; it answers what was added")
-            self.a.nc[id × 1¤ptrdiff] ← MID_HDIGEST
+            self.a.nc[id × 1¤ptrdiff] ← Mid.hdigest.ord()
             // The handle's type does not say which algorithm made it,
             // and with one algorithm it does not have to.  A second
             // would have to be told apart here, so the day one arrives
@@ -4254,7 +4238,7 @@ impl Checker:
                 self.check_expr(pe, types.mk_aty(types.TY_IOVEC))
                 if types.ty_strip_ref(self.ty_of(pe)) ≠ types.mk_aty(types.TY_IOVEC):
                     self.derr(tok, "writev writes runs of bytes; std.iov makes one, and this is " ⧺ self.tn(self.ty_of(pe)))
-            self.a.nc[id × 1¤ptrdiff] ← MID_WRITEV
+            self.a.nc[id × 1¤ptrdiff] ← Mid.writev.ord()
             self.set_type(id, types.TY_UNIT)
             return
         if t = types.TY_FILE and (m = "device" or m = "inode"):
@@ -4265,7 +4249,7 @@ impl Checker:
                 self.derr(tok, "asking about a file is impure; the function wants @impure")
             if argc0 ≠ 0:
                 self.derr(tok, m ⧺ " takes nothing")
-            self.a.nc[id × 1¤ptrdiff] ← (if m = "device": MID_FDEV else: MID_FINO)
+            self.a.nc[id × 1¤ptrdiff] ← (if m = "device": Mid.fdev.ord() else: Mid.fino.ord())
             self.set_type(id, types.TY_I64)
             return
         if t = types.TY_FILE and (m = "read_file" or m = "write" or m = "close"):
@@ -4280,7 +4264,7 @@ impl Checker:
                     if self.ty_of(al) ≠ types.TY_ALLOC:
                         self.derr(tok, """read_file reads through an allocator;
                                         " std.arena.allocator() answers one""")
-                self.a.nc[id × 1¤ptrdiff] ← MID_READF
+                self.a.nc[id × 1¤ptrdiff] ← Mid.readf.ord()
                 self.set_type(id, types.mk_aty(types.TY_U8))
                 return
             if m = "write":
@@ -4291,12 +4275,12 @@ impl Checker:
                     self.check_expr(bs, types.TY_UNIT)
                     if self.ty_of(bs) ≠ types.mk_aty(types.TY_U8):
                         self.derr(tok, "write puts down bytes, not " ⧺ self.tn(self.ty_of(bs)))
-                self.a.nc[id × 1¤ptrdiff] ← MID_WRITEF
+                self.a.nc[id × 1¤ptrdiff] ← Mid.writef.ord()
                 self.set_type(id, types.TY_UNIT)
                 return
             if argc0 ≠ 0:
                 self.derr(tok, "close takes nothing")
-            self.a.nc[id × 1¤ptrdiff] ← MID_CLOSEF
+            self.a.nc[id × 1¤ptrdiff] ← Mid.closef.ord()
             self.set_type(id, types.TY_UNIT)
             return
         if t = types.TY_DIR and m = "iterate":
@@ -4311,7 +4295,7 @@ impl Checker:
             if di = ⁻1:
                 di ← dm
                 self.ite.push(de)
-            self.a.nc[id × 1¤ptrdiff] ← MID_DIRITER
+            self.a.nc[id × 1¤ptrdiff] ← Mid.diriter.ord()
             self.set_type(id, 30720 + di)
             return
         if types.ty_is_arr(t) and m = "iterate":
@@ -4326,7 +4310,7 @@ impl Checker:
             if ii = ⁻1:
                 ii ← mi
                 self.ite.push(ie)
-            self.a.nc[id × 1¤ptrdiff] ← MID_ITER
+            self.a.nc[id × 1¤ptrdiff] ← Mid.iter.ord()
             // An iterator keeps the array it was made from, and there
             // is nothing in the language that says when the iterator
             // is done with, so the borrow runs to the end of the scope
@@ -4334,20 +4318,20 @@ impl Checker:
             // to be and never wrong: what it costs is changing an
             // array later in the same scope, and what it buys is that
             // an iterator never walks a thing that moved under it.
-            self.hold(na, HOLD_READ)
+            self.hold(na, Hold.read)
             self.set_type(id, 30720 + ii)
             return
         if types.ty_is_iter(t) and m = "next":
             if argc0 ≠ 0:
                 self.derrc(tok, 2256, "next takes nothing")
-            self.a.nc[id × 1¤ptrdiff] ← MID_NEXT
+            self.a.nc[id × 1¤ptrdiff] ← Mid.next.ord()
             let ne : i64 = self.ite[types.ty_iidx(t) × 1¤ptrdiff]
             self.set_type(id, if under_default: ne else: types.mk_oty(ne))
             return
         if t = types.TY_STR and m = "chars":
             if argc0 ≠ 0:
                 self.derr(tok, "chars takes nothing")
-            self.a.nc[id × 1¤ptrdiff] ← MID_CHARS
+            self.a.nc[id × 1¤ptrdiff] ← Mid.chars.ord()
             self.set_type(id, types.mk_aty(types.TY_CHAR))
             return
         if not types.ty_is_arr(t):
@@ -4378,14 +4362,14 @@ impl Checker:
                     self.adopt(arg, self.elem_of(t))
                 elif not self.try_fit(arg, self.elem_of(t)):
                     self.derr(tok, "the array holds " ⧺ self.tn(self.elem_of(t)) ⧺ ", not " ⧺ self.tn(self.ty_of(arg)))
-            self.a.nc[id × 1¤ptrdiff] ← MID_PUSH
+            self.a.nc[id × 1¤ptrdiff] ← Mid.push.ord()
             self.set_type(id, types.TY_UNIT)
         elif m = "pop":
             self.require_mut_base(na, tok)
             self.keep_safe(na)
             if argc ≠ 0:
                 self.derr(tok, "pop takes nothing")
-            self.a.nc[id × 1¤ptrdiff] ← MID_POP
+            self.a.nc[id × 1¤ptrdiff] ← Mid.pop.ord()
             // under ?? the default stands in and the value is bare;
             // anywhere else the absence is the answer, and it is boxed
             // as any optional is
@@ -4395,7 +4379,7 @@ impl Checker:
                 self.derr(tok, "get takes the index to look at")
             else:
                 self.check_index_expr(tok, t, self.a.extra[args_off + 1])
-            self.a.nc[id × 1¤ptrdiff] ← MID_GET
+            self.a.nc[id × 1¤ptrdiff] ← Mid.get.ord()
             self.set_type(id, if under_default: self.elem_of(t) else: types.mk_oty(self.elem_of(t)))
         else:
             self.derr(tok, "'" ⧺ m ⧺ "' is not a core-1 array method; push, pop and get are")
@@ -4513,14 +4497,17 @@ impl Checker:
     // inside a walk gives back the outer walk's claim and not none at
     // all; and a walk already inside a borrow keeps the stricter of the
     // two, which is what walking one array twice over has to mean.
-    @pre(how = HOLD_READ or how = HOLD_NONE)
-    fn hold(&mut self, e : i64, how : i64):
+    @pre(how = Hold.read or how = Hold.none)
+    fn hold(&mut self, e : i64, how : Hold):
         let s : i64 = self.base_slot(e)
         if s = ⁻1:
             return
         self.hslot.push(s)
         self.hback.push(self.sheld[s × 1¤ptrdiff])
-        self.sheld[s × 1¤ptrdiff] ← self.sheld[s × 1¤ptrdiff] ⌈ how
+        // the stronger claim stands: a binding already unreachable does
+        // not become readable because something else only reads it
+        if how.ord() > self.sheld[s × 1¤ptrdiff].ord():
+            self.sheld[s × 1¤ptrdiff] ← how
 
     fn require_mut_base(&mut self, base : i64, tok : i64):
         if self.kind_of(base) = ast.Nk.field or self.kind_of(base) = ast.Nk.index:
@@ -4536,12 +4523,12 @@ impl Checker:
             if g ≠ ⁻1 and not self.a.globals[g × 1¤ptrdiff].is_mut:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
             return
-        let hd : i64 = self.sheld[s × 1¤ptrdiff]
+        let hd : Hold = self.sheld[s × 1¤ptrdiff]
         if self.slend[s × 1¤ptrdiff] ≠ ⁻1:
             self.refuse_lent(tok, s)
             return
-        if hd ≠ HOLD_FREE:
-            self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ (if hd = HOLD_READ: "for reading" else: "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
+        if hd ≠ Hold.free:
+            self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ (if hd = Hold.read: "for reading" else: "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
             return
         let pt : i64 = self.stype[s × 1¤ptrdiff]
         if types.ty_ref_kind(pt) = 1:
@@ -4818,7 +4805,11 @@ impl Checker:
                 self.lend_back.push(self.sheld[o × 1¤ptrdiff])
                 self.lend_until.push(until)
                 self.lend_how.push(how)
-                self.sheld[o × 1¤ptrdiff] ← self.sheld[o × 1¤ptrdiff] ⌈ (if how = 2: HOLD_NONE else: HOLD_READ)
+                // what the lend claims, where it is stronger than what
+                // is already claimed
+                let claim : Hold = if how = 2: Hold.none else: Hold.read
+                if claim.ord() > self.sheld[o × 1¤ptrdiff].ord():
+                    self.sheld[o × 1¤ptrdiff] ← claim
                 self.slend[o × 1¤ptrdiff] ← bi
                 self.log.push("{\"function\": \"" ⧺ self.a.fns[self.cur_fn × 1¤ptrdiff].name ⧺ "\", \"line\": " ⧺ tokens.i64_str(@dropunit(self.toks.line[tok × 1¤ptrdiff])) ⧺ ", \"decision\": \"lend\", \"origin\": \"" ⧺ self.snames[o × 1¤ptrdiff] ⧺ "\", \"to\": \"" ⧺ self.text(tok) ⧺ "\", \"until\": " ⧺ tokens.i64_str(@dropunit(until)) ⧺ "}")
 
@@ -4947,7 +4938,7 @@ impl Checker:
                 continue
             if slot × 1¤ptrdiff < #self.lesc and self.lesc[slot × 1¤ptrdiff] ≠ 0:
                 continue
-            if self.sheld[si] ≠ HOLD_FREE or self.slend[si] ≠ ⁻1 or self.sborrow[si] ≠ 0:
+            if self.sheld[si] ≠ Hold.free or self.slend[si] ≠ ⁻1 or self.sborrow[si] ≠ 0:
                 continue
             let t : i64 = self.stype[si]
             // a sized array is the frame itself, with no block to give back
@@ -5574,7 +5565,7 @@ impl Checker:
                 let wct : i64 = self.ty_of(na)
                 let wmid : i64 = if ismc: self.a.nc[na × 1¤ptrdiff] else: 0
                 let wbt : mut i64 = types.TY_I64
-                if ismc and (wmid = MID_POP or wmid = MID_NEXT or wmid = MID_GET):
+                if ismc and (wmid = Mid.pop.ord() or wmid = Mid.next.ord() or wmid = Mid.get.ord()):
                     wbt ← wct
                 elif types.ty_is_opt(wct):
                     wbt ← types.ty_opt_base(wct)
@@ -5585,7 +5576,7 @@ impl Checker:
                 else:
                     self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ self.tn(wct) ⧺ ", not an optional")
                 let wmut : i64 = self.a.extra[nc × 1¤ptrdiff]
-                if wmut = 1 and not (ismc and wmid = MID_NEXT):
+                if wmut = 1 and not (ismc and wmid = Mid.next.ord()):
                     // only an iterator's next hands an element to write
                     // back through; everything else hands values
                     self.derrc(tok, 2245, """a mut while binding writes back through the element; this
@@ -5594,7 +5585,7 @@ impl Checker:
                 if wsty ≠ ⁻1 and wsty ≠ wbt:
                     self.derr(tok, "the binding says " ⧺ self.tn(wsty) ⧺ " but the loop answers " ⧺ self.tn(wbt))
                 self.push_scope()
-                let wdty : i64 = if wmut = 1 and ismc and wmid = MID_NEXT: wbt + 262144 × 2 else: wbt
+                let wdty : i64 = if wmut = 1 and ismc and wmid = Mid.next.ord(): wbt + 262144 × 2 else: wbt
                 let wslot : i64 = self.declare(tok, wdty, wmut)
                 self.nslot[id × 1¤ptrdiff] ← wslot
                 self.loop_depth ← self.loop_depth + 1
@@ -5627,7 +5618,7 @@ impl Checker:
                     // for the body; lending them for reading leaves the
                     // name readable and nothing more.
                     self.push_scope()
-                    self.hold(fiter, if frk = 2: HOLD_NONE else: HOLD_READ)
+                    self.hold(fiter, if frk = 2: Hold.none else: Hold.read)
                     let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, if frk = 2: 1 else: 0)
                     self.nslot[id × 1¤ptrdiff] ← rslot
                     self.loop_depth ← self.loop_depth + 1
@@ -5648,7 +5639,7 @@ impl Checker:
                 // what it walks, turn by turn, so the body may read it and
                 // not change it
                 self.push_scope()
-                self.hold(na, HOLD_READ)
+                self.hold(na, Hold.read)
                 let slot : i64 = self.declare(tok, if t = types.TY_STR: types.TY_CHAR else: (if types.ty_is_rg(t): types.ty_rgelem(t) else: self.elem_of(t)), 0)
                 self.nslot[id × 1¤ptrdiff] ← slot
                 self.loop_depth ← self.loop_depth + 1
@@ -6217,9 +6208,32 @@ impl Checker:
             self.gvals.push(0)
             self.ginit.push(g)
             return
-        if types.ty_is_arr(gd.ty) or gd.ty = types.TY_STR or types.ty_is_tup(gd.ty):
-            self.derr(gd.tok, """a core-2 global is a number, a truth value or a dictionary of
-                               " constants""")
+        if types.ty_is_arr(gd.ty):
+            // an immutable array global: its literal of constants is
+            // built by the same init code a dictionary global's is, so
+            // a table written once and read everywhere is written once
+            if gd.is_mut:
+                self.derr(gd.tok, """a global array is immutable; build a mut one where it is
+                                   " used""")
+            if self.kind_of(gd.init) ≠ ast.Nk.arrlit:
+                self.derr(gd.tok, "a global array is born from its literal")
+                self.gvals.push(0)
+                return
+            self.check_expr(gd.init, gd.ty)
+            let aoff : i64 = self.a.na[gd.init × 1¤ptrdiff]
+            let an : i64 = self.a.extra[aoff × 1¤ptrdiff]
+            foreach ai := 0…an:
+                let el : i64 = self.a.extra[(aoff + 1 + ai) × 1¤ptrdiff]
+                self.fold_const_global(el)
+                let ek : ast.Nk = self.kind_of(el)
+                if ek ≠ ast.Nk.lit_int and ek ≠ ast.Nk.lit_str and ek ≠ ast.Nk.lit_bool:
+                    self.derr(gd.tok, "a global array holds constants the compiler can see")
+            self.gvals.push(0)
+            self.ginit.push(g)
+            return
+        if gd.ty = types.TY_STR or types.ty_is_tup(gd.ty):
+            self.derr(gd.tok, """a core-2 global is a number, a truth value, an array or a
+                               " dictionary of constants""")
             self.gvals.push(0)
             return
         // fold the initializer to the constant the image carries
@@ -6305,7 +6319,7 @@ fn check_expectations(c : &mut Checker, a : ast.Ast):
         // take it back off the schedule; nothing of it is written, so
         // nothing of it may be left behind
         while #c.diags > n_diags:
-            _ ← c.diags.pop() ?? diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.DIAG_ERROR, code: diag.DIAG_NONE}
+            _ ← c.diags.pop() ?? diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.Level.error, code: diag.DIAG_NONE}
         while #c.a.fns > n_fns:
             _ ← c.a.fns.pop() ?? a.expects[i]
         while #c.fslots > n_slots:
@@ -6468,9 +6482,9 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
         // them to work it out.
         let why : str = if #a.builds > 0: """a @build recipe says how to build a program and is not
                                            " one; --build reads it""" else: "no @start function and no @test; nothing would run"
-        c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: why, level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+        c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: why, level: diag.Level.error, code: diag.DIAG_NONE})
     if starts > 1:
-        c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+        c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: diag.Level.error, code: diag.DIAG_NONE})
     if #a.structs > 0:
         foreach i := 0…#a.structs:
             c.check_invariants(@dropunit(i))

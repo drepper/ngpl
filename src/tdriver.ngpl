@@ -90,10 +90,10 @@ fn t_freediv(tg : elf.Target) → i64:
 // stays in the accumulator and that load takes it straight back, and
 // any other opening would put something else there first.  Read out of
 // the ladder below rather than written from memory of it.
-fn td_reads_a_first(o : i64) → bool:
-    if o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
+fn td_reads_a_first(o : ir_m.Ir) → bool:
+    if o.ord() >= ir_m.Ir.ceq.ord() and o.ord() <= ir_m.Ir.cge.ord():
         return true
-    o = ir_m.IR_MOV or o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW or o = ir_m.IR_MUL or o = ir_m.IR_MULW or o = ir_m.IR_NEG or o = ir_m.IR_NEGW or o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR or o = ir_m.IR_BNOTT or o = ir_m.IR_SHLL or o = ir_m.IR_SHRR or o = ir_m.IR_MAXX or o = ir_m.IR_MINN or o = ir_m.IR_DIVV or o = ir_m.IR_MODD or o = ir_m.IR_JZ or o = ir_m.IR_JNZ or o = ir_m.IR_AIDX or o = ir_m.IR_AREF or o = ir_m.IR_ASTO or o = ir_m.IR_ALEN or o = ir_m.IR_HLEN or o = ir_m.IR_FLD or o = ir_m.IR_FSTO or o = ir_m.IR_CHR or o = ir_m.IR_NARROW or o = ir_m.IR_LDN or o = ir_m.IR_STN or o = ir_m.IR_RET or o = ir_m.IR_EXT
+    o = ir_m.Ir.mov or o = ir_m.Ir.add or o = ir_m.Ir.addw or o = ir_m.Ir.sub or o = ir_m.Ir.subw or o = ir_m.Ir.mul or o = ir_m.Ir.mulw or o = ir_m.Ir.neg or o = ir_m.Ir.negw or o = ir_m.Ir.band or o = ir_m.Ir.borr or o = ir_m.Ir.bxorr or o = ir_m.Ir.bnott or o = ir_m.Ir.shll or o = ir_m.Ir.shrr or o = ir_m.Ir.maxx or o = ir_m.Ir.minn or o = ir_m.Ir.divv or o = ir_m.Ir.modd or o = ir_m.Ir.jz or o = ir_m.Ir.jnz or o = ir_m.Ir.aidx or o = ir_m.Ir.aref or o = ir_m.Ir.asto or o = ir_m.Ir.alen or o = ir_m.Ir.hlen or o = ir_m.Ir.fld or o = ir_m.Ir.fsto or o = ir_m.Ir.chr or o = ir_m.Ir.narrow or o = ir_m.Ir.ldn or o = ir_m.Ir.stn or o = ir_m.Ir.ret or o = ir_m.Ir.ext
 
 // The same reckoning the pioneer makes, over the same shared counts,
 // asking this ladder's own question about what comes next.
@@ -101,8 +101,8 @@ fn td_can_drop(ir : ir_m.IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[]
     let d : i64 = ir.id[i]
     if d < 0 or d >= nv or i + 1 >= n:
         return false
-    let nx : i64 = ir.op[i + 1]
-    if nx = ir_m.IR_LABEL or not td_reads_a_first(nx):
+    let nx : ir_m.Ir = ir.op[i + 1]
+    if nx = ir_m.Ir.label or not td_reads_a_first(nx):
         return false
     if ir.ia[i + 1] ≠ d:
         return false
@@ -122,7 +122,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
     dispatch.g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
     foreach i := 0¤ptrdiff…n:
-        let o : i64 = ir.op[i]
+        let o : ir_m.Ir = ir.op[i]
         let a : i64 = ir.ia[i]
         let b : i64 = ir.ib[i]
         let c : i64 = ir.ic[i]
@@ -138,23 +138,23 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
         let cwid : i64 = if (t_freecmp(tg) & wb9) ≠ 0: bits else: 64
         let dwid : i64 = if (t_freediv(tg) & wb9) ≠ 0: bits else: 64
         em.drop_slot ← if td_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
-        if o = ir_m.IR_CONST:
+        if o = ir_m.Ir.const:
             dispatch.g_const(&em, tg, arch_a64.RG_A, a)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_MOV:
+        elif o = ir_m.Ir.mov:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_ADD or o = ir_m.IR_ADDW or o = ir_m.IR_SUB or o = ir_m.IR_SUBW:
+        elif o = ir_m.Ir.add or o = ir_m.Ir.addw or o = ir_m.Ir.sub or o = ir_m.Ir.subw:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
-            if o = ir_m.IR_ADD or o = ir_m.IR_SUB:
+            if o = ir_m.Ir.add or o = ir_m.Ir.sub:
                 // Where the machine can settle it at this width, it
                 // does; otherwise the arithmetic is done at a word and
                 // the range asked afterwards.
                 if dispatch.g_narrow_ok(tg, bits):
                     // the target says whether it can branch on what the
                     // arithmetic set or has to make a value of it first
-                    if o = ir_m.IR_ADD:
+                    if o = ir_m.Ir.add:
                         dispatch.g_addchk(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, bits, sl)
                     else:
                         dispatch.g_subchk(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, bits, sl)
@@ -166,24 +166,24 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                     if arch_x86_64.want_canon(cwant, d, w):
                         t_canon(&em, tg, w)
                 else:
-                    if o = ir_m.IR_ADD:
+                    if o = ir_m.Ir.add:
                         dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                     else:
                         dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                     t_range_check(&em, tg, w, sl)
                     sl ← sl + 1
             else:
-                if o = ir_m.IR_ADDW:
+                if o = ir_m.Ir.addw:
                     dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 else:
                     dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_MUL or o = ir_m.IR_MULW:
+        elif o = ir_m.Ir.mul or o = ir_m.Ir.mulw:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
-            if o = ir_m.IR_MULW:
+            if o = ir_m.Ir.mulw:
                 dispatch.g_mul3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
@@ -198,9 +198,9 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 t_range_check(&em, tg, w, sl)
                 sl ← sl + 1
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_NEG or o = ir_m.IR_NEGW:
+        elif o = ir_m.Ir.neg or o = ir_m.Ir.negw:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
-            if o = ir_m.IR_NEG and sgn = 1 and bits = 64:
+            if o = ir_m.Ir.neg and sgn = 1 and bits = 64:
                 // the one signed value with no negation
                 dispatch.g_const(&em, tg, arch_a64.RG_B, ⁻9223372036854775807 - 1)
                 dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_NE, 0, 64)
@@ -209,7 +209,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
                 dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
-            elif o = ir_m.IR_NEG and sgn = 0:
+            elif o = ir_m.Ir.neg and sgn = 0:
                 // a negated unsigned is only 0
                 dispatch.g_jz(&em, tg, arch_a64.RG_A, sl)
                 dispatch.g_call(&em, tg, emit.RT_OV)
@@ -218,29 +218,29 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
             else:
                 dispatch.g_neg2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
-                if o = ir_m.IR_NEG:
+                if o = ir_m.Ir.neg:
                     t_range_check(&em, tg, w, sl)
                     sl ← sl + 1
                 elif arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_BAND or o = ir_m.IR_BORR or o = ir_m.IR_BXORR:
+        elif o = ir_m.Ir.band or o = ir_m.Ir.borr or o = ir_m.Ir.bxorr:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
-            if o = ir_m.IR_BAND:
+            if o = ir_m.Ir.band:
                 dispatch.g_and3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
-            elif o = ir_m.IR_BORR:
+            elif o = ir_m.Ir.borr:
                 dispatch.g_or3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
             else:
                 dispatch.g_xor3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_BNOTT:
+        elif o = ir_m.Ir.bnott:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_not2(&em, tg, arch_a64.RG_A, arch_a64.RG_A)
             if arch_x86_64.want_canon(cwant, d, w):
                 t_canon(&em, tg, w)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_SHLL or o = ir_m.IR_SHRR:
+        elif o = ir_m.Ir.shll or o = ir_m.Ir.shrr:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
             dispatch.g_const(&em, tg, arch_a64.RG_C, bits - sgn)
@@ -249,7 +249,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_call(&em, tg, emit.RT_SHIFT)
             dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
-            if o = ir_m.IR_SHLL:
+            if o = ir_m.Ir.shll:
                 dispatch.g_shl3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
                 if arch_x86_64.want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
@@ -258,25 +258,25 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             else:
                 dispatch.g_shr3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o >= ir_m.IR_CEQ and o <= ir_m.IR_CGE:
+        elif o.ord() >= ir_m.Ir.ceq.ord() and o.ord() <= ir_m.Ir.cge.ord():
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
-            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, o - ir_m.IR_CEQ, sgn, cwid)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, o.ord() - ir_m.Ir.ceq.ord(), sgn, cwid)
             dispatch.g_mov2(&em, tg, arch_a64.RG_A, arch_a64.RG_C)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_MAXX or o = ir_m.IR_MINN:
+        elif o = ir_m.Ir.maxx or o = ir_m.Ir.minn:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
-            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, if o = ir_m.IR_MAXX: arch_a64.CC_GE else: arch_a64.CC_LE, sgn, cwid)
+            dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, if o = ir_m.Ir.maxx: arch_a64.CC_GE else: arch_a64.CC_LE, sgn, cwid)
             dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_SEL:
+        elif o = ir_m.Ir.sel:
             dispatch.g_lds(&em, tg, arch_a64.RG_C, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
             dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_DIVV or o = ir_m.IR_MODD:
+        elif o = ir_m.Ir.divv or o = ir_m.Ir.modd:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
             let ldo9 : i64 = sl
@@ -298,7 +298,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_const(&em, tg, arch_a64.RG_C, ⁻1)
                 dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_B, arch_a64.RG_C, arch_a64.CC_NE, 0, dwid)
                 dispatch.g_jnz(&em, tg, arch_a64.RG_C, sl)
-                if o = ir_m.IR_DIVV:
+                if o = ir_m.Ir.divv:
                     dispatch.g_call(&em, tg, emit.RT_OV)
                 else:
                     // the remainder is nought and always was; the
@@ -308,7 +308,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                     dispatch.g_jmp(&em, tg, lend9)
                 dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
-            if o = ir_m.IR_DIVV:
+            if o = ir_m.Ir.divv:
                 dispatch.g_div3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, dwid)
             else:
                 dispatch.g_mod3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B, sgn, dwid)
@@ -322,17 +322,17 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             if dfree and arch_x86_64.want_canon(cwant, d, w):
                 t_canon(&em, tg, w)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_JMP:
+        elif o = ir_m.Ir.jmp:
             dispatch.g_jmp(&em, tg, a)
-        elif o = ir_m.IR_JZ or o = ir_m.IR_JNZ:
+        elif o = ir_m.Ir.jz or o = ir_m.Ir.jnz:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
-            if o = ir_m.IR_JZ:
+            if o = ir_m.Ir.jz:
                 dispatch.g_jz(&em, tg, arch_a64.RG_A, b)
             else:
                 dispatch.g_jnz(&em, tg, arch_a64.RG_A, b)
-        elif o = ir_m.IR_LABEL:
+        elif o = ir_m.Ir.label:
             dispatch.g_label(&em, tg, a)
-        elif o = ir_m.IR_CALL:
+        elif o = ir_m.Ir.call:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
             let cnr : i64 = if a >= 0 and a < @dropunit(#nreg_of): nreg_of[a × 1¤ptrdiff] else: 0
             // The stack arguments are put down first.  Where a target
@@ -351,7 +351,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_lds(&em, tg, arch_a64.RG_A, d)
                 t_canon(&em, tg, w)
                 dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_CALLI:
+        elif o = ir_m.Ir.calli:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
             foreach ki := 0…argci:
                 dispatch.g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
@@ -362,28 +362,28 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_lds(&em, tg, arch_a64.RG_A, d)
                 t_canon(&em, tg, w)
                 dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_RET:
+        elif o = ir_m.Ir.ret:
             if a ≠ ⁻1:
                 dispatch.g_retld(&em, tg, a)
             dispatch.g_epilogue(&em, tg)
-        elif o = ir_m.IR_PRINTS or o = ir_m.IR_EPRINTS or o = ir_m.IR_ABORT:
+        elif o = ir_m.Ir.prints or o = ir_m.Ir.eprints or o = ir_m.Ir.abort:
             let pos : i64 = dispatch.g_absref_arg(&em, tg, 0)
             if em.skipping = 0:
                 em.sf_pos.push(pos)
                 em.sf_str.push(a)
             dispatch.g_argconst(&em, tg, 1, emit.str_len(strs[a × 1¤ptrdiff]))
-            dispatch.g_call(&em, tg, if o = ir_m.IR_PRINTS: emit.RT_WRITE1 else: (if o = ir_m.IR_EPRINTS: emit.RT_WRITE2 else: emit.RT_ABORT))
-        elif o = ir_m.IR_PRINTI or o = ir_m.IR_PRINTU:
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.prints: emit.RT_WRITE1 else: (if o = ir_m.Ir.eprints: emit.RT_WRITE2 else: emit.RT_ABORT))
+        elif o = ir_m.Ir.printi or o = ir_m.Ir.printu:
             dispatch.g_argld(&em, tg, 0, a)
-            dispatch.g_call(&em, tg, if o = ir_m.IR_PRINTI: emit.RT_PRINTI else: emit.RT_PRINTU)
-        elif o = ir_m.IR_PRINTSV:
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.printi: emit.RT_PRINTI else: emit.RT_PRINTU)
+        elif o = ir_m.Ir.printsv:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_call(&em, tg, emit.RT_PRINTSTR)
-        elif o = ir_m.IR_EXIT:
+        elif o = ir_m.Ir.exit:
             dispatch.g_sysarg(&em, tg, 0, a)
             dispatch.g_syscall(&em, tg, arch_a64.SC_EXIT)
-        elif o = ir_m.IR_GLOAD or o = ir_m.IR_GSTORE:
-            let gg : i64 = if o = ir_m.IR_GLOAD: a else: a
+        elif o = ir_m.Ir.gload or o = ir_m.Ir.gstore:
+            let gg : i64 = if o = ir_m.Ir.gload: a else: a
             let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_B)
             if em.skipping = 0:
                 if em.gseg[gg × 1¤ptrdiff] = 0:
@@ -392,29 +392,29 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 else:
                     em.df_pos.push(pos)
                     em.df_off.push(em.gmap[gg × 1¤ptrdiff])
-            if o = ir_m.IR_GLOAD:
+            if o = ir_m.Ir.gload:
                 dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8, 0)
                 dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
             else:
                 dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
                 dispatch.g_sto(&em, tg, arch_a64.RG_A, arch_a64.RG_B, 0, 8)
-        elif o = ir_m.IR_ANEW:
+        elif o = ir_m.Ir.anew:
             dispatch.g_argconst(&em, tg, 0, a)
             dispatch.g_call(&em, tg, emit.RT_ARRNEW)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_GIVEBACK:
+        elif o = ir_m.Ir.giveback:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_FREE)
-        elif o = ir_m.IR_SNEW:
+        elif o = ir_m.Ir.snew:
             dispatch.g_argconst(&em, tg, 0, 8 × a)
             dispatch.g_call(&em, tg, emit.RT_ALLOC)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_APUSH:
+        elif o = ir_m.Ir.apush:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_ARRPUSH)
-        elif o = ir_m.IR_AIDX or o = ir_m.IR_AREF:
+        elif o = ir_m.Ir.aidx or o = ir_m.Ir.aref:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
             dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 8, 8, 0)
@@ -426,12 +426,12 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 0, 8, 0)
             dispatch.g_shl3i(&em, tg, arch_a64.RG_T, arch_a64.RG_B, 3)
             dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
-            if o = ir_m.IR_AIDX:
+            if o = ir_m.Ir.aidx:
                 dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_C, 0, 8, 0)
             else:
                 dispatch.g_mov2(&em, tg, arch_a64.RG_A, arch_a64.RG_C)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_ASTO:
+        elif o = ir_m.Ir.asto:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
             dispatch.g_ldo(&em, tg, arch_a64.RG_C, arch_a64.RG_A, 8, 8, 0)
@@ -445,7 +445,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_add3(&em, tg, arch_a64.RG_C, arch_a64.RG_C, arch_a64.RG_T)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
             dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_C, 0, 8)
-        elif o = ir_m.IR_APOP:
+        elif o = ir_m.Ir.apop:
             let lem : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
@@ -464,7 +464,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_lds(&em, tg, arch_a64.RG_A, b)
             dispatch.g_label(&em, tg, ldn)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_AGET:
+        elif o = ir_m.Ir.aget:
             let ldf : i64 = sl
             let ldn : i64 = sl + 1
             sl ← sl + 2
@@ -482,21 +482,21 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_lds(&em, tg, arch_a64.RG_A, c)
             dispatch.g_label(&em, tg, ldn)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_ALEN:
+        elif o = ir_m.Ir.alen:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 8, 8, 0)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_HLEN:
+        elif o = ir_m.Ir.hlen:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 16, 8, 0)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_SC:
+        elif o = ir_m.Ir.sc:
             let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.sd_pos.push(pos)
                 em.sd_str.push(a)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_FADDR:
+        elif o = ir_m.Ir.faddr:
             // Whatever this address reaches will be called indirectly,
             // by the architecture's convention.  A function taking a
             // convention of its own must therefore never be the one it
@@ -509,30 +509,30 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 em.ff_pos.push(pos)
                 em.ff_fn.push(a)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_FLD:
+        elif o = ir_m.Ir.fld:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, 8 × b, 8, 0)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_FSTO:
+        elif o = ir_m.Ir.fsto:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
             dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_A, 8 × b, 8)
-        elif o = ir_m.IR_HNEW:
+        elif o = ir_m.Ir.hnew:
             dispatch.g_argconst(&em, tg, 0, a)
             dispatch.g_argconst(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_HNEW)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_HPUT:
+        elif o = ir_m.Ir.hput:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_argld(&em, tg, 2, c)
             dispatch.g_call(&em, tg, emit.RT_HPUT)
-        elif o = ir_m.IR_HGET or o = ir_m.IR_HELEM:
+        elif o = ir_m.Ir.hget or o = ir_m.Ir.helem:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.IR_HGET: emit.RT_HGET else: emit.RT_HELEM)
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.hget: emit.RT_HGET else: emit.RT_HELEM)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_CHR:
+        elif o = ir_m.Ir.chr:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_const(&em, tg, arch_a64.RG_B, 1114111)
             dispatch.g_cmp3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, arch_a64.CC_LE, 0, 64)
@@ -550,46 +550,46 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_label(&em, tg, sl)
             sl ← sl + 1
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_SIDX:
+        elif o = ir_m.Ir.sidx:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_STRIDX)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_SCCAT or o = ir_m.IR_SEQV:
+        elif o = ir_m.Ir.sccat or o = ir_m.Ir.seqv:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.IR_SCCAT: emit.RT_CONCAT else: emit.RT_STREQ)
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.sccat: emit.RT_CONCAT else: emit.RT_STREQ)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_HFINAL:
+        elif o = ir_m.Ir.hfinal:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_HFINAL)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_FIDENT:
+        elif o = ir_m.Ir.fident:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_FIDENT)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_SLENV or o = ir_m.IR_CHARS or o = ir_m.IR_CHARSTR or o = ir_m.IR_SBYTES or o = ir_m.IR_HSTART or o = ir_m.IR_TORAW or o = ir_m.IR_FREAD or o = ir_m.IR_FOPEN:
+        elif o = ir_m.Ir.slenv or o = ir_m.Ir.chars or o = ir_m.Ir.charstr or o = ir_m.Ir.sbytes or o = ir_m.Ir.hstart or o = ir_m.Ir.toraw or o = ir_m.Ir.fread or o = ir_m.Ir.fopen:
             dispatch.g_argld(&em, tg, 0, a)
-            if o = ir_m.IR_SLENV:
+            if o = ir_m.Ir.slenv:
                 dispatch.g_call(&em, tg, emit.RT_STRCHARS)
-            elif o = ir_m.IR_CHARS:
+            elif o = ir_m.Ir.chars:
                 dispatch.g_call(&em, tg, emit.RT_CHARS)
-            elif o = ir_m.IR_CHARSTR:
+            elif o = ir_m.Ir.charstr:
                 dispatch.g_call(&em, tg, emit.RT_CHARSTR)
-            elif o = ir_m.IR_SBYTES:
+            elif o = ir_m.Ir.sbytes:
                 dispatch.g_call(&em, tg, emit.RT_SBYTES)
-            elif o = ir_m.IR_HSTART:
+            elif o = ir_m.Ir.hstart:
                 dispatch.g_call(&em, tg, emit.RT_HSTART)
-            elif o = ir_m.IR_TORAW:
+            elif o = ir_m.Ir.toraw:
                 dispatch.g_call(&em, tg, emit.RT_TORAW)
-            elif o = ir_m.IR_FREAD:
+            elif o = ir_m.Ir.fread:
                 dispatch.g_call(&em, tg, emit.RT_FREAD)
             else:
                 dispatch.g_call(&em, tg, emit.RT_FOPEN)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_SDEC:
+        elif o = ir_m.Ir.sdec:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_STRNEXT)
@@ -601,41 +601,41 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             dispatch.g_const(&em, tg, arch_a64.RG_C, 4294967295)
             dispatch.g_and3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_C)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_AUXV:
+        elif o = ir_m.Ir.auxv:
             dispatch.g_argconst(&em, tg, 0, a)
             dispatch.g_call(&em, tg, emit.RT_AUXV)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_EXECFN or o = ir_m.IR_ENVN or o = ir_m.IR_ARGS or o = ir_m.IR_DENTS:
-            if o = ir_m.IR_EXECFN:
+        elif o = ir_m.Ir.execfn or o = ir_m.Ir.envn or o = ir_m.Ir.args or o = ir_m.Ir.dents:
+            if o = ir_m.Ir.execfn:
                 dispatch.g_call(&em, tg, emit.RT_EXECFN)
-            elif o = ir_m.IR_ENVN:
+            elif o = ir_m.Ir.envn:
                 dispatch.g_call(&em, tg, emit.RT_ENVN)
-            elif o = ir_m.IR_ARGS:
+            elif o = ir_m.Ir.args:
                 dispatch.g_call(&em, tg, emit.RT_ARGS)
             else:
                 dispatch.g_call(&em, tg, emit.RT_DENTS)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_ENVG:
+        elif o = ir_m.Ir.envg:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_call(&em, tg, emit.RT_ENVG)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_FCREATE:
+        elif o = ir_m.Ir.fcreate:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_call(&em, tg, emit.RT_FCREATE)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_FWRITE or o = ir_m.IR_WRITEV or o = ir_m.IR_HUPDATE:
+        elif o = ir_m.Ir.fwrite or o = ir_m.Ir.writev or o = ir_m.Ir.hupdate:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
-            dispatch.g_call(&em, tg, if o = ir_m.IR_HUPDATE: emit.RT_HUPDATE else: (if o = ir_m.IR_FWRITE: emit.RT_FWRITE else: emit.RT_WRITEV))
-        elif o = ir_m.IR_FCLOSE:
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.hupdate: emit.RT_HUPDATE else: (if o = ir_m.Ir.fwrite: emit.RT_FWRITE else: emit.RT_WRITEV))
+        elif o = ir_m.Ir.fclose:
             dispatch.g_sysarg(&em, tg, 0, a)
             dispatch.g_syscall(&em, tg, arch_a64.SC_CLOSE)
-        elif o = ir_m.IR_EXT:
+        elif o = ir_m.Ir.ext:
             // asked for canonical, so it arrives canonical
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_NARROW:
+        elif o = ir_m.Ir.narrow:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             if bits = 64:
                 dispatch.g_const(&em, tg, arch_a64.RG_B, 0)
@@ -660,32 +660,32 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
                 dispatch.g_label(&em, tg, sl)
                 sl ← sl + 1
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_ACAT or o = ir_m.IR_AFILL or o = ir_m.IR_ACYC:
+        elif o = ir_m.Ir.acat or o = ir_m.Ir.afill or o = ir_m.Ir.acyc:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
-            if o = ir_m.IR_ACAT:
+            if o = ir_m.Ir.acat:
                 dispatch.g_call(&em, tg, emit.RT_ACAT)
-            elif o = ir_m.IR_AFILL:
+            elif o = ir_m.Ir.afill:
                 dispatch.g_call(&em, tg, emit.RT_AFILL)
             else:
                 dispatch.g_call(&em, tg, emit.RT_ACYC)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_AFIND:
+        elif o = ir_m.Ir.afind:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_argconst(&em, tg, 2, c)
             dispatch.g_call(&em, tg, emit.RT_AFIND)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_ASLICE or o = ir_m.IR_SSLICE:
+        elif o = ir_m.Ir.aslice or o = ir_m.Ir.sslice:
             dispatch.g_argld(&em, tg, 0, a)
             dispatch.g_argld(&em, tg, 1, b)
             dispatch.g_argld(&em, tg, 2, c)
-            dispatch.g_call(&em, tg, if o = ir_m.IR_ASLICE: emit.RT_ASLICE else: emit.RT_SSLICE)
+            dispatch.g_call(&em, tg, if o = ir_m.Ir.aslice: emit.RT_ASLICE else: emit.RT_SSLICE)
             dispatch.g_retst(&em, tg, d)
-        elif o = ir_m.IR_SATADD or o = ir_m.IR_SATSUB or o = ir_m.IR_SATMUL:
+        elif o = ir_m.Ir.satadd or o = ir_m.Ir.satsub or o = ir_m.Ir.satmul:
             t_emit_sat(&em, tg, o, w, a, b, d, sl)
             sl ← sl + 2
-        elif o = ir_m.IR_JTAB:
+        elif o = ir_m.Ir.jtab:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
@@ -710,7 +710,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             em.pj_len.push(span)
             foreach e := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
-        elif o = ir_m.IR_VTAB:
+        elif o = ir_m.Ir.vtab:
             let vmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
             let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
@@ -740,7 +740,7 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             em.pj_len.push(0 - span)
             foreach e2 := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
-        elif o = arch_a64.IR_SYSC:
+        elif o = ir_m.Ir.sysc:
             let sargc : i64 = ir.extra[b × 1¤ptrdiff]
             foreach sk := 0…sargc:
                 dispatch.g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
@@ -748,27 +748,27 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
             if d ≠ ⁻1:
                 dispatch.g_sysret(&em, tg, arch_a64.RG_A)
                 dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_LDN:
+        elif o = ir_m.Ir.ldn:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_ldo(&em, tg, arch_a64.RG_A, arch_a64.RG_A, b, bits, sgn)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_STN:
+        elif o = ir_m.Ir.stn:
             dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
             dispatch.g_lds(&em, tg, arch_a64.RG_B, c)
             dispatch.g_sto(&em, tg, arch_a64.RG_B, arch_a64.RG_A, b, bits)
-        elif o = ir_m.IR_FRAME:
+        elif o = ir_m.Ir.frame:
             dispatch.g_frameaddr(&em, tg, ir.nvregs, nobj, a, arch_a64.RG_A)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_KADDR:
+        elif o = ir_m.Ir.kaddr:
             let pos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.df_pos.push(pos)
                 em.df_off.push((if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_FPTR:
+        elif o = ir_m.Ir.fptr:
             dispatch.g_fptr(&em, tg, arch_a64.RG_A)
             dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
-        elif o = ir_m.IR_BTADDR:
+        elif o = ir_m.Ir.btaddr:
             let bpos : i64 = dispatch.g_absref(&em, tg, arch_a64.RG_A)
             if em.skipping = 0:
                 em.bt_pos.push(bpos)
@@ -779,15 +779,15 @@ fn t_emit_fn(em : &mut emit.Emit, tg : elf.Target, ir : ir_m.IrFn, np : i64, str
     em.resolve_jtabs()
 
 // saturating arithmetic, held at the type's edge; two scratch labels
-fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b : i64, d : i64, sl : i64):
+fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : ir_m.Ir, w : i64, a : i64, b : i64, d : i64, sl : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8
     dispatch.g_lds(&em, tg, arch_a64.RG_A, a)
     dispatch.g_lds(&em, tg, arch_a64.RG_B, b)
     if bits < 64:
-        if o = ir_m.IR_SATADD:
+        if o = ir_m.Ir.satadd:
             dispatch.g_add3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
-        elif o = ir_m.IR_SATSUB:
+        elif o = ir_m.Ir.satsub:
             dispatch.g_sub3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
         else:
             dispatch.g_mul3(&em, tg, arch_a64.RG_A, arch_a64.RG_A, arch_a64.RG_B)
@@ -798,7 +798,7 @@ fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b
             dispatch.g_const(&em, tg, arch_a64.RG_C, (1 « (bits - 1)) - 1)
             dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_GT, 1, 64)
             dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
-        elif o = ir_m.IR_SATSUB:
+        elif o = ir_m.Ir.satsub:
             dispatch.g_const(&em, tg, arch_a64.RG_C, 0)
             dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_A, arch_a64.RG_C, arch_a64.CC_LT, 1, 64)
             dispatch.g_sel4(&em, tg, arch_a64.RG_A, arch_a64.RG_T, arch_a64.RG_C, arch_a64.RG_A)
@@ -809,11 +809,11 @@ fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b
         dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         return
     if sgn = 0:
-        if o = ir_m.IR_SATADD:
+        if o = ir_m.Ir.satadd:
             dispatch.g_addov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 0, 64)
             dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
             dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻1)
-        elif o = ir_m.IR_SATSUB:
+        elif o = ir_m.Ir.satsub:
             dispatch.g_subov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 0, 64)
             dispatch.g_jz(&em, tg, arch_a64.RG_C, sl)
             dispatch.g_const(&em, tg, arch_a64.RG_A, 0)
@@ -826,7 +826,7 @@ fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b
         return
     // signed, full width: the direction of the clamp follows the
     // operands, read before they are lost
-    if o = ir_m.IR_SATMUL:
+    if o = ir_m.Ir.satmul:
         dispatch.g_xor3(&em, tg, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B)
         dispatch.g_mulov(&em, tg, arch_a64.RG_A, arch_a64.RG_B, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
         dispatch.g_jz(&em, tg, arch_a64.RG_B, sl + 1)
@@ -838,14 +838,14 @@ fn t_emit_sat(em : &mut emit.Emit, tg : elf.Target, o : i64, w : i64, a : i64, b
         dispatch.g_label(&em, tg, sl + 1)
         dispatch.g_sts(&em, tg, arch_a64.RG_A, d)
         return
-    if o = ir_m.IR_SATADD:
+    if o = ir_m.Ir.satadd:
         dispatch.g_addov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
     else:
         dispatch.g_subov(&em, tg, arch_a64.RG_A, arch_a64.RG_C, arch_a64.RG_A, arch_a64.RG_B, 1, 64)
     dispatch.g_jz(&em, tg, arch_a64.RG_C, sl + 1)
     dispatch.g_const(&em, tg, arch_a64.RG_C, 0)
     // an overflowed add went the way of b; a subtract the other way
-    dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_B, arch_a64.RG_C, if o = ir_m.IR_SATADD: arch_a64.CC_LT else: arch_a64.CC_GT, 1, 64)
+    dispatch.g_cmp3(&em, tg, arch_a64.RG_T, arch_a64.RG_B, arch_a64.RG_C, if o = ir_m.Ir.satadd: arch_a64.CC_LT else: arch_a64.CC_GT, 1, 64)
     dispatch.g_const(&em, tg, arch_a64.RG_A, 9223372036854775807)
     dispatch.g_jz(&em, tg, arch_a64.RG_T, sl + 1)
     dispatch.g_const(&em, tg, arch_a64.RG_A, ⁻9223372036854775807 - 1)

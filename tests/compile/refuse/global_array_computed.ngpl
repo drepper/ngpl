@@ -1,0 +1,12 @@
+// A global array holds what the compiler can see the value of: the
+// init code the image runs before @start lays the elements down one
+// by one, and a call is not something it can lay down.
+fn three() → i64:
+    3
+
+let TABLE : i64[] = [1, 2, three()]
+
+@start
+@impure
+fn main():
+    std.println("{}", TABLE[2 × 1¤ptrdiff])

@@ -166,7 +166,7 @@ impl Lexer:
         self.big.push(b)
 
     fn err(&mut self, m : str):
-        self.diags.push(diag.Diag{line: self.line, col: self.col, msg: m, level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
+        self.diags.push(diag.Diag{line: self.line, col: self.col, msg: m, level: diag.Level.error, code: diag.DIAG_NONE})
         self.pos ← self.n
 
     // one ASCII byte

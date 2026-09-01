@@ -142,10 +142,12 @@ Attempt 3 grows core-1 to **core-2** with structs:
   parses the expression first and turns a following `←` into the
   store its shape names, retiring the old name-only target ladder);
   `@dropunit` passes a measured number through unmeasured; and an
-  immutable global dictionary of constants is built by a synthesized init
-  function the image runs before `@start` — the one runtime-
-  initialized global kind, because the compiler's own keyword and
-  glyph tables want exactly that.
+  immutable global dictionary or array of constants is built by a
+  synthesized init function the image runs before `@start` — the two
+  runtime-initialized global kinds, because the compiler's own keyword
+  and glyph tables want the one and its opcode tables the other, and a
+  table read on every operation is better read from a global than
+  rebuilt by the function that reads it.
 - **the OS surface `main` stands on**: `std.args.all()` (argv[1..] as
   a `str[]`, the kernel's argc/argv captured at the entry rsp into
   the data segment), `std.fs.cwd().open_file(p)` answering `File?` so

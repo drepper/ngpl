@@ -1,0 +1,27 @@
+// A global array of constants is built once, before @start, and read
+// wherever a function wants it: the table a hot loop consults belongs
+// beside the program rather than inside the function that reads it,
+// which would rebuild it on every call.
+//
+// It is immutable, like a global dictionary, and holds only what the
+// compiler can see the value of.
+
+let SQUARES : i64[] = [0, 1, 4, 9, 16, 25, 36, 49]
+let NAMES : str[] = ["zero", "one", "two", "three"]
+let SEEN : bool[] = [true, false, true]
+
+// The square of i, read from the table rather than multiplied.
+@pre(i >= 0 and i < 8)
+@post(r: r = i × i)
+fn square(i : i64) → i64:
+    SQUARES[i × 1¤ptrdiff]
+
+@start
+@impure
+fn main():
+    let total : mut i64 = 0
+    foreach i := 0…8:
+        total ← total + square(@dropunit(i))
+    std.println("{} squares add to {}", @dropunit(#SQUARES), total)
+    std.println("{} is {}", 2, NAMES[2 × 1¤ptrdiff])
+    std.println("{} {} {}", SEEN[0 × 1¤ptrdiff], SEEN[1 × 1¤ptrdiff], SEEN[2 × 1¤ptrdiff])

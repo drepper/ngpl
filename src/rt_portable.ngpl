@@ -27,7 +27,7 @@ let rt_signal := @import("rt_signal")
 
 @export
 struct RtB:
-    op : i64[]
+    op : ir.Ir[]
     ia : i64[]
     ib : i64[]
     ic : i64[]
@@ -43,7 +43,7 @@ fn rtb(np : i64) → RtB:
          ntmp: np, nlab: 0})
 
 impl RtB:
-    fn o(&mut self, op : i64, a : i64, b : i64, c : i64, d : i64, w : i64):
+    fn o(&mut self, op : ir.Ir, a : i64, b : i64, c : i64, d : i64, w : i64):
         self.op.push(op)
         self.ia.push(a)
         self.ib.push(b)
@@ -61,101 +61,101 @@ impl RtB:
 
     fn cst(&mut self, v : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CONST, v, 0, 0, d, 0)
+        self.o(ir.Ir.const, v, 0, 0, d, 0)
         d
 
     fn mov(&mut self, dst : i64, src : i64):
-        self.o(ir.IR_MOV, src, 0, 0, dst, 0)
+        self.o(ir.Ir.mov, src, 0, 0, dst, 0)
 
     fn add(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_ADDW, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.addw, a, b, 0, d, 64 + 256)
         d
 
     fn sub(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SUBW, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.subw, a, b, 0, d, 64 + 256)
         d
 
     fn mul(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_MULW, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.mulw, a, b, 0, d, 64 + 256)
         d
 
     fn band(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BAND, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.band, a, b, 0, d, 64 + 256)
         d
 
     fn bor(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BORR, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.borr, a, b, 0, d, 64 + 256)
         d
 
     fn shl(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SHLL, a, b, 0, d, 64)
+        self.o(ir.Ir.shll, a, b, 0, d, 64)
         d
 
     fn shr(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SHRR, a, b, 0, d, 64)
+        self.o(ir.Ir.shrr, a, b, 0, d, 64)
         d
 
     // unsigned division and remainder; the divisor is never zero here,
     // so the default lane is fed the dividend and cannot be taken
     fn udiv(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_DIVV, a, b, a, d, 64)
+        self.o(ir.Ir.divv, a, b, a, d, 64)
         d
 
     fn umod(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_MODD, a, b, a, d, 64)
+        self.o(ir.Ir.modd, a, b, a, d, 64)
         d
 
     // comparisons, unsigned unless said otherwise
     fn ceq(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CEQ, a, b, 0, d, 64)
+        self.o(ir.Ir.ceq, a, b, 0, d, 64)
         d
 
     fn cne(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CNE, a, b, 0, d, 64)
+        self.o(ir.Ir.cne, a, b, 0, d, 64)
         d
 
     fn cltu(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CLT, a, b, 0, d, 64)
+        self.o(ir.Ir.clt, a, b, 0, d, 64)
         d
 
     fn cgeu(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CGE, a, b, 0, d, 64)
+        self.o(ir.Ir.cge, a, b, 0, d, 64)
         d
 
     fn clts(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_CLT, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.clt, a, b, 0, d, 64 + 256)
         d
 
     fn sel(&mut self, c : i64, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SEL, c, a, b, d, 0)
+        self.o(ir.Ir.sel, c, a, b, d, 0)
         d
 
     fn jz(&mut self, v : i64, lab : i64):
-        self.o(ir.IR_JZ, v, lab, 0, 0, 0)
+        self.o(ir.Ir.jz, v, lab, 0, 0, 0)
 
     fn jnz(&mut self, v : i64, lab : i64):
-        self.o(ir.IR_JNZ, v, lab, 0, 0, 0)
+        self.o(ir.Ir.jnz, v, lab, 0, 0, 0)
 
     fn jmp(&mut self, lab : i64):
-        self.o(ir.IR_JMP, lab, 0, 0, 0, 0)
+        self.o(ir.Ir.jmp, lab, 0, 0, 0, 0)
 
     fn lab(&mut self, l : i64):
-        self.o(ir.IR_LABEL, l, 0, 0, 0, 0)
+        self.o(ir.Ir.label, l, 0, 0, 0, 0)
 
     // The same four at thirty-two bits.  A width narrower than the
     // machine's costs nothing extra here -- the driver's t_canon
@@ -164,76 +164,76 @@ impl RtB:
     // in the IR what the arithmetic actually is.
     fn add32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_ADDW, a, b, 0, d, 32)
+        self.o(ir.Ir.addw, a, b, 0, d, 32)
         d
 
     fn shl32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SHLL, a, b, 0, d, 32)
+        self.o(ir.Ir.shll, a, b, 0, d, 32)
         d
 
     // no narrowing follows a right shift, so what goes in must already
     // be a thirty-two bit value; everything here is
     fn shr32(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_SHRR, a, b, 0, d, 32)
+        self.o(ir.Ir.shrr, a, b, 0, d, 32)
         d
 
     fn bnot32(&mut self, a : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BNOTT, a, 0, 0, d, 32)
+        self.o(ir.Ir.bnott, a, 0, 0, d, 32)
         d
 
     // raw memory, the runtime's own privilege
     fn bxor(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BXORR, a, b, 0, d, 64 + 256)
+        self.o(ir.Ir.bxorr, a, b, 0, d, 64 + 256)
         d
 
     fn bnot(&mut self, a : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BNOTT, a, 0, 0, d, 64 + 256)
+        self.o(ir.Ir.bnott, a, 0, 0, d, 64 + 256)
         d
 
     fn ldn(&mut self, base : i64, off : i64, w : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_LDN, base, off, 0, d, w)
+        self.o(ir.Ir.ldn, base, off, 0, d, w)
         d
 
     fn stn(&mut self, base : i64, off : i64, v : i64, w : i64):
-        self.o(ir.IR_STN, base, off, v, 0, w)
+        self.o(ir.Ir.stn, base, off, v, 0, w)
 
     // the address of a runtime routine, for the one thing that wants
     // one rather than a jump to it: handing a handler to the kernel
     fn faddr(&mut self, target : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_FADDR, target, 0, 0, d, 0)
+        self.o(ir.Ir.faddr, target, 0, 0, d, 0)
         d
 
     fn kaddr(&mut self, which : i64, off : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_KADDR, which, off, 0, d, 0)
+        self.o(ir.Ir.kaddr, which, off, 0, d, 0)
         d
 
     // the routine's own frame, for the few bytes a routine needs
     // somewhere to put and nowhere to keep
     fn frame(&mut self, off : i64) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_FRAME, off, 0, 0, d, 0)
+        self.o(ir.Ir.frame, off, 0, 0, d, 0)
         d
 
     // where this frame stands, which is where a walk over the frames
     // starts
     fn fptr(&mut self) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_FPTR, 0, 0, 0, d, 0)
+        self.o(ir.Ir.fptr, 0, 0, 0, d, 0)
         d
 
     // the table the backtrace reads, which the compiler leaves in the
     // read-only data
     fn btaddr(&mut self) → i64:
         let d : i64 = self.t()
-        self.o(ir.IR_BTADDR, 0, 0, 0, d, 0)
+        self.o(ir.Ir.btaddr, 0, 0, 0, d, 0)
         d
 
     // calls into the rest of the runtime
@@ -241,7 +241,7 @@ impl RtB:
         let d : i64 = self.t()
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(0)
-        self.o(ir.IR_CALL, target, off, 0, d, 0)
+        self.o(ir.Ir.call, target, off, 0, d, 0)
         d
 
     fn call1(&mut self, target : i64, a0 : i64) → i64:
@@ -249,7 +249,7 @@ impl RtB:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(1)
         self.extra.push(a0)
-        self.o(ir.IR_CALL, target, off, 0, d, 0)
+        self.o(ir.Ir.call, target, off, 0, d, 0)
         d
 
     fn call2(&mut self, target : i64, a0 : i64, a1 : i64) → i64:
@@ -258,7 +258,7 @@ impl RtB:
         self.extra.push(2)
         self.extra.push(a0)
         self.extra.push(a1)
-        self.o(ir.IR_CALL, target, off, 0, d, 0)
+        self.o(ir.Ir.call, target, off, 0, d, 0)
         d
 
     fn call3(&mut self, target : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
@@ -268,7 +268,7 @@ impl RtB:
         self.extra.push(a0)
         self.extra.push(a1)
         self.extra.push(a2)
-        self.o(ir.IR_CALL, target, off, 0, d, 0)
+        self.o(ir.Ir.call, target, off, 0, d, 0)
         d
 
     // the kernel; up to six arguments from slots
@@ -277,7 +277,7 @@ impl RtB:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(1)
         self.extra.push(a0)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn sys2(&mut self, id : i64, a0 : i64, a1 : i64) → i64:
@@ -286,7 +286,7 @@ impl RtB:
         self.extra.push(2)
         self.extra.push(a0)
         self.extra.push(a1)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn sys3(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
@@ -296,7 +296,7 @@ impl RtB:
         self.extra.push(a0)
         self.extra.push(a1)
         self.extra.push(a2)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn sys4(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64) → i64:
@@ -307,7 +307,7 @@ impl RtB:
         self.extra.push(a1)
         self.extra.push(a2)
         self.extra.push(a3)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn sys5(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64, a4 : i64) → i64:
@@ -319,7 +319,7 @@ impl RtB:
         self.extra.push(a2)
         self.extra.push(a3)
         self.extra.push(a4)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn sys6(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64, a4 : i64, a5 : i64) → i64:
@@ -332,21 +332,21 @@ impl RtB:
         self.extra.push(a3)
         self.extra.push(a4)
         self.extra.push(a5)
-        self.o(arch_a64.IR_SYSC, id, off, 0, d, 0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
         d
 
     fn ret(&mut self, v : i64):
-        self.o(ir.IR_RET, v, 0, 0, 0, 0)
+        self.o(ir.Ir.ret, v, 0, 0, 0, 0)
 
     fn retn(&mut self):
-        self.o(ir.IR_RET, ⁻1, 0, 0, 0, 0)
+        self.o(ir.Ir.ret, ⁻1, 0, 0, 0, 0)
 
     fn abort_msg(&mut self, strid : i64):
-        self.o(ir.IR_ABORT, strid, 0, 0, 0, 0)
+        self.o(ir.Ir.abort, strid, 0, 0, 0, 0)
 
     // the same message, on the error stream, without the leaving
     fn eprint_msg(&mut self, strid : i64):
-        self.o(ir.IR_EPRINTS, strid, 0, 0, 0, 0)
+        self.o(ir.Ir.eprints, strid, 0, 0, 0, 0)
 
 // What statx is asked and where it answers.  Unlike the older fstat,
 // whose struct every architecture shapes for itself, statx lays out one
@@ -1156,7 +1156,7 @@ fn rt_hash_str(b : &mut RtB, slot : i64) → i64:
     b.jz(more, lend)
     let c : i64 = b.ldn(b.add(p, ix), 0, 1)
     let x : i64 = b.t()
-    b.o(ir.IR_BXORR, h, c, 0, x, 64 + 256)
+    b.o(ir.Ir.bxorr, h, c, 0, x, 64 + 256)
     b.mov(h, b.mul(x, prime))
     b.mov(ix, b.add(ix, one))
     b.jmp(ltop)
@@ -1883,7 +1883,7 @@ fn rt_build3(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         if id = emit.RT_DIVS64:
             let q : i64 = b.call2(emit.RT_DIVU64, na, da)
             let flip : i64 = b.t()
-            b.o(ir.IR_BXORR, nneg, dneg, 0, flip, 64)
+            b.o(ir.Ir.bxorr, nneg, dneg, 0, flip, 64)
             b.ret(b.sel(flip, b.sub(z, q), q))
         else:
             let r : i64 = b.call2(emit.RT_MODU64, na, da)

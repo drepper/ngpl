@@ -1,0 +1,3 @@
+tests/compile/refuse/global_array_computed.ngpl:7:5: error: a global array holds constants the compiler can see
+  7 | let TABLE : i64[] = [1, 2, three()]
+    |     ^
