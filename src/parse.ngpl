@@ -65,7 +65,10 @@ struct Parser:
     emembers : str[]
     evalues : i64[]
     tvn : str[]          // type-variable spellings, interned file-wide
-    braces : i64         // statements end at ';' inside a brace block
+    braces : i64
+    semi_end : bool      // the statement just ended carried a ';' where a
+                         // line would have ended it: laid out, that says
+                         // the value is dropped         // statements end at ';' inside a brace block
     lent : i64           // the statement's terminator belongs to the block
     ifexpr : i64         // an if is being parsed where a value is wanted,
                          // so a one-line block inside it ends at the
@@ -1623,13 +1626,12 @@ impl Parser:
             return
         if self.lent ≠ 0:
             return
-        // A ';' ends a statement wherever it stands, laid out or not.
-        // A line ends one too, so a statement may carry both, and the
-        // last statement of a block may carry the ';' and nothing
-        // after it: what ends a statement is not what gives a block
-        // its value.
+        // A ';' ends a statement where a line would have, and is
+        // written down: laid out, the semicolon is how a statement says
+        // its value is dropped rather than handed back.
         if self.peek() = tokens.TK_SEMI:
             self.pos ← self.pos + 1
+            self.semi_end ← true
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
             return
@@ -2045,8 +2047,9 @@ impl Parser:
                                    self.nb[e × 1¤ptrdiff], v)
             self.err("this is not a place a value can be stored into")
             return 0
+        self.semi_end ← false
         self.end_stmt()
-        self.mknode(ast.NK_EXPRSTMT, at, e, 0, 0)
+        self.mknode(ast.NK_EXPRSTMT, at, e, if self.semi_end: 1 else: 0, 0)
 
     // if cond block (elif cond block)* (else block)? -- one shape,
     // whether the if stands as a statement or where a value is
@@ -3097,7 +3100,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
                                  estart: [0], ecount: [8], eflag: [0],
                                  emembers: types.builtin_enum_members(),
                                  evalues: types.builtin_enum_values(),
-                                 tvn: [], braces: 0, lent: 0, ifexpr: 0,
+                                 tvn: [], braces: 0, semi_end: false, lent: 0, ifexpr: 0,
                                  ignored: [], igtests: [],
                                  expects: [], expoff: [], pending_exp: ⁻1, def_start: 0,
                                  diags: [], poisoned: false})

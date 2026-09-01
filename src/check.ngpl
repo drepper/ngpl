@@ -5664,6 +5664,14 @@ impl Checker:
             if self.loop_depth = 0:
                 self.derr(tok, "there is no loop here to act on")
         elif k = ast.NK_EXPRSTMT:
+            // A statement a ';' ended, where a line would have, says
+            // its value is dropped: it is not what the body hands back,
+            // and nothing is missing from a program that says so.
+            let dropped : bool = self.a.nb[id × 1¤ptrdiff] = 1
+            if dropped:
+                self.val_want ← ⁻1
+                self.check_expr(na, types.TY_UNIT)
+                return
             if self.val_want ≠ ⁻1:
                 // this expression is the value of the block holding it
                 let vw : i64 = self.val_want
@@ -5930,6 +5938,10 @@ impl Checker:
     // read by the same two steps as far as it goes.
     fn stmt_is_value(&self, id : i64) → bool:
         let k : i64 = self.kind_of(id)
+        // a statement a ';' ended, where a line would have, dropped its
+        // value and hands nothing back
+        if k = ast.NK_EXPRSTMT and self.a.nb[id × 1¤ptrdiff] = 1:
+            return false
         if k = ast.NK_EXPRSTMT or k = ast.NK_MATCH or k = ast.NK_MATCHE:
             // Every value of the enumeration has an arm -- that is
             // checked where the match is -- so if each arm answers,

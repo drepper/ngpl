@@ -2938,6 +2938,10 @@ error: in main: the value of this statement is not used; it computes
 something and nothing reads it
 ```
 
+#### Saying the Value Is Meant to Go
+
+`_ ← …` says it for any statement.  A laid-out body may also say it with a `;`, which drops the value of the statement it ends — see [the semicolon's two jobs](#function-return-values).  Both are the program saying so, which is all this rule asks for.
+
 #### The Last Statement of a Body
 
 A body ending in an expression is how a function returns one, so the last statement is the return value and nothing is said about it — whether the caller reads it is the caller's business.
@@ -3141,13 +3145,32 @@ This is consistent with expression-oriented languages like Rust, Haskell, and Zi
 
 2. **Implicit return.**  The last statement in a function body, if it is a bare expression, becomes the function's return value.  No `return` keyword is needed.
 
-3. **A semicolon ends a statement and says nothing else.**  It may stand after the last one, where a line would otherwise have ended it, and the expression is still the value:
+3. **What a trailing semicolon says depends on how the block was written**, because the two forms put it in different work.
+
+   Laid out, a line already ends a statement, so a `;` is not needed to end one and writing it says something: **the value is dropped rather than handed back**, as Rust's does.  It is how a body says its last statement is not its answer, and it answers the [unused-value](#a-statement-whose-value-nothing-reads) question at the same time:
+
+   ```
+   fn drops():
+       5;                     // answers ∅, and the ';' says the 5 is meant to go
+
+   fn keeps() → i64:
+       5                      // answers 5
+   ```
+
+   A signature that promises a value is then not met by a body ending in one:
+
+   ```
+   fn discards() → i64:
+       5;
+
+   error: 'discards' answers i64 but not on every path
+   ```
+
+   In braces the `;` is the separator between statements — a line ends nothing there — so one after the last statement is a trailing separator and says nothing.  The block still answers its last expression:
 
    ```
    fn add(a : int, b : int) → int { a + b; }   // answers a + b
    ```
-
-   This is where the language parts company with Rust, whose trailing semicolon discards the value.  A separator that changes what a function answers makes two programs of one that differ by a keystroke, and the difference is invisible at the call.  What a function answers is said in its signature: a function that answers nothing says `∅` there, and one that answers a value hands back its last expression however the line ended.
 
 Eliding the `return` keyword only really comes into its own when functions are small and can be written
 in possibly just a single function.  Requiring the use `return` in an inline-defined anonymous function

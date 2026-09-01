@@ -1,0 +1,10 @@
+// Laid out, a ';' says the statement's value is dropped rather than
+// handed back, so a body that ends in one answers nothing -- and a
+// signature promising a value is not met.
+fn discards() → i64:
+    5;
+
+@start
+@impure
+fn main():
+    std.println("{}", discards())

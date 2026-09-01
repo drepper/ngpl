@@ -831,11 +831,11 @@ Control Flow and Expressions
     out, which is listed there too.
 
 [x] multiple statements on one line with semicolon separator, and a ';' after the last
-    statement of a body.  A semicolon ends a statement and says nothing else: what ends a
-    statement is not what gives a block its value, so a body answers its last expression
-    however the line ended.  The Rust-mirroring discard the specification used to describe
-    is withdrawn -- a separator that changes what a function answers makes two programs of
-    one that differ by a keystroke, and the difference is invisible at the call.  In both
+    statement of a body.  What the ';' says depends on how the block was written, because
+    the two forms put it in different work: laid out, a line already ends a statement, so a
+    ';' drops the value of the one it ends -- Rust's rule, and the way a body says its last
+    statement is not its answer.  In braces the ';' is the separator, so a trailing one is a
+    trailing separator and the block still answers its last expression.  In both
     implementations; tests/compile/t77_trailing_semi.ngpl and tests/test_block_forms.ngpl.
 
 [ ] [FULL] insecure mode scoping: per compilation-unit, function, or block (like Rust unsafe).

@@ -2240,6 +2240,10 @@ def _check_one_unused_value(stmt, env, struct_vars,
                 list(getattr(stmt.stmt, "static_errors", ())) + [str(inner)])
         return None
     if isinstance(stmt, _ast.ExprStmt):
+        if getattr(stmt, "had_semi", False):
+            # The ';' said the value is dropped, which is the saying-so
+            # this looks for.
+            return None
         if in_value_position:
             return None
         return _dropped_value_finding(stmt.expr, env, struct_vars)
@@ -3175,6 +3179,26 @@ class LoadedProgram:
         self.warnings: list[tuple[str, tuple | None]] = []
 
 
+def _semi_dropped_answer(func_def) -> str | None:
+    """A body whose last statement dropped its value, where one is owed.
+
+    Laid out, a ';' says the statement's value is dropped rather than
+    handed back, so a body ending in one answers nothing -- and a
+    signature promising a value is not met.  The words are the
+    compiler's for the same mistake, since it is the same mistake.
+    """
+    ret = getattr(func_def, "ret_type", None)
+    if ret in (None, "\N{EMPTY SET}"):
+        return None
+    body = func_def.body
+    if not body:
+        return None
+    last = body[-1]
+    if isinstance(last, _ast.ExprStmt) and getattr(last, "had_semi", False):
+        return f"'{func_def.name}' answers {ret} but not on every path"
+    return None
+
+
 def _int_type_range(type_name: str) -> tuple[int, int]:
     """The inclusive range of a sized integer type, by its name."""
     bits = int(type_name[1:]) if type_name[1:].isdigit() else 64
@@ -3848,6 +3872,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if chr_err is not None:
                     raise DefinitionError(f"in {defn.name}: {chr_err}",
                                           _finding_pos(chr_err) or _node_pos(defn))
+                semi_err = _semi_dropped_answer(defn)
+                if semi_err is not None:
+                    raise DefinitionError(semi_err, _node_pos(defn))
                 struct_vars = _struct_vars_of(defn, env)
                 purity_err = _static_purity_check(defn, env, struct_vars)
                 if purity_err is not None:

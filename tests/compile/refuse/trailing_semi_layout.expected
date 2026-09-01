@@ -1,0 +1,3 @@
+tests/compile/refuse/trailing_semi_layout.ngpl:4:4: error: 'discards' answers i64 but not on every path
+  4 | fn discards() → i64:
+    |    ^

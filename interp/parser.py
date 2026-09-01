@@ -163,6 +163,9 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        # how many brace blocks are open: inside one a ';' separates
+        # statements, where laid out it says a value is dropped
+        self.braces = 0
         # The module the definitions being read belong to.  A `module`
         # line is not a block: it says where what follows lives, until
         # the next one says otherwise.  Empty is the global module,
@@ -1879,6 +1882,7 @@ class Parser:
         INDENT/DEDENT tokens are skipped as noise inside braces.
         """
         self._eat(TokenType.PUNCT, "{")
+        self.braces += 1
         stmts = []
         while True:
             while not self._check(TokenType.EOF) and self._cur().type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
@@ -1893,6 +1897,7 @@ class Parser:
             # own to eat, where a plain one has already eaten the ';'.
             while self._check(TokenType.PUNCT) and self._cur().value == ";":
                 self.pos += 1
+        self.braces -= 1
         self._eat(TokenType.PUNCT, "}")
         return stmts
 
@@ -2027,10 +2032,11 @@ class Parser:
                 return ("assign_stmt", lhs, rhs)
 
         expr = self._parse_expr()
-        # A ';' ends the statement wherever it stands; what ends a
-        # statement is not what gives a block its value.
-        self._try_eat(TokenType.PUNCT, ";")
-        return ExprStmt(expr)
+        # A ';' ends the statement where a line would have.  Laid
+        # out, that says the value is dropped; inside braces it is the
+        # separator between statements and says nothing.
+        had_semi = self._try_eat(TokenType.PUNCT, ";")
+        return ExprStmt(expr, had_semi=bool(had_semi) and not self.braces)
 
     def _arm_alike(self, braced: bool):
         """Hold this arm to the way the if opened its first.

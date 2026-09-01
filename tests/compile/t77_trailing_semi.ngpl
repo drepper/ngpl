@@ -1,12 +1,25 @@
-// A ';' ends a statement wherever it stands, and a line ends one too.
-// It may stand after the last statement of a body -- laid out, in
-// braces, or in an arm -- and what the body answers is unchanged: what
-// ends a statement is not what gives a block its value.
+// What a ';' says depends on how the block was written, because the
+// two forms put it in different work.
+//
+// Laid out, a line ends a statement, so a ';' is not needed to end one
+// and writing one says something: the value is dropped rather than
+// handed back.  It is how a body says its last statement is not its
+// answer, and it answers the unused-value question at the same time.
+//
+// In braces a ';' is the separator -- a line ends nothing there -- so
+// one after the last statement is a trailing separator and says
+// nothing.  The block still answers its last expression.
 
+// laid out: the ';' drops the value, and the function answers nothing
+fn drops():
+    5;
+
+// laid out, but not last: the ';' ends the statement as a line would
 fn kept_layout() → i64:
     let a : i64 = 1;
-    a;
+    a
 
+// in braces: the trailing ';' is a separator, and the value stands
 fn kept_brace() → i64 { let a : i64 = 1; a; }
 
 fn kept_arm(c : bool) → i64 { if c { 1; } else { 0; } }
@@ -18,5 +31,6 @@ fn two_on_a_line() → i64:
 @start
 @impure
 fn main():
+    drops()
     std.println("{} {} {} {} {}", kept_layout(), kept_brace(),
                 kept_arm(true), kept_arm(false), two_on_a_line())

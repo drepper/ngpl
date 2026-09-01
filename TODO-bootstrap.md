@@ -222,8 +222,8 @@ Outstanding
     identifier characters and vanished into expressions; a fast element type slipped through
     the empty-array-literal path (`let a : mut i32fast[] = []` ran); and a function whose
     last expression carried a trailing ';' answered the value where the full language was
-    then going to discard it -- one program with two meanings, refused at the time and since
-    settled the other way: the semicolon ends a statement and says nothing else.  `import` and the glyphs are refused by name; @repr(packed) already was.
+    going to discard it -- one program with two meanings, refused at the time and since
+    settled: laid out, the ';' drops the value, and in braces it is the separator.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
     The @flag rule was made whole where the interpreter had only half of it: a bare number
     was refused in an assignment but silently compared, which the specification forbids on

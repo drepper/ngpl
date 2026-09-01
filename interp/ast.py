@@ -303,8 +303,13 @@ class DestructureDef:
 class ExprStmt:
     """An expression used as a statement (discard result)."""
 
-    def __init__(self, expr):
+    def __init__(self, expr, had_semi=False):
         self.expr = expr
+        # Whether a ';' ended it where a line would have.  Laid out,
+        # that is how a statement says its value is dropped rather than
+        # handed back; inside braces the ';' is the separator and says
+        # nothing.
+        self.had_semi = had_semi
 
 
 class FuncCall:
