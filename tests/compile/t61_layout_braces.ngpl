@@ -24,6 +24,13 @@ fn spread(p : Pair) → i64 { let w : Wide = Wide{lo: p.a, hi: p.b}; w.hi - w.lo
 
 fn sided(s : Side) → i64 { if s = Side.left { return 1 }; 2 }
 
+fn named(s : Side) → str {
+    match s {
+        Side.left { "left" }
+        Side.right { "right" }
+    }
+}
+
 fn work(n : i64) → i64 { let step := λx : i64 → i64 { let y : i64 = x + 1; let z : i64 = y × 2; z }; step(n) }
 
 fn grade(n : i64) → str { if n > 10 { return "big" }; if n > 0 { return "small" }; "none" }
@@ -39,4 +46,4 @@ fn walked(v : i64[]) → i64 { let s : mut i64 = 0; foreach x := v { s ← s + x
 
 @start
 @impure
-fn main() { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right)) }
+fn main() { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left)) }

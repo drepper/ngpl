@@ -4458,7 +4458,7 @@ in braces; a block takes one of them, not both
 
 #### Everything Else With a Body
 
-A struct's fields, an enum's members and an `impl` block's methods are laid out the same two ways, and mean the same either way:
+A struct's fields, an enum's members, an `impl` block's methods and a `match`'s arms are laid out the same two ways, and mean the same either way:
 
 ```
 struct Point:
@@ -4472,9 +4472,15 @@ enum Level:
 impl Point:
     fn sum(&self) → i64:
         self.x + self.y
+
+match level:
+    Level.quiet:
+        "hush"
+    Level.loud:
+        "shout"
 ```
 
-and the same three written in braces:
+and the same four written in braces:
 
 ```
 struct Point { x : i64; y : i64 }
@@ -4484,9 +4490,14 @@ enum Level { quiet; loud }
 impl Point {
     fn sum(&self) → i64 { self.x + self.y }
 }
+
+match level {
+    Level.quiet { "hush" }
+    Level.loud { "shout" }
+}
 ```
 
-The same rule holds: the brace opens the body where the colon would have, and never follows one.  Inside braces a line ends nothing — [indentation is not tracked inside brackets](#layout-driven-blocks), which is what lets a struct literal be spread over several lines — so `;` separates what a line cannot, and a field's or member's own name will do on its own where they are written a line each.
+The same rule holds: the brace opens the body where the colon would have, and never follows one.  Inside braces a line ends nothing — [indentation is not tracked inside brackets](#layout-driven-blocks), which is what lets a struct literal be spread over several lines — so `;` separates what a line cannot, and a field's, member's or arm's own beginning will do on its own where they are written a line each.  A `match` arm's body is itself a block and takes either form, so the two rules meet without either being a special case.
 
 #### Layout-Driven Blocks
 

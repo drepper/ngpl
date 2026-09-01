@@ -1762,9 +1762,19 @@ impl Parser:
         let at : i64 = self.pos
         self.pos ← self.pos + 1
         let subject : i64 = self.parse_expr()
-        _ ← self.eat(tokens.TK_COLON, "':' after the subject")
-        _ ← self.eat(tokens.TK_NL, "the arms on their own lines")
-        _ ← self.eat(tokens.TK_INDENT, "an indented arm list")
+        // laid out under a colon, or written in braces, as every other
+        // body is; a ';' after an arm is what a line would have said
+        let braced : bool = self.peek() = tokens.TK_LBRACE
+        if braced:
+            _ ← self.eat(tokens.TK_LBRACE, "'{' opening the arms")
+        else:
+            _ ← self.eat(tokens.TK_COLON, "':' or '{' after the subject")
+            if self.peek() = tokens.TK_LBRACE:
+                self.err(both_openers())
+                return 0
+            _ ← self.eat(tokens.TK_NL, "the arms on their own lines")
+            _ ← self.eat(tokens.TK_INDENT, "an indented arm list")
+        let ender : i64 = if braced: tokens.TK_RBRACE else: tokens.TK_DEDENT
         // An identifier where a pattern goes says this match is
         // over an enumeration: the arms name its values, and there
         // is no ⊨ or ∅ about it.
@@ -1776,11 +1786,11 @@ impl Parser:
             is_enum ← true
         self.pos ← mut_pos
         if is_enum:
-            return self.parse_match_enum(at, subject)
+            return self.parse_match_enum(at, subject, ender, braced)
         let some_blk : mut i64 = ⁻1
         let empty_blk : mut i64 = ⁻1
         let bind_tok : mut i64 = ⁻1
-        while self.peek() ≠ tokens.TK_DEDENT and not self.failed():
+        while self.peek() ≠ ender and not self.failed():
             if self.peek() = tokens.TK_SOME:
                 if some_blk ≠ ⁻1:
                     self.err("match repeats the ⊨ pattern")
@@ -1797,12 +1807,12 @@ impl Parser:
                     return 0
                 self.pos ← self.pos + 1
                 empty_blk ← self.parse_block()
-            elif self.peek() = tokens.TK_NL:
+            elif self.peek() = tokens.TK_NL or self.peek() = tokens.TK_SEMI:
                 self.pos ← self.pos + 1
             else:
                 self.err("a core-2 match arm is ⊨(name) or ∅")
                 return 0
-        _ ← self.eat(tokens.TK_DEDENT, "the end of the match")
+        _ ← self.eat(ender, if braced: "'}' closing the match" else: "the end of the match")
         if some_blk = ⁻1:
             self.err("match has no arm for ⊨")
             return 0
@@ -1813,10 +1823,10 @@ impl Parser:
         self.extra.push(some_blk)
         self.extra.push(empty_blk)
         return self.mknode(ast.NK_MATCH, bind_tok, subject, off, 0)
-    fn parse_match_enum(&mut self, at : i64, subject : i64) → i64:
+    fn parse_match_enum(&mut self, at : i64, subject : i64, ender : i64, braced : bool) → i64:
         let arms : mut i64[] = []
         let default_blk : mut i64 = ⁻1
-        while self.peek() ≠ tokens.TK_DEDENT and not self.failed():
+        while self.peek() ≠ ender and not self.failed():
             if self.peek() = tokens.TK_NL:
                 self.pos ← self.pos + 1
             elif self.peek() = tokens.TK_IDENT and self.ttext(self.pos) = "_":
@@ -1843,10 +1853,12 @@ impl Parser:
                 arms.push(etok)
                 arms.push(mtok)
                 arms.push(blk)
+                if self.peek() = tokens.TK_SEMI:
+                    self.pos ← self.pos + 1
             else:
                 self.err("a match arm over an enumeration is Name.value or _")
                 return 0
-        _ ← self.eat(tokens.TK_DEDENT, "the end of the match")
+        _ ← self.eat(ender, if braced: "'}' closing the match" else: "the end of the match")
         if #arms = 0:
             self.err("match over an enumeration wants an arm naming a value of it")
             return 0

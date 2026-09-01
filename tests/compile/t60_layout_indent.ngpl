@@ -38,6 +38,13 @@ fn sided(s : Side) → i64:
         return 1
     2
 
+fn named(s : Side) → str:
+    match s:
+        Side.left:
+            "left"
+        Side.right:
+            "right"
+
 fn work(n : i64) → i64:
     let step := λx : i64 → i64:
         let y : i64 = x + 1
@@ -71,4 +78,4 @@ fn walked(v : i64[]) → i64:
 @impure
 fn main():
     let v : i64[] = [1, 2, 3]
-    std.println("{} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right))
+    std.println("{} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left))

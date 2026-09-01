@@ -2201,29 +2201,43 @@ class Parser:
         return self._parse_expr()
 
     def _parse_match_stmt(self):
-        """Parse: match expr: INDENT arm+ DEDENT
+        """Parse: match expr: INDENT arm+ DEDENT, or match expr { arm+ }
 
-        Each arm is a pattern, a colon, and a body -- either statements
-        on the same line or an indented block, as elsewhere.
+        The arms are laid out under a colon or written in braces, as
+        every other body is; a ';' after an arm is what a line would
+        have said.  Each arm is a pattern, a colon or a brace, and a
+        body -- the same rule again, one level down.
         """
         kw_tok = self._eat(TokenType.MATCH)
         subject = self._parse_expr()
-        self._eat(TokenType.PUNCT, ":")
-        while self._try_eat(TokenType.NEWLINE):
-            pass
-        if not self._check(TokenType.INDENT):
-            raise ParseError("match requires an indented list of arms",
-                             self._cur())
-        self._eat(TokenType.INDENT)
+        braced = self._at_punct("{")
+        if braced:
+            self._eat(TokenType.PUNCT, "{")
+        else:
+            self._eat(TokenType.PUNCT, ":")
+            if self._at_punct("{"):
+                raise ParseError(BOTH_OPENERS, self._cur())
+            while self._try_eat(TokenType.NEWLINE):
+                pass
+            if not self._check(TokenType.INDENT):
+                raise ParseError("match requires an indented list of arms",
+                                 self._cur())
+            self._eat(TokenType.INDENT)
 
         arms: list[MatchArm] = []
         while True:
             while self._try_eat(TokenType.NEWLINE):
                 pass
+            if braced and self._at_punct("}"):
+                break
             if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             arms.append(self._parse_match_arm())
-        self._eat(TokenType.DEDENT)
+            self._try_eat(TokenType.PUNCT, ";")
+        if braced:
+            self._eat(TokenType.PUNCT, "}")
+        else:
+            self._eat(TokenType.DEDENT)
         if not arms:
             raise ParseError("match requires at least one arm", kw_tok)
         return self._set_pos(MatchStmt(subject, arms), kw_tok)

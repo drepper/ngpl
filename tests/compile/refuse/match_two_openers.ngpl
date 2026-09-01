@@ -1,0 +1,8 @@
+// A match's arms are opened the same one way at a time.
+fn first(o : i64?) → i64:
+    match o: { ⊨(v) { v }; ∅ { 0 } }
+
+@start
+@impure
+fn main():
+    std.println("{}", first(⊨(3)))

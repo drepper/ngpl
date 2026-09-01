@@ -208,3 +208,31 @@ fn test_a_literal_over_several_lines():
 @impure
 fn main():
     std.println("block form tests passed")
+
+// ---------------------------------------------------------------------
+// A match's arms
+// ---------------------------------------------------------------------
+//
+// The arms are laid out under a colon or written in braces, as every
+// other body is, and an arm's own body is a block and takes either.
+
+fn matched_layout(o : i64?) → i64:
+    match o:
+        ⊨(v):
+            v
+        ∅:
+            0
+
+fn matched_braces(o : i64?) → i64 {
+    match o {
+        ⊨(v) { v }
+        ∅ { 0 }
+    }
+}
+
+@test
+fn test_a_match_either_way():
+    assert_eq(matched_layout(⊨(7)), 7)
+    assert_eq(matched_braces(⊨(7)), 7)
+    assert_eq(matched_layout(∅), 0)
+    assert_eq(matched_braces(∅), 0)
