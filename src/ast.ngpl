@@ -251,29 +251,48 @@ fn hash_algs_named() → str:
         out ← out ⧺ (if k = 0: "" else: ", ") ⧺ algs[k]
     out
 
-// what the auxiliary vector is asked for, and under which key
+// The keys the auxiliary vector answers to, the AT_* names of
+// <elf.h> in the language's own spelling.  The kernel writes the
+// vector as pairs of a key and a value, and these are the keys this
+// language asks about.
+@export
+enum Auxv : u8:
+    pagesz = 6
+    uid = 11
+    euid = 12
+    gid = 13
+    egid = 14
+    secure = 23
+    execfn = 31
+
+// What a std.process member is, numbered by the key it is answered
+// under: the two enumerations are one numbering, so asking which
+// member it is and asking which key to read are the same question.
 @export
 enum Proc : u8:
-    pagesize = 0
-    uid = 1
-    euid = 2
-    gid = 3
-    egid = 4
-    secure = 5
-    execfn = 6
+    pagesize = 6
+    uid = 11
+    euid = 12
+    gid = 13
+    egid = 14
+    secure = 23
+    execfn = 31
 
+// The key a member asks for.  The two are numbered alike, so the
+// conversion is the number itself -- and the assertions below are what
+// keeps them alike, since a member renumbered on one side and not the
+// other would otherwise read the wrong entry.
 @export
-@pre(m >= 0 and m <= 6)
+@post(r: r = m)
 fn proc_key(m : i64) → i64:
-    // the member arrives as the number the tree slot holds, so the
-    // names are asked for theirs
-    if m = Proc.pagesize.ord(): return 6
-    if m = Proc.uid.ord(): return 11
-    if m = Proc.euid.ord(): return 12
-    if m = Proc.gid.ord(): return 13
-    if m = Proc.egid.ord(): return 14
-    if m = Proc.secure.ord(): return 23
-    31
+    static_assert(Proc.pagesize.ord() = Auxv.pagesz.ord())
+    static_assert(Proc.uid.ord() = Auxv.uid.ord())
+    static_assert(Proc.euid.ord() = Auxv.euid.ord())
+    static_assert(Proc.gid.ord() = Auxv.gid.ord())
+    static_assert(Proc.egid.ord() = Auxv.egid.ord())
+    static_assert(Proc.secure.ord() = Auxv.secure.ord())
+    static_assert(Proc.execfn.ord() = Auxv.execfn.ord())
+    m
 
 
 // Where something sits in the extra table, and how many slots it takes

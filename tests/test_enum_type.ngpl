@@ -122,7 +122,7 @@ fn error_flag_enum_still_rejects_numbers():
 // An enum is asked about its own kind and nothing else: a number that
 // happens to equal a member is not that member, and .ord() is how a
 // program says it means the number.
-@expect error 2810 "an enum is asked about its own kind; the sides are 'Perms' and a number; .ord() answers the number behind an enumerator"
+@expect error 2810 "an enum is asked about its own kind; the sides are Perms and u64; .ord() answers the number behind an enumerator"
 fn error_an_enum_is_not_compared_with_a_number() → bool:
     Perms.read = 1
 

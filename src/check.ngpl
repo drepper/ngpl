@@ -1756,6 +1756,12 @@ impl Checker:
         elif not (self.stands_for(types.ty_unit(l), types.ty_unit(r))
                   or self.stands_for(types.ty_unit(r), types.ty_unit(l))):
             self.derr(tok, "a value measured " ⧺ self.tn(l) ⧺ " does not meet one measured " ⧺ self.tn(r))
+        // Two numbers the compiler can see answer here rather than
+        // where the program runs; a comparison that settles at build
+        // time is one a static_assert may read.
+        if self.kind_of(na) = ast.Nk.lit_int and self.kind_of(nb) = ast.Nk.lit_int and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0:
+            self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff], self.a.na[nb × 1¤ptrdiff])
+            return
         self.set_type(id, types.TY_BOOL)
 
     // + and - where one of the sides is a character.  A character is a
