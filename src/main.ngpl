@@ -225,8 +225,8 @@ fn build(b : &mut std.Build, o : &std.Options):
                                           optimize: o.optimize ?? 0})
 
 fn empty_recipe() → comptime_m.Recipe:
-    (comptime_m.Recipe{names: [], roots: [], outdirs: [], targets: [], optimizes: [],
-            paths: [], flags: [], diags: []})
+    comptime_m.Recipe{names: [], roots: [], outdirs: [], targets: [], optimizes: [],
+           paths: [], flags: [], diags: []}
 
 // A name the recipe gave, made into a path this run can open.  An
 // absolute name is taken as written; anything else is looked for beside
@@ -406,11 +406,11 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
         dump_tokens(toks, src, files)
         return 0
 
-    let mtab : ast_m.Mods = (ast_m.Mods{offs: prog.offs, fmod: prog.fmod,
-                            names: imports.mod_names(prog.mroot, prog.bmod),
-                            roots: prog.mroot,
-                            bname: prog.bname, bmod: prog.bmod,
-                            bowner: prog.bowner})
+    let mtab : ast_m.Mods = ast_m.Mods{offs: prog.offs, fmod: prog.fmod,
+                           names: imports.mod_names(prog.mroot, prog.bmod),
+                           roots: prog.mroot,
+                           bname: prog.bname, bmod: prog.bmod,
+                           bowner: prog.bowner}
     let ast := parse.parse_mods(toks, src, mtab)
     if #ast.diags > 0:
         report(ast.diags, files, o.json, src)
@@ -706,14 +706,14 @@ fn main() → u8:
 
     // Every executable the recipe asked for, in the order it asked.
     // Without a recipe there is the one program the command line named.
-    let opts : Options = (Options{tgt_index: tgt_index, stack_size: stack_size,
-                                  guard_size: guard_size,
-                                  optimize: opt_level ⌈ 0,
-                                  path: split_path(path_raw),
-                                  want_tokens: want_tokens,
-                                  want_ast: want_ast, want_log: want_log,
-                                  werror: werror, json: json,
-                                  incremental: incremental})
+    let opts : Options = Options{tgt_index: tgt_index, stack_size: stack_size,
+                                 guard_size: guard_size,
+                                 optimize: opt_level ⌈ 0,
+                                 path: split_path(path_raw),
+                                 want_tokens: want_tokens,
+                                 want_ast: want_ast, want_log: want_log,
+                                 werror: werror, json: json,
+                                 incremental: incremental}
     if build_file = "":
         return compile_one(inputs, if output ≠ "": output else: "a.out", opts)
     foreach i := 0¤ptrdiff…#plan.names:
@@ -738,14 +738,14 @@ fn main() → u8:
         // How hard the compiler is asked to work on this one: what the
         // executable said, else what -O said, which is 0 unless it did.
         let olv : i64 = if plan.optimizes[i] >= 0: plan.optimizes[i] else: opts.optimize
-        let one : Options = (Options{tgt_index: ti, stack_size: opts.stack_size,
-                                     guard_size: opts.guard_size,
-                                     optimize: olv,
-                                     path: opts.path,
-                                     want_tokens: opts.want_tokens,
-                                     want_ast: opts.want_ast, want_log: opts.want_log,
-                                     werror: opts.werror, json: opts.json,
-                                     incremental: opts.incremental})
+        let one : Options = Options{tgt_index: ti, stack_size: opts.stack_size,
+                                    guard_size: opts.guard_size,
+                                    optimize: olv,
+                                    path: opts.path,
+                                    want_tokens: opts.want_tokens,
+                                    want_ast: opts.want_ast, want_log: opts.want_log,
+                                    werror: opts.werror, json: opts.json,
+                                    incremental: opts.incremental}
         let rc : u8 = compile_one([resolve_source(plan.roots[i], imports.dir_of(build_file), plan.paths)],
                                   where, one)
         if rc ≠ 0:

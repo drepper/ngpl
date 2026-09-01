@@ -79,33 +79,33 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
-    let lw : mut lower.Lower = (lower.Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
-                                nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0,
-                                op: [], ia: [], ib: [], ic: [], idd: [],
-                                iww: [], extra: [], tbase: 0, tnext: 0,
-                                tmax: 0, nlabels: 0, breaks: [], conts: [],
-                                in_wrap: 0, argsfix: ⁻1, lambase: 0,
-                                shimbase: 0,
-                                cur_ret: 0, post_label: ⁻1,
-                                res_vreg: ⁻1, old_base: 0, inv_subject: ⁻1, tail_label: ⁻1, tail_fn: ⁻1, tail_np: 0, cur_fname: "", dlog: [],
-                                argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1,
-                                olevel: olevel})
-    let em : mut emit.Emit = (emit.Emit{code: [], cf_pos: [], cf_target: [],
-                              sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
-                              df_pos: [], df_off: [], labels: [],
-                              lf_pos: [], lf_label: [], fn_off: [],
-                              rt_off: [], rax_slot: ⁻1, drop_slot: ⁻1, hold_slot: ⁻1, pkeep: [], self_priv: 0,
-                              jt_pos: [], jt_id: [], jt_count: 0,
-                              jt_starts: [], jt_is_code: [], jt_entries: [],
-                              pj_id: [],
-                              pj_start: [], pj_len: [], pj_labels: [],
-                              max_frame: 0,
-                              gmap: [], gseg: [], gr_pos: [], gr_off: [],
-                              skipping: 0, rt_need: [],
-                              rx: [], rx_pos: [], rx_off: [], bt_pos: [],
-                              ab_kind: [], ab_lab: [],
-                              tf_pos: [], tf_lab: [], tf_form: [],
-                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
+    let lw : mut lower.Lower = lower.Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
+                               nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0,
+                               op: [], ia: [], ib: [], ic: [], idd: [],
+                               iww: [], extra: [], tbase: 0, tnext: 0,
+                               tmax: 0, nlabels: 0, breaks: [], conts: [],
+                               in_wrap: 0, argsfix: ⁻1, lambase: 0,
+                               shimbase: 0,
+                               cur_ret: 0, post_label: ⁻1,
+                               res_vreg: ⁻1, old_base: 0, inv_subject: ⁻1, tail_label: ⁻1, tail_fn: ⁻1, tail_np: 0, cur_fname: "", dlog: [],
+                               argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1,
+                               olevel: olevel}
+    let em : mut emit.Emit = emit.Emit{code: [], cf_pos: [], cf_target: [],
+                             sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
+                             df_pos: [], df_off: [], labels: [],
+                             lf_pos: [], lf_label: [], fn_off: [],
+                             rt_off: [], rax_slot: ⁻1, drop_slot: ⁻1, hold_slot: ⁻1, pkeep: [], self_priv: 0,
+                             jt_pos: [], jt_id: [], jt_count: 0,
+                             jt_starts: [], jt_is_code: [], jt_entries: [],
+                             pj_id: [],
+                             pj_start: [], pj_len: [], pj_labels: [],
+                             max_frame: 0,
+                             gmap: [], gseg: [], gr_pos: [], gr_off: [],
+                             skipping: 0, rt_need: [],
+                             rx: [], rx_pos: [], rx_off: [], bt_pos: [],
+                             ab_kind: [], ab_lab: [],
+                             tf_pos: [], tf_lab: [], tf_form: [],
+                             ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0}
     let nglobals : i64 ¤ptrdiff = #a.globals
     // the same three kinds of data the x86-64 path sorts out, placed
     // with the same offsets
@@ -620,12 +620,12 @@ fn codegen_t(a : ast.Ast, toks : lex.Toks, src : byte[], chk : check.Chk, tgt : 
         dlog.push(l)
     foreach l := lw.dlog:
         dlog.push(l)
-    (codegen.Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
-              text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
-              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
-              ro_bt: bt_at × 1¤byte, ro_bt_end: bt_to × 1¤byte, code: em.code, rodata: rodata, data: data,
-              relro_size: relro_size, syms: syms,
-              log: dlog, diags: cdiags})
+    codegen.Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
+             text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
+             ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
+             ro_bt: bt_at × 1¤byte, ro_bt_end: bt_to × 1¤byte, code: em.code, rodata: rodata, data: data,
+             relro_size: relro_size, syms: syms,
+             log: dlog, diags: cdiags}
 
 // the same door, spelled in RV64
 fn rv_startup(em : &mut emit.Emit, lw : &mut lower.Lower, tg : elf.Target, args_off : i64,

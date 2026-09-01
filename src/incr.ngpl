@@ -85,11 +85,11 @@ struct Prev:
 
 @export
 fn prev_none() → Prev:
-    (Prev{ok: false, raw: [], machine: 0, is64: false, eflags: 0, text_off: 0¤byte, text_size: 0¤byte,
-          tx_end: [],
-          ro_off: 0¤byte, ro_size: 0¤byte, d_off: 0¤byte, d_size: 0¤byte,
-          sym_name: [], sym_off: [], sym_size: [],
-          row_kind: [], row_name: [], row_hash: []})
+    Prev{ok: false, raw: [], machine: 0, is64: false, eflags: 0, text_off: 0¤byte, text_size: 0¤byte,
+         tx_end: [],
+         ro_off: 0¤byte, ro_size: 0¤byte, d_off: 0¤byte, d_size: 0¤byte,
+         sym_name: [], sym_off: [], sym_size: [],
+         row_kind: [], row_name: [], row_hash: []}
 
 // A little-endian number of n bytes, as every field in the files this
 // compiler writes is written.
@@ -287,15 +287,15 @@ fn read_prev(path : str) → Prev:
                 rh.push(pv_cstr(f, bstr_o + pv_le(f, row + 8¤byte, 4) × 1¤byte, bstr_o + bstr_n))
                 r ← r + 1
 
-            return (Prev{ok: true, raw: f,
-                         machine: pv_le(f, 18¤byte, 2),
-                         is64: is64,
-                         eflags: pv_le(f, if is64: 48¤byte else: 36¤byte, 4),
-                         text_off: text_o, text_size: text_n,
-                         tx_end: tx,
-                         ro_off: ro_o, ro_size: ro_n, d_off: d_o, d_size: d_n,
-                         sym_name: sn, sym_off: sv, sym_size: ss,
-                         row_kind: rk, row_name: rn, row_hash: rh})
+            return Prev{ok: true, raw: f,
+                        machine: pv_le(f, 18¤byte, 2),
+                        is64: is64,
+                        eflags: pv_le(f, if is64: 48¤byte else: 36¤byte, 4),
+                        text_off: text_o, text_size: text_n,
+                        tx_end: tx,
+                        ro_off: ro_o, ro_size: ro_n, d_off: d_o, d_size: d_n,
+                        sym_name: sn, sym_off: sv, sym_size: ss,
+                        row_kind: rk, row_name: rn, row_hash: rh}
         ∅:
             return prev_none()
 
@@ -371,7 +371,7 @@ fn names_new(want : i64) → Names:
     let sl : mut i64[] = []
     foreach _ := 0…names_slots(want):
         sl.push(0)
-    (Names{slot: sl, name: []})
+    Names{slot: sl, name: []}
 
 // The name the bill knows a function by: the module it was written in,
 // then its own.
@@ -595,17 +595,17 @@ struct Incr:
 
 @export
 fn incr_off() → Incr:
-    (Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
-          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
-          tx_ends: [], text: [], ro: []})
+    Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
+         sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
+         tx_ends: [], text: [], ro: []}
 
 // A first build under --incremental: no file to line up with, so
 // every function is written as usual and each is left room to grow.
 @export
 fn incr_first(fill : i64) → Incr:
-    (Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
-          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
-          tx_ends: [], text: [], ro: []})
+    Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
+         sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
+         tx_ends: [], text: [], ro: []}
 
 // A build against a file the previous one wrote: every symbol it had,
 // the room it gave each, its .text to copy from, and which functions
@@ -647,11 +647,11 @@ fn incr_prev(a : ast.Ast, toks : lex.Toks, src : byte[], prev : Prev,
     let ro : mut u8[] = []
     if rhi <= #prev.raw:
         ro ← prev.raw[prev.ro_off…rhi]
-    (Incr{mode: 2, fill: fill,
-          fresh: incr_regenerate(a, toks, src, prev, rows),
-          sym: sym, sym_at: at, sym_end: end,
-          text_room: incr_text_room(prev), ro_room: incr_ro_room(prev),
-          tx_ends: rel, text: text, ro: ro})
+    Incr{mode: 2, fill: fill,
+         fresh: incr_regenerate(a, toks, src, prev, rows),
+         sym: sym, sym_at: at, sym_end: end,
+         text_room: incr_text_room(prev), ro_room: incr_ro_room(prev),
+         tx_ends: rel, text: text, ro: ro}
 
 // How many functions a rebuild has to write again, for the line the
 // driver prints about what it decided.

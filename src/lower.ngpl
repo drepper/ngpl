@@ -3419,8 +3419,8 @@ fn lower_lambda_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, j : i64) → i
     if #lw.extra > 0:
         foreach v := lw.extra:
             exc.push(v)
-    (ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
-          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
+    ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+         extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 
 // one partial-application site becomes one shim: the remaining
 // arguments arrive in registers, the box rides behind them, and the
@@ -3499,8 +3499,8 @@ fn lower_shim_fn(lw : &mut Lower, chk : check.Chk, j : i64) → ir.IrFn:
     if #lw.extra > 0:
         foreach v := lw.extra:
             exc.push(v)
-    (ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
-          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
+    ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+         extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 
 @export
 fn lower_stub_fn(lw : &mut Lower, np : i64) → ir.IrFn:
@@ -3537,8 +3537,8 @@ fn lower_stub_fn(lw : &mut Lower, np : i64) → ir.IrFn:
         idc.push(v)
     foreach v := lw.iww:
         iwc.push(v)
-    (ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
-          extra: [], nvregs: lw.tmax, nlabels: 0, fbytes: lw.fbytes})
+    ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+         extra: [], nvregs: lw.tmax, nlabels: 0, fbytes: lw.fbytes}
 
 @export
 fn lower_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, f : i64) → ir.IrFn:
@@ -3668,5 +3668,5 @@ fn lower_fn(lw : &mut Lower, a : ast.Ast, chk : check.Chk, f : i64) → ir.IrFn:
     assert(#opc = #iac and #opc = #ibc and #opc = #icc, "ir arrays in step")
     assert(#opc = #idc and #opc = #iwc, "ir arrays in step")
     assert(lw.tmax >= chk.fslots[f × 1¤ptrdiff], "the frame covers the locals")
-    (ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc, extra: exc,
-          nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
+    ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc, extra: exc,
+         nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}

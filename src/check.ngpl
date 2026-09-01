@@ -6401,34 +6401,34 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
     let snm : mut str[] = []
     foreach sd := a.structs:
         snm.push(sd.name)
-    let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, snm: snm, curmod: "",
-                                   gnames: gnames, gvals: [], ginit: [], ite: [],
-                                   ntype: ntype, nslot: nslot, ncvt: ncvt,
-                                   nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,
-                                   pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
-                                   pnode_slot: [], pnode_id: [],
-                                   stmt_seq: 0, cur_stmt: ast.Nk.none,
-                                   lbirth: [], llast: [], luse: [],
-                                   lesc: [], lwarn: [], ltok: [], log: [],
-                                   lown: [], wslot: [], wreb: [],
-                                   fslots: [],
-                                   diags: [], snames: [], stype: [], smut: [],
-                                   sslot: [], sheld: [], hslot: [], hback: [],
-                                   hmark: [], marks: [], nslots: 0,
-                                   loop_depth: 0, cur_fn: 0,
-                                   in_contract: false, in_post: false,
-                                   scope_floor: 0, lams: [], lamns: [],
-                                   psfn: [], psk: [], psnp: [],
-                                   fdone: [], skipfn: [], lam_ret: ⁻1,
-                                   val_want: ⁻1,
-                                   argcopy: [],
-                                   nlend: nlend, lorig_node: [], lorig_s: [],
-                                   slend: [], sborrow: [],
-                                   lend_b: [], lend_o: [], lend_back: [], lend_until: [], lend_how: [],
-                                   lu_name: [], lu_line: [], lu_slot: [], lu_used: [], lu_tok: [], loop_end: [],
-                                   stmt_end: 0¤"line", blk_end: 0¤"line",
-                                   rec_stmt: [], rec_slot: [], lrec: [],
-                                   rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: [], smove: [], nmove: nmove})
+    let c : mut Checker = Checker{a: a, toks: toks, src: src, fnames: fnames, snm: snm, curmod: "",
+                                  gnames: gnames, gvals: [], ginit: [], ite: [],
+                                  ntype: ntype, nslot: nslot, ncvt: ncvt,
+                                  nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,
+                                  pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
+                                  pnode_slot: [], pnode_id: [],
+                                  stmt_seq: 0, cur_stmt: ast.Nk.none,
+                                  lbirth: [], llast: [], luse: [],
+                                  lesc: [], lwarn: [], ltok: [], log: [],
+                                  lown: [], wslot: [], wreb: [],
+                                  fslots: [],
+                                  diags: [], snames: [], stype: [], smut: [],
+                                  sslot: [], sheld: [], hslot: [], hback: [],
+                                  hmark: [], marks: [], nslots: 0,
+                                  loop_depth: 0, cur_fn: 0,
+                                  in_contract: false, in_post: false,
+                                  scope_floor: 0, lams: [], lamns: [],
+                                  psfn: [], psk: [], psnp: [],
+                                  fdone: [], skipfn: [], lam_ret: ⁻1,
+                                  val_want: ⁻1,
+                                  argcopy: [],
+                                  nlend: nlend, lorig_node: [], lorig_s: [],
+                                  slend: [], sborrow: [],
+                                  lend_b: [], lend_o: [], lend_back: [], lend_until: [], lend_how: [],
+                                  lu_name: [], lu_line: [], lu_slot: [], lu_used: [], lu_tok: [], loop_end: [],
+                                  stmt_end: 0¤"line", blk_end: 0¤"line",
+                                  rec_stmt: [], rec_slot: [], lrec: [],
+                                  rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: [], smove: [], nmove: nmove}
     if #a.structs > 0:
         foreach i := 0…#a.structs:
             let sd := a.structs[i]
@@ -6536,9 +6536,9 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nhold: c.nhold, nfree: c.nfree, log: c.log, fslots: c.fslots,
-         rec_stmt: c.rec_stmt, rec_slot: c.rec_slot, nmove: c.nmove,
-         gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
-         psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
-         argcopy: c.argcopy,
-         diags: c.diags})
+    Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nhold: c.nhold, nfree: c.nfree, log: c.log, fslots: c.fslots,
+        rec_stmt: c.rec_stmt, rec_slot: c.rec_slot, nmove: c.nmove,
+        gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
+        psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
+        argcopy: c.argcopy,
+        diags: c.diags}

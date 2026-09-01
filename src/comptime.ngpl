@@ -50,16 +50,16 @@ struct CVal:
     s : str
 
 fn cv_none() → CVal:
-    (CVal{tag: CV_NONE, n: 0, m: 0, s: ""})
+    CVal{tag: CV_NONE, n: 0, m: 0, s: ""}
 
 fn cv_int(v : i64) → CVal:
-    (CVal{tag: CV_INT, n: v, m: 0, s: ""})
+    CVal{tag: CV_INT, n: v, m: 0, s: ""}
 
 fn cv_bool(b : bool) → CVal:
-    (CVal{tag: CV_BOOL, n: if b: 1 else: 0, m: 0, s: ""})
+    CVal{tag: CV_BOOL, n: if b: 1 else: 0, m: 0, s: ""}
 
 fn cv_str(t : str) → CVal:
-    (CVal{tag: CV_STR, n: 0, m: 0, s: t})
+    CVal{tag: CV_STR, n: 0, m: 0, s: t}
 
 // how a statement left off, carried outward by one comparison
 let EV_NORM : i64 = 0
@@ -747,7 +747,7 @@ impl Cev:
                 return cv_none()
             self.pool.push(e.s)
         assert(@dropunit(#self.pool) = base + n, "every element reached the pool")
-        (CVal{tag: CV_ARR, n: base, m: n, s: ""})
+        CVal{tag: CV_ARR, n: base, m: n, s: ""}
 
     fn ev_index(&mut self, tok : i64, na : i64, nb : i64) → CVal:
         let base : CVal = self.ev_expr(na)
@@ -778,7 +778,7 @@ impl Cev:
                 self.pool.push(self.pool[(l.n + i) × 1¤ptrdiff])
             foreach j := 0…r.m:
                 self.pool.push(self.pool[(r.n + j) × 1¤ptrdiff])
-            return (CVal{tag: CV_ARR, n: base, m: l.m + r.m, s: ""})
+            return CVal{tag: CV_ARR, n: base, m: l.m + r.m, s: ""}
         self.derr(tok, "⧺ joins two strings or two arrays, and these are " ⧺ self.cv_kind(l) ⧺ " and " ⧺ self.cv_kind(r))
         cv_none()
 
@@ -931,7 +931,7 @@ impl Cev:
         self.cfg_outd.push(outd)
         self.cfg_tgt.push(tgt)
         self.cfg_opt.push(olv)
-        (CVal{tag: CV_EXE, n: at, m: 0, s: ""})
+        CVal{tag: CV_EXE, n: at, m: 0, s: ""}
 
     fn ev_bmethod(&mut self, tok : i64, name : str, args_off : i64 ¤"aextra") → CVal:
         // A member function of the build: what the recipe declares.
@@ -1000,7 +1000,7 @@ impl Cev:
         let base : i64 = @dropunit(#self.pool)
         foreach x := xs:
             self.pool.push(x)
-        (CVal{tag: CV_ARR, n: base, m: @dropunit(#xs), s: ""})
+        CVal{tag: CV_ARR, n: base, m: @dropunit(#xs), s: ""}
 
 // Read the @build recipe, if the program carries one.  A file without
 // one pays a single comparison; every other phase here answers a struct
@@ -1011,19 +1011,19 @@ fn build_recipe(a : ast.Ast, toks : lex.Toks, src : byte[], gvals : i64[],
                 output : str, target : str, host : str, optimize : i64,
                 searched : str) → Recipe:
     if #a.builds = 0:
-        return (Recipe{names: [], roots: [], outdirs: [], targets: [],
-                       optimizes: [], paths: [], flags: [], diags: []})
+        return Recipe{names: [], roots: [], outdirs: [], targets: [],
+                      optimizes: [], paths: [], flags: [], diags: []}
     let recipe : ast.FnDef = a.builds[0¤ptrdiff]
-    let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
-                          names: [], vals: [], vmut: [], marks: [], floor: 0,
-                          pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
-                          cfg_tgt: [], cfg_opt: [], added: [], opt_output: output,
-                          opt_target: target, opt_path: searched,
-                          opt_optimize: optimize,
-                          outd: "", host: host,
-                          paths: [], flags: [],
-                          steps: EV_STEPS, depth: 0, ret: cv_none(),
-                          diags: []})
+    let ev : mut Cev = Cev{a: a, toks: toks, src: src, gvals: gvals,
+                         names: [], vals: [], vmut: [], marks: [], floor: 0,
+                         pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
+                         cfg_tgt: [], cfg_opt: [], added: [], opt_output: output,
+                         opt_target: target, opt_path: searched,
+                         opt_optimize: optimize,
+                         outd: "", host: host,
+                         paths: [], flags: [],
+                         steps: EV_STEPS, depth: 0, ret: cv_none(),
+                         diags: []}
     // Pass one settles what the body may contain, for every branch --
     // including the ones pass two will not take.
     ev.ev_scan(recipe.body)
@@ -1037,15 +1037,15 @@ fn build_recipe(a : ast.Ast, toks : lex.Toks, src : byte[], gvals : i64[],
         let np : i64 = a.extra[recipe.params_off]
         assert(np >= 1 and np <= 2, "the recipe takes the build and, where it reads it, the command line")
         ev.bind(ev.text(a.extra[recipe.params_off + 1]),
-                (CVal{tag: CV_BUILD, n: 0, m: 0, s: ""}), false)
+                CVal{tag: CV_BUILD, n: 0, m: 0, s: ""}, false)
         if np = 2:
             ev.bind(ev.text(a.extra[recipe.params_off + 3]),
-                    (CVal{tag: CV_OPTS, n: 0, m: 0, s: ""}), false)
+                    CVal{tag: CV_OPTS, n: 0, m: 0, s: ""}, false)
         _ ← ev.ev_stmt(recipe.body)
         ev.pop_scope()
     if #ev.diags > 0:
-        return (Recipe{names: [], roots: [], outdirs: [], targets: [],
-                       optimizes: [], paths: [], flags: [], diags: ev.diags})
+        return Recipe{names: [], roots: [], outdirs: [], targets: [],
+                      optimizes: [], paths: [], flags: [], diags: ev.diags}
     assert(#ev.marks = 0, "every scope the recipe opened was closed")
     assert(ev.depth = 0, "every call the recipe made returned")
     // the executables it added, in the order it added them, each with
@@ -1064,5 +1064,5 @@ fn build_recipe(a : ast.Ast, toks : lex.Toks, src : byte[], gvals : i64[],
         optimizes.push(ev.cfg_opt[i])
     assert(#names = #roots and #names = #outdirs and #names = #targets and #names = #optimizes,
            "the five things said about an executable are still in step")
-    (Recipe{names: names, roots: roots, outdirs: outdirs, targets: targets,
-            optimizes: optimizes, paths: ev.paths, flags: ev.flags, diags: []})
+    Recipe{names: names, roots: roots, outdirs: outdirs, targets: targets,
+           optimizes: optimizes, paths: ev.paths, flags: ev.flags, diags: []}

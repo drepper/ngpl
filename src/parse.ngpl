@@ -3123,28 +3123,28 @@ fn parse_recipe(toks : lex.Toks, src : byte[]) → ast.Ast:
     parse_mode(toks, src, true, ast.no_mods())
 
 fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) → ast.Ast:
-    let p : mut Parser = (Parser{mtab: mods, udecl: [], edecl: [], toks: toks, src: src, pos: 0, blets: [],
-                                 nkind: [], ntok: [], na: [], nb: [], nc: [],
-                                 extra: [], fns: [], qmods: [],
-                                 builds: [], globals: [], structs: [],
-                                 tanames: [], tatypes: [],
-                                 unames: types.unit_names(), umarks: types.unit_marks(),
-                                 udecay: types.unit_decays(),
-                                 udname: types.unit_none_names(),
-                                 udtok: types.unit_decays(),
-                                 snames: [], sexp: [], eexp: [1], tts: [], ttl: [], tte: [],
-                                 fae: [], fas: [], hdty: [],
-                                 mel: [], mrr: [], mcc: [], mdd: [], minner: [],
-                                 lts: [], ltl: [], lte: [], ltf: [], olds: [],
-                                 enames: types.builtin_enum_names(),
-                                 ewidth: types.builtin_enum_widths(),
-                                 estart: [0], ecount: [8], eflag: [0],
-                                 emembers: types.builtin_enum_members(),
-                                 evalues: types.builtin_enum_values(),
-                                 tvn: [], braces: 0, semi_end: false, lent: 0, ifexpr: 0,
-                                 ignored: [], igtests: [],
-                                 expects: [], expoff: [], pending_exp: ⁻1, def_start: 0,
-                                 diags: [], poisoned: false})
+    let p : mut Parser = Parser{mtab: mods, udecl: [], edecl: [], toks: toks, src: src, pos: 0, blets: [],
+                                nkind: [], ntok: [], na: [], nb: [], nc: [],
+                                extra: [], fns: [], qmods: [],
+                                builds: [], globals: [], structs: [],
+                                tanames: [], tatypes: [],
+                                unames: types.unit_names(), umarks: types.unit_marks(),
+                                udecay: types.unit_decays(),
+                                udname: types.unit_none_names(),
+                                udtok: types.unit_decays(),
+                                snames: [], sexp: [], eexp: [1], tts: [], ttl: [], tte: [],
+                                fae: [], fas: [], hdty: [],
+                                mel: [], mrr: [], mcc: [], mdd: [], minner: [],
+                                lts: [], ltl: [], lte: [], ltf: [], olds: [],
+                                enames: types.builtin_enum_names(),
+                                ewidth: types.builtin_enum_widths(),
+                                estart: [0], ecount: [8], eflag: [0],
+                                emembers: types.builtin_enum_members(),
+                                evalues: types.builtin_enum_values(),
+                                tvn: [], braces: 0, semi_end: false, lent: 0, ifexpr: 0,
+                                ignored: [], igtests: [],
+                                expects: [], expoff: [], pending_exp: ⁻1, def_start: 0,
+                                diags: [], poisoned: false}
     // a struct may be written below whatever names it, so the names
     // are gathered in one sweep before anything is parsed
     let n : i64 = @dropunit(#toks.kind)
@@ -3217,7 +3217,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
             // nothing half-built is left where the recipe can call it
             if lenient and @dropunit(#p.diags) > d0 and @dropunit(#p.builds) = b0:
                 while @dropunit(#p.diags) > d0:
-                    _ ← p.diags.pop() ?? (diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.Level.error, code: diag.DIAG_NONE})
+                    _ ← p.diags.pop() ?? diag.Diag{line: 1¤"line", col: 1¤"col", msg: "", level: diag.Level.error, code: diag.DIAG_NONE}
                 while @dropunit(#p.fns) > f0:
                     _ ← p.fns.pop() ?? p.fns[0¤ptrdiff]
                 while @dropunit(#p.globals) > g0:
@@ -3242,18 +3242,18 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         assert(#p.structs = #p.snames, "every pre-scanned struct parsed")
         assert(#p.nkind = #p.ntok and #p.nkind = #p.na, "node arrays in step")
         assert(#p.nkind = #p.nb and #p.nkind = #p.nc, "node arrays in step")
-    (ast.Ast{blets: p.blets, nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
-         extra: p.extra, strs: p.toks.strs, fns: p.fns,
-         qmods: p.qmods, mnames: mods.names, mroots: mods.roots,
-         builds: p.builds,
-         globals: p.globals,
-         structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
-         fae: p.fae, fas: p.fas, hdty: p.hdty,
-         mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
-         lts: p.lts, ltl: p.ltl, lte: p.lte, ltf: p.ltf,
-         unames: p.unames, umarks: p.umarks, udecay: p.udecay,
-         enames: p.enames, ewidth: p.ewidth, estart: p.estart,
-         ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,
-         evalues: p.evalues,
-         ignored: p.ignored, igtests: p.igtests,
-         expects: p.expects, expoff: p.expoff, diags: p.diags})
+    ast.Ast{blets: p.blets, nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
+        extra: p.extra, strs: p.toks.strs, fns: p.fns,
+        qmods: p.qmods, mnames: mods.names, mroots: mods.roots,
+        builds: p.builds,
+        globals: p.globals,
+        structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
+        fae: p.fae, fas: p.fas, hdty: p.hdty,
+        mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
+        lts: p.lts, ltl: p.ltl, lte: p.lte, ltf: p.ltf,
+        unames: p.unames, umarks: p.umarks, udecay: p.udecay,
+        enames: p.enames, ewidth: p.ewidth, estart: p.estart,
+        ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,
+        evalues: p.evalues,
+        ignored: p.ignored, igtests: p.igtests,
+        expects: p.expects, expoff: p.expoff, diags: p.diags}

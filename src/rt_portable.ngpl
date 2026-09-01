@@ -39,8 +39,8 @@ struct RtB:
 
 @export
 fn rtb(np : i64) → RtB:
-    (RtB{op: [], ia: [], ib: [], ic: [], idd: [], iww: [], extra: [],
-         ntmp: np, nlab: 0})
+    RtB{op: [], ia: [], ib: [], ic: [], idd: [], iww: [], extra: [],
+        ntmp: np, nlab: 0}
 
 impl RtB:
     fn o(&mut self, op : ir.Ir, a : i64, b : i64, c : i64, d : i64, w : i64):
@@ -380,17 +380,17 @@ fn rt_makedev(b : &mut RtB, maj : i64, mnr : i64) → i64:
 
 @export
 fn rtb_fn(b : RtB) → ir.IrFn:
-    (ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
-          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab, fbytes: 0¤byte})
+    ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+         extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab, fbytes: 0¤byte}
 
 // the same, for a routine that asked for bytes of its own frame.  The
 // count arrives without a measure and is given one here, since what
 // the bootstrap subset writes a unit on is a literal and not a name.
 @export
 fn rtb_deep_fn(b : RtB, nbytes : i64) → ir.IrFn:
-    (ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
-          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab,
-          fbytes: nbytes × 1¤byte})
+    ir.IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+         extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab,
+         fbytes: nbytes × 1¤byte}
 
 // each runtime routine, one builder; the id picks it
 @export

@@ -162,8 +162,8 @@ struct Mods:
 
 @export
 fn no_mods() → Mods:
-    (Mods{offs: [0¤byte], fmod: [0], names: [""], roots: [""], bname: [],
-          bmod: [], bowner: []})
+    Mods{offs: [0¤byte], fmod: [0], names: [""], roots: [""], bname: [],
+         bmod: [], bowner: []}
 
 // A struct literal writes a name and its fields; one of them names no
 // struct the program declares but the one the build system defines,

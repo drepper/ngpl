@@ -592,11 +592,11 @@ impl Lexer:
 
 @export
 fn lex(src : byte[]) → Toks:
-    let lx : mut Lexer = (Lexer{src: src, n: @dropunit(#src), cls: mkcls(), punct: mkpunct(),
-                                pos: 0, line: 1, col: 1, parens: 0,
-                                kind: [], off: [], len: [], tline: [],
-                                tcol: [], val: [], big: [], strs: [],
-                                indents: [0¤"col"], diags: []})
+    let lx : mut Lexer = Lexer{src: src, n: @dropunit(#src), cls: mkcls(), punct: mkpunct(),
+                               pos: 0, line: 1, col: 1, parens: 0,
+                               kind: [], off: [], len: [], tline: [],
+                               tcol: [], val: [], big: [], strs: [],
+                               indents: [0¤"col"], diags: []}
     let at_line_start : mut bool = true
     while lx.pos < lx.n and #lx.diags = 0:
         let more : bool = lx.skip_gaps()
@@ -658,6 +658,6 @@ fn lex(src : byte[]) → Toks:
     assert(#lx.kind = #lx.off and #lx.kind = #lx.len, "token arrays in step")
     assert(#lx.kind = #lx.tline and #lx.kind = #lx.val and #lx.kind = #lx.big,
            "token arrays in step")
-    (Toks{kind: lx.kind, off: lx.off, len: lx.len, line: lx.tline,
-          col: lx.tcol, val: lx.val, big: lx.big, strs: lx.strs,
-          diags: lx.diags})
+    Toks{kind: lx.kind, off: lx.off, len: lx.len, line: lx.tline,
+         col: lx.tcol, val: lx.val, big: lx.big, strs: lx.strs,
+         diags: lx.diags}

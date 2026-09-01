@@ -447,13 +447,13 @@ impl Emit:
         @dropunit(#self.code)
 
     fn mark(&self) → Emark:
-        (Emark{code: @dropunit(#self.code), cf: @dropunit(#self.cf_pos),
-               sf: @dropunit(#self.sf_pos), sd: @dropunit(#self.sd_pos),
-               df: @dropunit(#self.df_pos), jt: @dropunit(#self.jt_pos),
-               jts: @dropunit(#self.jt_starts), jte: @dropunit(#self.jt_entries),
-               jtn: self.jt_count, gr: @dropunit(#self.gr_pos),
-               rx: @dropunit(#self.rx_pos), bt: @dropunit(#self.bt_pos),
-               ff: @dropunit(#self.ff_pos)})
+        Emark{code: @dropunit(#self.code), cf: @dropunit(#self.cf_pos),
+              sf: @dropunit(#self.sf_pos), sd: @dropunit(#self.sd_pos),
+              df: @dropunit(#self.df_pos), jt: @dropunit(#self.jt_pos),
+              jts: @dropunit(#self.jt_starts), jte: @dropunit(#self.jt_entries),
+              jtn: self.jt_count, gr: @dropunit(#self.gr_pos),
+              rx: @dropunit(#self.rx_pos), bt: @dropunit(#self.bt_pos),
+              ff: @dropunit(#self.ff_pos)}
 
     // Everything written since the mark, unwritten.  Each list is
     // appended to in order, so its length at the mark is a position in

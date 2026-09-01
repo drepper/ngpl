@@ -537,20 +537,20 @@ struct Elf32:
 @export
 fn phdr(kind : Pt, flags : Pf, off : i64 ¤byte, vaddr : i64 ¤byte,
         filesz : i64 ¤byte, memsz : i64 ¤byte, align : i64 ¤byte) → Elf64_Phdr:
-    (Elf64_Phdr{p_type: kind, p_flags: flags,
-                p_offset: off, p_vaddr: vaddr,
-                p_paddr: vaddr, p_filesz: filesz,
-                p_memsz: memsz, p_align: align})
+    Elf64_Phdr{p_type: kind, p_flags: flags,
+               p_offset: off, p_vaddr: vaddr,
+               p_paddr: vaddr, p_filesz: filesz,
+               p_memsz: memsz, p_align: align}
 
 fn shdr(name : i64 ¤byte, kind : Sht, flags : Shf, addr : i64 ¤byte,
         off : i64 ¤byte, size : i64 ¤byte, link : i64 ¤"shndx",
         info : i64 ¤"symndx", align : i64 ¤byte,
         entsize : i64 ¤byte) → Elf64_Shdr:
-    (Elf64_Shdr{sh_name: name, sh_type: kind,
-                sh_flags: flags, sh_addr: addr,
-                sh_offset: off, sh_size: size,
-                sh_link: link, sh_info: info,
-                sh_addralign: align, sh_entsize: entsize})
+    Elf64_Shdr{sh_name: name, sh_type: kind,
+               sh_flags: flags, sh_addr: addr,
+               sh_offset: off, sh_size: size,
+               sh_link: link, sh_info: info,
+               sh_addralign: align, sh_entsize: entsize}
 
 // The plan, in the gelf manner: the 64-bit structures are wide enough
 // to hold everything a 32-bit file says, so the planning phase builds
@@ -815,42 +815,42 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let nsh : i64 ¤"shndx" = @dropunit(#shdrs)
 
     let cls : Elfclass = if tgt.is64: Elfclass.class64 else: Elfclass.class32
-    let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
-        e_ident: elf_ident(cls, Elfdata.lsb, Elfosabi.sysv),
-        e_type: Et.exec, e_machine: tgt.machine,
-        e_version: Ev.current, e_entry: text_vaddr,
-        e_phoff: ehsize, e_shoff: sh_off,
-        e_flags: tgt.eflags, e_ehsize: ehsize,
-        e_phentsize: phent, e_phnum: nph,
-        e_shentsize: shent, e_shnum: nsh,
-        e_shstrndx: nsh - 1})
+    let ehdr : Elf64_Ehdr = Elf64_Ehdr{
+       e_ident: elf_ident(cls, Elfdata.lsb, Elfosabi.sysv),
+       e_type: Et.exec, e_machine: tgt.machine,
+       e_version: Ev.current, e_entry: text_vaddr,
+       e_phoff: ehsize, e_shoff: sh_off,
+       e_flags: tgt.eflags, e_ehsize: ehsize,
+       e_phentsize: phent, e_phnum: nph,
+       e_shentsize: shent, e_shnum: nsh,
+       e_shstrndx: nsh - 1}
 
-    (ElfPlan{ehdr: ehdr, phdrs: phdrs, shdrs: shdrs, syms: symtab,
-             strtab: strtab, shstr: shstr,
-             sbom: sbom, sbomstr: sbomstr,
-             text_off: text_off, text_size: text_size,
-             ro_off: ro_off, ro_size: ro_size,
-             d_off: d_off, d_size: d_size,
-             bom_off: bom_off, bom_size: bom_size, bstr_size: bstr_size,
-             sym_off: sym_off, shstr_off: shstr_off,
-             sh_off: sh_off, hdrs_size: hdrs_size})
+    ElfPlan{ehdr: ehdr, phdrs: phdrs, shdrs: shdrs, syms: symtab,
+            strtab: strtab, shstr: shstr,
+            sbom: sbom, sbomstr: sbomstr,
+            text_off: text_off, text_size: text_size,
+            ro_off: ro_off, ro_size: ro_size,
+            d_off: d_off, d_size: d_size,
+            bom_off: bom_off, bom_size: bom_size, bstr_size: bstr_size,
+            sym_off: sym_off, shstr_off: shstr_off,
+            sh_off: sh_off, hdrs_size: hdrs_size}
 
 // a 64-bit file is the plan with the gaps put in: nothing is copied
 // and nothing converted, which is what building the wide forms up
 // front buys
 @export
 fn elf_file64(pl : ElfPlan, code : u8[], rodata : u8[], data : u8[]) → Elf:
-    (Elf{ehdr: pl.ehdr, phdrs: pl.phdrs,
-        gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
-        gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
-        gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
-        gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
-        sbom: pl.sbom, sbomstr: pl.sbomstr,
-        gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
-        syms: pl.syms,
-        strtab: pl.strtab, shstrtab: pl.shstr,
-        gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
-        shdrs: pl.shdrs})
+    Elf{ehdr: pl.ehdr, phdrs: pl.phdrs,
+       gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
+       gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
+       gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
+       gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
+       sbom: pl.sbom, sbomstr: pl.sbomstr,
+       gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
+       syms: pl.syms,
+       strtab: pl.strtab, shstrtab: pl.shstr,
+       gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
+       shdrs: pl.shdrs}
 
 // …and a 32-bit file narrows copies of the same structures, with the
 // two reorderings the specification asks for written where the fields
@@ -877,26 +877,26 @@ fn elf_file32(pl : ElfPlan, code : u8[], rodata : u8[], data : u8[]) → Elf32:
                               st_size: sy.st_size, st_info: sy.st_info,
                               st_other: sy.st_other, st_shndx: sy.st_shndx})
     let e := pl.ehdr
-    let ehdr : Elf32_Ehdr = (Elf32_Ehdr{
-        e_ident: e.e_ident,
-        e_type: e.e_type, e_machine: e.e_machine,
-        e_version: e.e_version, e_entry: e.e_entry,
-        e_phoff: e.e_phoff, e_shoff: e.e_shoff,
-        e_flags: e.e_flags, e_ehsize: e.e_ehsize,
-        e_phentsize: e.e_phentsize, e_phnum: e.e_phnum,
-        e_shentsize: e.e_shentsize, e_shnum: e.e_shnum,
-        e_shstrndx: e.e_shstrndx})
-    (Elf32{ehdr: ehdr, phdrs: phdrs,
-        gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
-        gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
-        gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
-        // the bill of materials is the same twelve bytes a row in both
-        // classes: an offset into a string table is no wider on a
-        // 64-bit machine, so there is nothing here to narrow
-        gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
-        sbom: pl.sbom, sbomstr: pl.sbomstr,
-        gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
-        syms: symtab,
-        strtab: pl.strtab, shstrtab: pl.shstr,
-        gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
-        shdrs: shdrs})
+    let ehdr : Elf32_Ehdr = Elf32_Ehdr{
+       e_ident: e.e_ident,
+       e_type: e.e_type, e_machine: e.e_machine,
+       e_version: e.e_version, e_entry: e.e_entry,
+       e_phoff: e.e_phoff, e_shoff: e.e_shoff,
+       e_flags: e.e_flags, e_ehsize: e.e_ehsize,
+       e_phentsize: e.e_phentsize, e_phnum: e.e_phnum,
+       e_shentsize: e.e_shentsize, e_shnum: e.e_shnum,
+       e_shstrndx: e.e_shstrndx}
+    Elf32{ehdr: ehdr, phdrs: phdrs,
+       gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
+       gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
+       gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
+       // the bill of materials is the same twelve bytes a row in both
+       // classes: an offset into a string table is no wider on a
+       // 64-bit machine, so there is nothing here to narrow
+       gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
+       sbom: pl.sbom, sbomstr: pl.sbomstr,
+       gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
+       syms: symtab,
+       strtab: pl.strtab, shstrtab: pl.shstr,
+       gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
+       shdrs: shdrs}

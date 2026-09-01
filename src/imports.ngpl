@@ -255,7 +255,7 @@ struct Found:
 
 @export
 fn imp_nowhere() → Found:
-    (Found{path: "", dev: 0, ino: 0})
+    Found{path: "", dev: 0, ino: 0}
 
 // What a path is, as one call: the pair is (0, 0) where the path
 // answers to no file to read, and a candidate that is not there --
@@ -270,7 +270,7 @@ fn imp_ident(p : str) → Found:
     let (d, k) : (i64, i64) = std.fs.cwd().file_id(p)
     if k = 0:
         return imp_nowhere()
-    (Found{path: p, dev: d, ino: k})
+    Found{path: p, dev: d, ino: k}
 
 // A name looked for in one directory, as written and then with the
 // suffix a source file has.  Nowhere where neither is there.
@@ -471,7 +471,7 @@ impl Reader:
                 // what it is is asked here, where every other name has
                 // been asked already
                 let f0 : Found = imp_ident(nm)
-                _ ← self.take((Found{path: nm, dev: f0.dev, ino: f0.ino}), "")
+                _ ← self.take(Found{path: nm, dev: f0.dev, ino: f0.ino}, "")
                 if self.why ≠ "":
                     return
         let at : mut i64 ¤ptrdiff = 0¤ptrdiff
@@ -494,14 +494,14 @@ impl Reader:
 @export
 @impure
 fn read_program(roots : str[], paths : str[]) → Program:
-    let r : mut Reader = (Reader{why: "", paths: paths, src: [], names: [],
-                                 offs: [], fmod: [], cdev: [], cino: [],
-                                 cname: [], cmod: [],
-                                 cur: 0, mroot: [], pend_name: [],
-                                 pend_file: [], pend_from: [], pend_line: [],
-                                 pend_owner: [], bname: [], bmod: [],
-                                 bowner: []})
+    let r : mut Reader = Reader{why: "", paths: paths, src: [], names: [],
+                                offs: [], fmod: [], cdev: [], cino: [],
+                                cname: [], cmod: [],
+                                cur: 0, mroot: [], pend_name: [],
+                                pend_file: [], pend_from: [], pend_line: [],
+                                pend_owner: [], bname: [], bmod: [],
+                                bowner: []}
     r.take_all(roots)
-    (Program{why: r.why, src: r.src, names: r.names, offs: r.offs,
-             fmod: r.fmod, mroot: r.mroot, bname: r.bname, bmod: r.bmod,
-             bowner: r.bowner})
+    Program{why: r.why, src: r.src, names: r.names, offs: r.offs,
+            fmod: r.fmod, mroot: r.mroot, bname: r.bname, bmod: r.bmod,
+            bowner: r.bowner}
