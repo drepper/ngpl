@@ -1,0 +1,10 @@
+// Asking the file system what is there is looking outside the program,
+// so the function that asks says @impure, exactly as one that opens a
+// file does.
+fn looks(p : str) → bool:
+    std.fs.cwd().has_file(p)
+
+@start
+@impure
+fn main():
+    std.println("{}", looks("CLAUDE.md"))

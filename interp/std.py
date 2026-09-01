@@ -396,6 +396,34 @@ class DirFD:
             return none()
         return some(ObjectValue(FileStream(fd)))
 
+    def has_file(self, name):
+        """Whether a name in this directory answers to a file to read.
+
+        Asked with statx rather than an open: a name that is not there
+        costs one call and no descriptor, and a name that is there is
+        not held open by the asking.  A directory answers no -- the
+        question is about a file to read, and opening one for reading
+        succeeds where reading it would not.
+
+        Args:
+            name: filename (str or bytes).
+
+        Returns:
+            true where the name answers to a regular file, false where
+            it answers to nothing, to something that is not a file, or
+            to something this process may not ask about.
+        """
+        from interp.value import mk_bool
+
+        self._check_open("has_file")
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        try:
+            st = os.stat(name, dir_fd=self._fd)
+        except OSError:
+            return mk_bool(False)
+        return mk_bool((st.st_mode & 0o170000) == 0o100000)
+
     def create_file(self, name, mode=None):
         """Create (or truncate) a file relative to this directory, for writing.
 

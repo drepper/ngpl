@@ -246,12 +246,12 @@ fn resolve_source(name : str, base : str, paths : str[]) → str:
             return cand
     here
 
+// Whether a candidate is there, asked the way imports.ngpl asks it:
+// the name is looked at rather than opened, so the candidates that are
+// not there cost a call each and a descriptor none.
 @impure
 fn can_open(path : str) → bool:
-    let f := std.fs.cwd().open_file(path)
-    match f:
-        ⊨(_): true
-        ∅: false
+    std.fs.cwd().has_file(path)
 
 // Read the recipe out of its own file: lex it, parse it leniently, and
 // run it.  The file is not compiled here -- what it says to compile is

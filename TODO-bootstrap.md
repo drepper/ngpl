@@ -294,3 +294,12 @@ Outstanding
     compiler can see.  A table read on every operation -- the IR's reads/canon/copies
     masks -- is written once beside the program instead of being rebuilt by the function
     that reads it.  tests/compile/t79_global_table and refuse/global_array_{mut,computed}.
+
+[x] `std.fs.cwd().has_file(p)` answers whether a name is a plain file, asked with statx and
+    without opening it: a candidate that is not there costs one call and no descriptor, and
+    a directory answers false where an open for reading would have said yes to something
+    that reads as nothing.  The import resolver and the recipe's source resolver both asked
+    by opening and closing; they ask this now.  On x86-64 the emitter gained the `sysc`
+    operation, so a runtime routine written once as portable IR now serves all six machines
+    rather than being hand-written for the pioneer as well.  tests/compile/t80_has_file and
+    refuse/has_file_{pure,two_args}; spec, "Asking Without Opening".

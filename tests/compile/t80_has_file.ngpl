@@ -1,0 +1,24 @@
+// A name is asked about without being opened.  statx answers what the
+// name is; nothing is opened, so nothing has to be closed, and a
+// resolver that tries a name in several directories pays a call for
+// each and a descriptor for none.
+//
+// Only a plain file answers true.  A directory answers false, where an
+// open for reading would have succeeded and then read as nothing, and
+// so does a name that is not there.
+//
+// The test asks about itself, about the directory it is run from, and
+// about a name nothing answers to, so it needs no fixture beyond the
+// tree it is run in.
+
+@start
+@impure
+fn main():
+    std.println("a file:      {}", std.fs.cwd().has_file("tests/compile/t80_has_file.ngpl"))
+    std.println("a directory: {}", std.fs.cwd().has_file("tests/compile"))
+    std.println("neither:     {}", std.fs.cwd().has_file("tests/compile/no_such_file.ngpl"))
+    // the answer is a truth value like any other, and composes
+    let isf : bool = std.fs.cwd().has_file("tests/compile/t80_has_file.ngpl")
+    let isd : bool = std.fs.cwd().has_file("tests/compile")
+    let both : bool = isf and not isd
+    std.println("a file and not a directory: {}", both)

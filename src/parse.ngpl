@@ -1275,7 +1275,11 @@ impl Parser:
                     if fm = "create_file":
                         let coff : i64 = self.parse_args()
                         return self.mknode(ast.Nk.scall, at, ast.Sb.create.ord(), coff, 0)
-                    self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
+                    if fm = "has_file":
+                        let hoff : i64 = self.parse_args()
+                        return self.mknode(ast.Nk.scall, at, ast.Sb.hasfile.ord(), hoff, 0)
+                    self.err("'" ⧺ fm ⧺ """' is not core-2; cwd() answers open_file, create_file
+                                          " and has_file""")
                     return 0
                 if m = "filetype":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.filetype")

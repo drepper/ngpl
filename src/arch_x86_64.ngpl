@@ -1,3 +1,5 @@
+let arch_a64 := @import("arch_a64")
+let elf := @import("elf")
 let emit := @import("emit")
 let ir_m := @import("ir")
 
@@ -18,6 +20,19 @@ fn arg_reg(j : i64) → i64:
     if j = 1: return emit.R_SI
     if j = 2: return emit.R_DX
     if j = 3: return emit.R_CX
+    if j = 4: return emit.R_R8
+    emit.R_R9
+
+// Where a system call's argument travels.  The kernel takes its
+// arguments in the registers a call would use but for the fourth: rcx
+// is where the syscall instruction leaves the return address, so r10
+// stands in its place.
+@pre(j >= 0 and j <= 5)
+fn sysarg_reg(j : i64) → i64:
+    if j = 0: return emit.R_DI
+    if j = 1: return emit.R_SI
+    if j = 2: return emit.R_DX
+    if j = 3: return emit.R_R10
     if j = 4: return emit.R_R8
     emit.R_R9
 
@@ -820,6 +835,22 @@ fn emit_fn(em : &mut emit.Emit, ir : ir_m.IrFn, np : i64, strs : str[],
         elif o = ir_m.Ir.fread:
             em.load(emit.R_DI, a)
             em.jglobal(232, ⁻1, emit.RT_FREAD)
+            em.store(emit.R_AX, d)
+        elif o = ir_m.Ir.sysc:
+            // the one way a runtime routine written as IR reaches the
+            // kernel, so that a routine which asks something of it is
+            // written once for all six machines rather than by hand
+            // here as well
+            let sargc : i64 = ir.extra[b × 1¤ptrdiff]
+            foreach sk := 0…sargc:
+                em.load(sysarg_reg(sk), ir.extra[(b + 1 + sk) × 1¤ptrdiff])
+            em.movimm(emit.R_AX, arch_a64.sc_number(elf.targets()[elf.target_index("x86-64") × 1¤ptrdiff], a))
+            em.b2(15, 5)                     // syscall
+            if d ≠ ⁻1:
+                em.store(emit.R_AX, d)
+        elif o = ir_m.Ir.fthere:
+            em.load(emit.R_DI, a)
+            em.jglobal(232, ⁻1, emit.RT_FTHERE)
             em.store(emit.R_AX, d)
         elif o = ir_m.Ir.fident:
             em.load(emit.R_DI, a)

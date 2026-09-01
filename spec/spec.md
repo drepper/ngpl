@@ -9300,6 +9300,19 @@ let file : mut = dir.open_file("data.bin") ?? std.exit(1)
 
 `??` reads its right side only when the left answered `∅`, and a right side that never returns satisfies any type the left may have, so the binding holds the opened file on the only path that reaches it.
 
+#### Asking Without Opening
+
+`has_file` answers whether a name in a directory is a file that can be read, and does not open it:
+
+```
+if std.fs.cwd().has_file(name):
+    read_it(name)
+```
+
+Only a plain file answers `true`.  A directory answers `false`, where opening one for reading succeeds and then reads as nothing; so does a name that is not there, and one this process may not ask about — the question is whether reading would find something, not why it would not.
+
+The asking costs one call to the system and no descriptor, which is what makes it worth having beside `open_file`: a program that looks for a name in several directories asks about many that are not there and opens the one that is.  A program that is then going to read the file still opens it and decides from that answer.  Between the asking and the opening the file may be gone, so `has_file` is how a program chooses among names, not how it establishes that a read will succeed.
+
 #### Order
 
 Bindings are destroyed in reverse order of definition.  A resource acquired by using an earlier one is therefore released before the thing it came from — above, `file` is closed before `dir`, never the other way round.

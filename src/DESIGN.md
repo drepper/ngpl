@@ -151,7 +151,10 @@ Attempt 3 grows core-1 to **core-2** with structs:
 - **the OS surface `main` stands on**: `std.args.all()` (argv[1..] as
   a `str[]`, the kernel's argc/argv captured at the entry rsp into
   the data segment), `std.fs.cwd().open_file(p)` answering `File?` so
-  absence composes with `??` and a `@noreturn` default, `create_file`
+  absence composes with `??` and a `@noreturn` default, `has_file(p)`
+  answering whether a name is a plain file without opening it (one
+  statx, no descriptor, so a resolver that tries many names pays for
+  the one it finds), `create_file`
   aborting rather than answering, `read_file` (fstat + read loop +
   widening into slots), `write` (narrowing + write loop), `close`,
   and `std.arena.allocator()` as an accepted token — the bump

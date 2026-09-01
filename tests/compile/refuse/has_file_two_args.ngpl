@@ -1,0 +1,6 @@
+// has_file asks about one name.  There is no mode, no flag and no
+// second thing to say about it.
+@start
+@impure
+fn main():
+    std.println("{}", std.fs.cwd().has_file("CLAUDE.md", 420))

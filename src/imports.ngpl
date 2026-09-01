@@ -241,18 +241,16 @@ fn imp_join(base : str, name : str) → str:
     let bare : str = if "./" ⊑ name: name[2¤ptrdiff…#name] else: name
     if base = "": bare else: base ⧺ "/" ⧺ bare
 
-// Whether there is a file there to be read.  Asking costs an open and
-// a close, which is what reading it would have cost anyway; the answer
-// is asked for once per candidate and a candidate that answers is the
-// one that is then read.
+// Whether there is a file there to be read.  The name is asked about
+// rather than opened: a candidate that is not there -- which is most
+// of them, since a bare name is tried in every directory on the path
+// and with two spellings in each -- costs one statx and no descriptor,
+// where an open would have taken one and handed it straight back.  A
+// directory answers no, where an open for reading would have answered
+// yes to something that reads as nothing.
 @impure
 fn imp_readable(p : str) → bool:
-    match std.fs.cwd().open_file(p):
-        ⊨(file):
-            file.close()
-            true
-        ∅:
-            false
+    std.fs.cwd().has_file(p)
 
 // A name looked for in one directory, as written and then with the
 // suffix a source file has.  "" where neither is there.

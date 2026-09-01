@@ -1,0 +1,3 @@
+tests/compile/refuse/has_file_two_args.ngpl:6:23: error: has_file takes the path alone
+  6 |     std.println("{}", std.fs.cwd().has_file("CLAUDE.md", 420))
+    |                       ^

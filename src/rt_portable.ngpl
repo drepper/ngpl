@@ -356,8 +356,16 @@ let STATX_BYTES : i64 = 256          // the struct is 256 bytes
 let AT_EMPTY_PATH : i64 = 4096       // ask about the descriptor itself
 let STATX_BASIC_STATS : i64 = 2047   // everything a stat would have said
 let STX_INO : i64 = 32               // where the file's number sits
+let STX_MODE : i64 = 28              // …what kind of thing it is, 2 bytes
 let STX_DEV_MAJOR : i64 = 136        // …and the two halves of the device
 let STX_DEV_MINOR : i64 = 140
+
+// The kind bits of a mode, and the one that says a plain file.  A
+// directory opens for reading as readily as a file does and reads as
+// nothing, so a name is only a file to read where these agree.
+let S_IFMT : i64 = 61440
+let S_IFREG : i64 = 32768
+let AT_FDCWD : i64 = ⁻100            // a path is from where the process is
 
 // The device number a major and a minor make, the way every system
 // that reports the two separately puts them back together.  Answering
@@ -1484,6 +1492,33 @@ fn rt_build3(id : i64, tg : elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         b.jmp(lcp)
         b.lab(lcpe)
         b.ret(out)
+        return rtb_fn(b)
+    if id = emit.RT_FTHERE:
+        // (str) → 1 where the path answers to a file that can be read,
+        // 0 where it does not.  The name is asked about rather than
+        // opened: a candidate that is not there costs one call and no
+        // descriptor, and one that is there is not held open by the
+        // asking.  A directory answers 0, where an open for reading
+        // would have answered yes to something that reads as nothing.
+        let b : mut RtB = rtb(1)
+        let n : i64 = b.ldn(0, 8, 8)
+        let one : i64 = b.cst(1)
+        let p : i64 = b.call1(emit.RT_ALLOC, b.add(n, one))
+        let src : i64 = b.ldn(0, 0, 8)
+        rt_copy_bytes(&b, src, p, n)
+        let z : i64 = b.cst(0)
+        b.stn(b.add(p, n), 0, z, 1)
+        let st : i64 = b.call1(emit.RT_ALLOC, b.cst(STATX_BYTES))
+        let r : i64 = b.sys5(arch_a64.SC_STATX, b.cst(AT_FDCWD), p, z,
+                             b.cst(STATX_BASIC_STATS), st)
+        let bad : i64 = b.clts(r, z)
+        let lno : i64 = b.l()
+        let ans : i64 = b.t()
+        b.mov(ans, z)
+        b.jnz(bad, lno)
+        b.mov(ans, b.ceq(b.band(b.ldn(st, STX_MODE, 2), b.cst(S_IFMT)), b.cst(S_IFREG)))
+        b.lab(lno)
+        b.ret(ans)
         return rtb_fn(b)
     if id = emit.RT_FIDENT:
         // (fd, which) → the device the file is on where which is 0, its

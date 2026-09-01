@@ -2007,6 +2007,12 @@ fn emit_runtime(em : &mut emit.Emit, tg : elf.Target, lw : &mut lower.Lower, all
     em.rt_begin(emit.RT_SSLICE)
     arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_SSLICE, tg, &lw), 3, lw.strs, 0, [])
 
+    // Asking whether a name is a file is a statx and a look at two bits
+    // of what it answered, which is the same on every machine, so this
+    // is written once as IR too.
+    em.rt_begin(emit.RT_FTHERE)
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FTHERE, tg, &lw), 1, lw.strs, 0, [])
+
     // ------------------------------------------------------------------
     // The stack running out
     // ------------------------------------------------------------------

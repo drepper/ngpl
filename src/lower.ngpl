@@ -629,6 +629,11 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(ir.Ir.fopen, pv, 0, 0, d, 0)
                 return d
+            if na = ast.Sb.hasfile.ord():
+                let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(ir.Ir.fthere, pv, 0, 0, d, 0)
+                return d
             if na = ast.Sb.create.ord():
                 let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let mv : i64 = self.lower_expr(self.a.extra[(nb + 2) × 1¤ptrdiff])

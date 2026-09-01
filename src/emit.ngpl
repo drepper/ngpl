@@ -193,6 +193,13 @@ let RT_SSLICE : i64 = ⁻69
 @export
 let RT_FIDENT : i64 = ⁻70
 
+// (str) → whether the path answers to a file that can be read.  statx
+// asks the name rather than opening it, so a name that is not there
+// costs one call and no descriptor, and one that is there is not held
+// open by the asking.
+@export
+let RT_FTHERE : i64 = ⁻71
+
 // ---------------------------------------------------------------------------
 // What the allocator keeps
 // ---------------------------------------------------------------------------
@@ -1034,7 +1041,8 @@ fn rt_names() → str[]:
     "RT_BIGPRINT",
     "RT_BT",
     "RT_SSLICE",
-    "RT_FIDENT"]
+    "RT_FIDENT",
+    "RT_FTHERE"]
 
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one

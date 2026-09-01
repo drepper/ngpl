@@ -124,6 +124,7 @@ enum Sb : u8:
     args = 4    // std.args.all() → str[]
     open = 5    // std.fs.cwd().open_file(p) → File?
     create = 6    // std.fs.cwd().create_file(p, mode) → File
+    hasfile = 15    // std.fs.cwd().has_file(p) → bool
     allocator = 7    // std.arena.allocator()
     bytes = 8    // std.bytes(s) → the string's bytes, u8[]
     cwd = 9    // std.fs.cwd() as a value
