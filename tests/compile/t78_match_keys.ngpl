@@ -1,0 +1,35 @@
+// One match arm may name several values of the enumeration, separated
+// by commas, where the answer is the same for each.  Each name is an
+// arm of its own over the one body, so everything else about a match
+// is unchanged: every value still needs an arm or a _, and naming one
+// twice is still refused.
+
+enum Cl : u8:
+    ws = 1
+    nl = 2
+    digit = 3
+    ident = 4
+    quote = 5
+
+fn what(c : Cl) → str:
+    match c:
+        Cl.ws, Cl.nl:
+            "space"
+        Cl.digit:
+            "digit"
+        _:
+            "other"
+
+fn braced(c : Cl) → i64 {
+    match c {
+        Cl.ws, Cl.nl, Cl.quote { 1 }
+        Cl.digit, Cl.ident { 2 }
+    }
+}
+
+@start
+@impure
+fn main():
+    std.println("{} {} {} {} {} {} {}", what(Cl.ws), what(Cl.nl),
+                what(Cl.digit), what(Cl.ident),
+                braced(Cl.quote), braced(Cl.ident), braced(Cl.nl))

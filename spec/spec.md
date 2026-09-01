@@ -3634,6 +3634,24 @@ An arm names a value with `Enum.member` and binds nothing, because an
 enumerator holds nothing beside which one it is. One `match` asks about
 one enumeration; arms naming two is refused.
 
+**One arm may name several values**, separated by commas, where the
+answer is the same for each — which is what the reader means by writing
+them together:
+
+```
+match c:
+    Cl.mb2, Cl.mb3:
+        read_glyph(c)
+    Cl.colon, Cl.lt, Cl.gt, Cl.dash, Cl.qmark:
+        read_op2(c)
+    _:
+        refuse()
+```
+
+Each name is an arm of its own over the one body, so nothing else
+changes: every value still needs an arm or a `_`, and naming one twice
+is still refused.
+
 **Every value must have an arm, or there must be a `_`.**  This is the
 whole reason to write it this way rather than as a chain of
 comparisons. A chain has a last branch, and the last branch is what a

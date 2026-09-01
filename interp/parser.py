@@ -2257,7 +2257,8 @@ class Parser:
                 break
             if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
-            arms.append(self._parse_match_arm())
+            one = self._parse_match_arm()
+            arms.extend(one if isinstance(one, list) else [one])
             self._try_eat(TokenType.PUNCT, ";")
         if braced:
             self._eat(TokenType.PUNCT, "}")
@@ -2282,6 +2283,17 @@ class Parser:
         name = self._eat(TokenType.IDENT).value
         self._eat(TokenType.PUNCT, ")")
         return name
+
+    def _parse_enum_key(self):
+        """`Enum.member`, or `m.Enum.member` where m is a bound import."""
+        type_name = self._eat(TokenType.IDENT).value
+        self._eat(TokenType.PUNCT, ".")
+        member = self._eat(TokenType.IDENT).value
+        if self._at_punct("."):
+            self.pos += 1
+            type_name = f"{type_name}.{member}"
+            member = self._eat(TokenType.IDENT).value
+        return type_name, member
 
     def _parse_match_arm(self) -> MatchArm:
         """Parse one arm: ⊨(name) | ∅ | _  followed by ':' and a body."""
@@ -2320,11 +2332,23 @@ class Parser:
                     self.pos += 1
                     type_name = f"{type_name}.{member}"
                     member = self._eat(TokenType.IDENT).value
+                # One arm may name several values, separated by commas:
+                # what they are answered with is the same, and saying it
+                # once is what the reader means.  Each is made an arm of
+                # its own over the one body, so everything downstream
+                # counts them the way it always did.
+                keys = [(type_name, member)]
+                while self._at_punct(","):
+                    self.pos += 1
+                    if not self._check(TokenType.IDENT):
+                        raise ParseError(
+                            "a comma in a match arm is followed by "
+                            "another value of the enumeration", self._cur())
+                    keys.append(self._parse_enum_key())
                 body = self._parse_block()
-                return self._set_pos(
-                    MatchArm("enum", None, body, type_name=type_name,
-                             member=member),
-                    pattern_tok)
+                return [self._set_pos(
+                    MatchArm("enum", None, body, type_name=t, member=m),
+                    pattern_tok) for t, m in keys]
             # Type(name): an alternative of a sum type, binding the
             # value under the type that says which alternative it is.
             name = self._parse_arm_binding()

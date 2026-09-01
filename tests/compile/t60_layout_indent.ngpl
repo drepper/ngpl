@@ -38,6 +38,13 @@ fn sided(s : Side) → i64:
         return 1
     2
 
+// One arm may name several values, separated by commas: what they are
+// answered with is said once.
+fn side_word(s : Side) → str:
+    match s:
+        Side.left, Side.right:
+            "sided"
+
 fn named(s : Side) → str:
     match s:
         Side.left:
@@ -78,4 +85,4 @@ fn walked(v : i64[]) → i64:
 @impure
 fn main():
     let v : i64[] = [1, 2, 3]
-    std.println("{} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left))
+    std.println("{} {} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left), side_word(Side.right))

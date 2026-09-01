@@ -1857,23 +1857,38 @@ impl Parser:
                 self.pos ← self.pos + 1
                 default_blk ← self.parse_block()
             elif self.peek() = tokens.Tk.ident:
-                // `m.Enum.value` where m is a bound import: which
-                // module the enum is of is settled by what is being
-                // matched, so the binding is read past here and the
-                // arm names the enum as the subject knows it.
-                if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.Tk.dot and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = tokens.Tk.ident and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = tokens.Tk.dot and self.bound_module(self.pos) ≠ "":
-                    let bm2 : str = self.bound_module(self.pos)
-                    self.hold_export(self.pos + 2, bm2, self.ttext(self.pos + 2))
-                    self.pos ← self.pos + 2
-                let etok : i64 = self.pos
-                self.pos ← self.pos + 1
-                _ ← self.eat(tokens.Tk.dot, "'.' and the value's name")
-                let mtok : i64 = self.pos
-                _ ← self.eat_name("the value's name")
+                // One arm may name several values, separated by
+                // commas: what they are answered with is the same, and
+                // saying it once is what the reader means.  Each name
+                // is written down as an arm of its own, so everything
+                // after this counts them the way it always did.
+                let keys : mut i64[] = []
+                while true:
+                    // `m.Enum.value` where m is a bound import: which
+                    // module the enum is of is settled by what is being
+                    // matched, so the binding is read past here and the
+                    // arm names the enum as the subject knows it.
+                    if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.Tk.dot and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = tokens.Tk.ident and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = tokens.Tk.dot and self.bound_module(self.pos) ≠ "":
+                        let bm2 : str = self.bound_module(self.pos)
+                        self.hold_export(self.pos + 2, bm2, self.ttext(self.pos + 2))
+                        self.pos ← self.pos + 2
+                    keys.push(self.pos)
+                    self.pos ← self.pos + 1
+                    _ ← self.eat(tokens.Tk.dot, "'.' and the value's name")
+                    keys.push(self.pos)
+                    _ ← self.eat_name("the value's name")
+                    if self.peek() ≠ tokens.Tk.comma:
+                        break
+                    self.pos ← self.pos + 1
+                    if self.peek() ≠ tokens.Tk.ident:
+                        self.err("a comma in a match arm is followed by another value of the enumeration")
+                        return 0
                 let blk : i64 = self.parse_block()
-                arms.push(etok)
-                arms.push(mtok)
-                arms.push(blk)
+                let nkeys : i64 = @dropunit((#keys ÷ 2¤ptrdiff) ?? 0¤ptrdiff)
+                foreach ki := 0…nkeys:
+                    arms.push(keys[ki × 2 × 1¤ptrdiff])
+                    arms.push(keys[(ki × 2 + 1) × 1¤ptrdiff])
+                    arms.push(blk)
                 if self.peek() = tokens.Tk.semi:
                     self.pos ← self.pos + 1
             else:

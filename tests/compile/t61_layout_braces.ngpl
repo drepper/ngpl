@@ -46,4 +46,12 @@ fn walked(v : i64[]) → i64 { let s : mut i64 = 0; foreach x := v { s ← s + x
 
 @start
 @impure
-fn main() { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left)) }
+fn main() { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {} {} {} {} {} {}", work(3), grade(20), total(5), walked(v), spread(Pair{a: 2, b: 9}), Pair{a: 2, b: 9}.wider(), sided(Side.right), named(Side.left), side_word(Side.right)) }
+
+// One arm may name several values, separated by commas: what they are
+// answered with is said once.
+fn side_word(s : Side) → str {
+    match s {
+        Side.left, Side.right { "sided" }
+    }
+}
