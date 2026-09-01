@@ -1,0 +1,3 @@
+tests/compile/refuse/if_two_openers.ngpl:5:25: error: an if opens every arm the way it opened its first: this one began with '{' and this arm begins with ':'
+  5 |     if n > 10 { 2 } else: 1
+    |                         ^

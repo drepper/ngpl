@@ -4432,7 +4432,7 @@ The `&` syntax follows Rust's convention of explicit reference passing.  Requiri
 
 ### Block Scoping: Braces and Layout
 
-Blocks of statements — function bodies, if/elif/else branches, while loop bodies — can be delimited in two ways.  Both styles are fully interchangeable and can be freely mixed within a single source file or even within a single function.
+Blocks of statements — function bodies, if/elif/else branches, while loop bodies — can be delimited in two ways.  Both styles are fully interchangeable and can be mixed within a single source file, within a single function, and between a block and the one it sits inside.  What may not be mixed is a block's own two openers, or the arms of one `if` chain; both are said below.
 
 #### Brace-Delimited Blocks
 
@@ -4455,6 +4455,17 @@ if c: { a }
 error: a ':' opens a block laid out under it and a '{' opens one written
 in braces; a block takes one of them, not both
 ```
+
+**An `if` opens every arm the way it opened its first.**  A chain half laid out and half in braces says one thing two ways at once, and a reader has to hold both to follow it:
+
+```
+if c { 1 } else: 2
+
+error: an if opens every arm the way it opened its first: this one began
+with '{' and this arm begins with ':'
+```
+
+The rule is the if's own, not its surroundings': an if written in braces sits happily inside a body that is laid out, and one laid out sits inside a braced body.  It is the arms of a single `if`, `elif`, `else` chain that have to agree.
 
 #### Everything Else With a Body
 

@@ -2044,31 +2044,55 @@ impl Parser:
     // the node is the same either way and what differs is only
     // whether anything reads the value, which is the checker's to
     // know.
+    // Whether the arm about to be read is written in braces.  An if
+    // opens every arm the way it opened its first, so the first arm's
+    // answer is what the rest are held to.
+    fn arm_braced(&self) → bool:
+        self.peek() = tokens.TK_LBRACE
+
+    // The arm here is opened the way the if's first arm was, or it is
+    // refused: an if half laid out and half in braces is two ways of
+    // writing one thing at once, and a reader has to hold both.
+    fn arm_alike(&mut self, braced : bool) → bool:
+        if self.arm_braced() = braced:
+            return true
+        let began : str = if braced: "'{'" else: "':'"
+        let here : str = if braced: "':'" else: "'{'"
+        self.err("an if opens every arm the way it opened its first: this one began with " ⧺ began ⧺ " and this arm begins with " ⧺ here)
+        false
+
     fn parse_if_node(&mut self) → i64:
         let at : i64 = self.pos
         self.pos ← self.pos + 1
         let cond : i64 = self.parse_expr()
+        let braced : bool = self.arm_braced()
         let then_blk : i64 = self.parse_block()
         let else_blk : mut i64 = ⁻1
         self.skip_nl_before_else()
         if self.peek() = tokens.TK_ELIF:
-            else_blk ← self.parse_elif_chain()
+            else_blk ← self.parse_elif_chain(braced)
         elif self.peek() = tokens.TK_ELSE:
             self.pos ← self.pos + 1
+            if not self.arm_alike(braced):
+                return 0
             else_blk ← self.parse_block()
         self.mknode(ast.NK_IF, at, cond, then_blk, else_blk)
 
-    fn parse_elif_chain(&mut self) → i64:
+    fn parse_elif_chain(&mut self, braced : bool) → i64:
         let at : i64 = self.pos
         self.pos ← self.pos + 1
         let cond : i64 = self.parse_expr()
+        if not self.arm_alike(braced):
+            return 0
         let then_blk : i64 = self.parse_block()
         let else_blk : mut i64 = ⁻1
         self.skip_nl_before_else()
         if self.peek() = tokens.TK_ELIF:
-            else_blk ← self.parse_elif_chain()
+            else_blk ← self.parse_elif_chain(braced)
         elif self.peek() = tokens.TK_ELSE:
             self.pos ← self.pos + 1
+            if not self.arm_alike(braced):
+                return 0
             else_blk ← self.parse_block()
         let ifn : i64 = self.mknode(ast.NK_IF, at, cond, then_blk, else_blk)
         let off : i64 = @dropunit(#self.extra)

@@ -68,7 +68,10 @@ fn grade_brace(x : i64) → i64 {
     if x > 10 { return 2 } elif x > 5 { return 1 } else { return 0 }
 }
 
-// braces for the if inside an indented body
+// An if opens every arm the way it opened its first, so there is no
+// `if c { 1 } else: 2` and no `if c: 1` with a braced else.  What may
+// be mixed is an if against what encloses it: the ifs below are in
+// braces inside a body that is laid out.
 fn grade_mixed(x : i64) → i64:
     if x > 10 {
         return 2

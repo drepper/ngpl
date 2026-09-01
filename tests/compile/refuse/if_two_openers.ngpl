@@ -1,0 +1,10 @@
+// An if opens every arm the way it opened its first.  One half laid
+// out and one half in braces is two ways of writing one thing at once,
+// and a reader has to hold both to follow it.
+fn grade(n : i64) → i64:
+    if n > 10 { 2 } else: 1
+
+@start
+@impure
+fn main():
+    std.println("{}", grade(20))

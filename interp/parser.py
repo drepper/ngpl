@@ -2030,10 +2030,25 @@ class Parser:
         had_semi = self._try_eat(TokenType.PUNCT, ";")
         return ExprStmt(expr, had_semi=bool(had_semi))
 
+    def _arm_alike(self, braced: bool):
+        """Hold this arm to the way the if opened its first.
+
+        An if half laid out and half in braces is two ways of writing
+        one thing at once, and a reader has to hold both.
+        """
+        if self._at_punct("{") == braced:
+            return
+        began, here = ("'{'", "':'") if braced else ("':'", "'{'")
+        raise ParseError(
+            f"an if opens every arm the way it opened its first: this "
+            f"one began with {began} and this arm begins with {here}",
+            self._cur())
+
     def _parse_if_stmt(self, hint: str | None = None):
         """Parse: if expr block (elif expr block)* (else block)?"""
         self._eat(TokenType.IF)
         cond = self._parse_expr()
+        braced = self._at_punct("{")
         cons_body = self._parse_block()
 
         # Collected in source order, then nested so that the first
@@ -2046,9 +2061,11 @@ class Parser:
             if self._check(TokenType.ELIF):
                 self._eat(TokenType.ELIF)
                 elif_cond = self._parse_expr()
+                self._arm_alike(braced)
                 clauses.append((elif_cond, self._parse_block()))
             elif self._check(TokenType.ELSE):
                 self._eat(TokenType.ELSE)
+                self._arm_alike(braced)
                 clauses.append((None, self._parse_block()))
             else:
                 break
