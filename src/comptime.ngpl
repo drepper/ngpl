@@ -138,7 +138,7 @@ struct Cev:
 
 // how a construct a recipe may not use is spelled, so the complaint
 // names what was written rather than a node number
-fn ev_spell(k : i64) → str:
+fn ev_spell(k : ast.Nk) → str:
     if k = ast.Nk.mcall: return "a method call"
     if k = ast.Nk.hlit: return "a dictionary literal"
     if k = ast.Nk.slit: return "a struct literal"
@@ -185,25 +185,31 @@ fn ev_subset() → str:
      " with ??, and calls the functions this file defines"""
 
 // a node with nothing under it
-fn ev_is_leaf(k : i64) → bool:
-    if k = ast.Nk.lit_int or k = ast.Nk.lit_bool or k = ast.Nk.lit_str or k = ast.Nk.emptyv: return true
-    k = ast.Nk.var or k = ast.Nk.st_break or k = ast.Nk.st_continue
+fn ev_is_leaf(k : ast.Nk) → bool:
+    match k:
+        ast.Nk.lit_int, ast.Nk.lit_bool, ast.Nk.lit_str, ast.Nk.emptyv: true
+        ast.Nk.var, ast.Nk.st_break, ast.Nk.st_continue: true
+        _: false
 
 // How many of na, nb and nc hold a child, for the nodes that keep them
 // there; 0 says the node is not part of the subset.  The count has to
 // be exact rather than "walk all three": a let keeps its mutability in
 // nb and its type in nc, and either read as a node id sends the walk
 // somewhere else in the tree entirely.
-fn ev_nchildren(k : i64) → i64:
-    if k = ast.Nk.len or k = ast.Nk.neg or k = ast.Nk.op_not or k = ast.Nk.dropu: return 1
-    if k = ast.Nk.st_return or k = ast.Nk.discard or k = ast.Nk.exprstmt: return 1
-    if k = ast.Nk.st_let or k = ast.Nk.assign: return 1
-    if k = ast.Nk.index or k = ast.Nk.ccat or k = ast.Nk.default: return 2
-    if k >= ast.Nk.add.ord() and k <= ast.Nk.mod.ord(): return 2
-    if k >= ast.Nk.eq.ord() and k <= ast.Nk.op_or.ord(): return 2
-    if k = ast.Nk.st_while or k = ast.Nk.foreacha: return 2
-    if k = ast.Nk.st_if: return 3
-    0
+fn ev_nchildren(k : ast.Nk) → i64:
+    // the arithmetic and the comparisons sit together in the
+    // numbering, and are asked for as a run rather than named one by
+    // one; everything else names itself
+    if k.ord() >= ast.Nk.add.ord() and k.ord() <= ast.Nk.mod.ord(): return 2
+    if k.ord() >= ast.Nk.eq.ord() and k.ord() <= ast.Nk.op_or.ord(): return 2
+    match k:
+        ast.Nk.len, ast.Nk.neg, ast.Nk.op_not, ast.Nk.dropu: 1
+        ast.Nk.st_return, ast.Nk.discard, ast.Nk.exprstmt: 1
+        ast.Nk.st_let, ast.Nk.assign: 1
+        ast.Nk.index, ast.Nk.ccat, ast.Nk.default: 2
+        ast.Nk.st_while, ast.Nk.foreacha: 2
+        ast.Nk.st_if: 3
+        _: 0
 
 // which orderings each comparison admits, indexed by Nk.eq…Nk.ge:
 // less is 1, equal is 2, greater is 4.  One subtraction and a mask
@@ -235,7 +241,7 @@ impl Cev:
     fn ev_scan(&mut self, id : i64):
         if id = ⁻1 or self.halted():
             return
-        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let k : ast.Nk = self.a.nkind[id × 1¤ptrdiff]
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
@@ -404,7 +410,7 @@ impl Cev:
                 self.pop_scope()
                 return cv_none()
         let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
-        let lk : i64 = self.a.nkind[last × 1¤ptrdiff]
+        let lk : ast.Nk = self.a.nkind[last × 1¤ptrdiff]
         let v : mut CVal = cv_none()
         if lk = ast.Nk.exprstmt:
             v ← self.ev_expr(self.a.na[last × 1¤ptrdiff])
@@ -419,7 +425,7 @@ impl Cev:
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         if not self.tick(tok):
             return EV_STOP
-        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let k : ast.Nk = self.a.nkind[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
@@ -595,7 +601,7 @@ impl Cev:
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         if not self.tick(tok):
             return cv_none()
-        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let k : ast.Nk = self.a.nkind[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
@@ -689,9 +695,9 @@ impl Cev:
             if self.halted():
                 return cv_none()
             return self.ev_block_value(if c.n ≠ 0: nb else: nc)
-        if k >= ast.Nk.add.ord() and k <= ast.Nk.mod.ord():
+        if k.ord() >= ast.Nk.add.ord() and k.ord() <= ast.Nk.mod.ord():
             return self.ev_arith(k, tok, na, nb)
-        if k >= ast.Nk.eq.ord() and k <= ast.Nk.ge.ord():
+        if k.ord() >= ast.Nk.eq.ord() and k.ord() <= ast.Nk.ge.ord():
             return self.ev_cmp(k, tok, na, nb)
         if k = ast.Nk.call:
             return self.ev_call(tok, na × 1¤"aextra")
@@ -778,7 +784,7 @@ impl Cev:
 
     // The compiler's own arithmetic aborts on overflow, so a recipe's
     // overflow has to be caught before it reaches it.
-    fn ev_arith(&mut self, k : i64, tok : i64, na : i64, nb : i64) → CVal:
+    fn ev_arith(&mut self, k : ast.Nk, tok : i64, na : i64, nb : i64) → CVal:
         let l : CVal = self.ev_expr(na)
         let r : CVal = self.ev_expr(nb)
         if self.halted():
@@ -810,7 +816,7 @@ impl Cev:
 
     // One comparison into a sign, then which orderings the operator
     // admits: less is 1, equal is 2, greater is 4.
-    fn ev_cmp(&mut self, k : i64, tok : i64, na : i64, nb : i64) → CVal:
+    fn ev_cmp(&mut self, k : ast.Nk, tok : i64, na : i64, nb : i64) → CVal:
         let l : CVal = self.ev_expr(na)
         let r : CVal = self.ev_expr(nb)
         if self.halted():
@@ -827,7 +833,7 @@ impl Cev:
         else:
             ord ← if l.n = r.n: two else: (if l.n < r.n: one else: four)
         let admits : i64[] = ev_cmp_admits()
-        cv_bool(admits[(k - ast.Nk.eq.ord()) × 1¤ptrdiff] & ord ≠ 0)
+        cv_bool(admits[(k.ord() - ast.Nk.eq.ord()) × 1¤ptrdiff] & ord ≠ 0)
 
     // -------------------------------------------------------------------
     // Calls, and what the recipe declares

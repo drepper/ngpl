@@ -19,7 +19,7 @@ let tokens := @import("tokens")
 
 
 
-fn tok_name(k : i64) → str:
+fn tok_name(k : tokens.Tk) → str:
     if k = tokens.Tk.eof: return "eof"
     if k = tokens.Tk.nl: return "nl"
     if k = tokens.Tk.indent: return "indent"
@@ -28,7 +28,9 @@ fn tok_name(k : i64) → str:
     if k = tokens.Tk.number: return "int"
     if k = tokens.Tk.string: return "str"
     if k = tokens.Tk.reserved: return "reserved"
-    if k >= 20 and k <= 38: return "kw"
+    // the keywords sit together in the numbering, which is what this
+    // asks about: their names, not one of them
+    if k.ord() >= tokens.Tk.kw_fn.ord() and k.ord() <= tokens.Tk.kw_match.ord(): return "kw"
     "op"
 
 @impure
@@ -37,12 +39,12 @@ fn dump_tokens(t : lex.Toks, src : byte[], files : diag.Files):
     // back into the file it came from, as a diagnostic's is
     let starts := diag.file_lines(files, src)
     foreach i := 0…#t.kind:
-        let k : i64 = t.kind[i]
+        let k : tokens.Tk = t.kind[i]
         let text := tokens.run_str(src, t.off[i], t.len[i])
         let f : i64 ¤ptrdiff = diag.file_of(starts, t.line[i])
         std.println("{}:{}:{} {} {} '{}' {}", files.names[f],
                     @dropunit(t.line[i] - starts[f] + 1),
-                    @dropunit(t.col[i]), k,
+                    @dropunit(t.col[i]), k.ord(),
                     tok_name(k), text, t.val[i])
 
 // Whether anything said here refuses the program.  A warning does not:

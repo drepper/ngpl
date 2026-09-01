@@ -367,7 +367,7 @@ struct GlobalDef:
 struct Ast:
     // the let nodes written `let v : &T = …`, which bind a borrow
     blets : i64[]
-    nkind : i64[]
+    nkind : Nk[]
     ntok : i64[]
     na : i64[]
     nb : i64[]

@@ -24,7 +24,7 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
     let pad : mut str = ""
     foreach d := 0…depth:
         pad ← pad ⧺ "  "
-    let k : i64 = a.nkind[id × 1¤ptrdiff]
+    let k : ast.Nk = a.nkind[id × 1¤ptrdiff]
     let tok : i64 = a.ntok[id × 1¤ptrdiff]
     let na : i64 = a.na[id × 1¤ptrdiff]
     let nb : i64 = a.nb[id × 1¤ptrdiff]
@@ -151,10 +151,10 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
         std.println("{}wrap", pad)
         dump_node(a, na, depth + 1, src, toks)
     elif k = ast.Nk.neg or k = ast.Nk.op_not or k = ast.Nk.bnot:
-        std.println("{}unop {}", pad, k)
+        std.println("{}unop {}", pad, k.ord())
         dump_node(a, na, depth + 1, src, toks)
     else:
-        std.println("{}binop {}", pad, k)
+        std.println("{}binop {}", pad, k.ord())
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
 

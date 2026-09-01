@@ -357,7 +357,7 @@ struct Checker:
     // the end is not the last use but the end of the scope, which is
     // what happens where a callee may have kept what it was handed.
     stmt_seq : i64
-    cur_stmt : i64       // which kind of statement is being checked
+    cur_stmt : ast.Nk    // which kind of statement is being checked
     lbirth : i64[]
     llast : i64[]
     luse : i64[]         // how many times it was read
@@ -442,7 +442,7 @@ impl Checker:
     // bytes settled here, and all three fold into the literal the
     // lowering would have had to make anyway.
     fn fold_bytes(&mut self, id : i64, v : i64):
-        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
         self.a.na[id × 1¤ptrdiff] ← v
         self.a.nb[id × 1¤ptrdiff] ← 0
         self.a.nc[id × 1¤ptrdiff] ← 0
@@ -587,7 +587,7 @@ impl Checker:
     // whether the expression builds a struct of its own rather than
     // naming one that already lives somewhere
     fn is_fresh_struct(&self, id : i64) → bool:
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         k = ast.Nk.slit or k = ast.Nk.call or k = ast.Nk.mcall
 
     // A name written unqualified, found the way its module sees it:
@@ -730,7 +730,7 @@ impl Checker:
     fn ty_of(&self, id : i64) → i64:
         self.ntype[id × 1¤ptrdiff]
 
-    fn kind_of(&self, id : i64) → i64:
+    fn kind_of(&self, id : i64) → ast.Nk:
         self.a.nkind[id × 1¤ptrdiff]
 
     // ------------------------------------------------------------------
@@ -898,7 +898,7 @@ impl Checker:
     // fold an arithmetic node whose operands folded to literals; the
     // computation is exact, and one that leaves i64 is refused since
     // no run of the program could hold it either
-    fn fold_bin(&mut self, id : i64, k : i64, tok : i64, l : i64, r : i64):
+    fn fold_bin(&mut self, id : i64, k : ast.Nk, tok : i64, l : i64, r : i64):
         let res : mut i64 = 0
         let bad : mut bool = false
         if k = ast.Nk.add:
@@ -945,13 +945,13 @@ impl Checker:
                 self.derr(tok, "these two untyped numbers cannot meet here; state a type")
                 self.set_type(id, types.TY_I64)
                 return
-            self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_bool.ord()
+            self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_bool
             self.a.na[id × 1¤ptrdiff] ← b
             self.set_type(id, types.TY_BOOL)
             return
         if bad:
             self.derr(tok, "this literal computation leaves i64, which no run could hold")
-        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
         self.a.na[id × 1¤ptrdiff] ← res
         self.a.nb[id × 1¤ptrdiff] ← 0
         self.set_type(id, types.TY_UNT)
@@ -961,7 +961,7 @@ impl Checker:
     // 0 (TY_UNIT) meaning it asks nothing
     // ------------------------------------------------------------------
 
-    fn unify_arith(&mut self, tok : i64, id : i64, k : i64, tl : i64, tr : i64) → i64:
+    fn unify_arith(&mut self, tok : i64, id : i64, k : ast.Nk, tl : i64, tr : i64) → i64:
         // both integer operands; answers the operation's type
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
@@ -1015,7 +1015,7 @@ impl Checker:
     // both measured makes a measure of its own (ptrdiff×ptrdiff),
     // which core-2 has no way to write down and so refuses.  A
     // quotient divides the measures out: alike, they cancel.
-    fn unit_meet(&mut self, tok : i64, k : i64, tl : i64, tr : i64) → i64:
+    fn unit_meet(&mut self, tok : i64, k : ast.Nk, tl : i64, tr : i64) → i64:
         let ul : i64 = types.ty_unit(tl)
         let ur : i64 = types.ty_unit(tr)
         if k = ⁻1:
@@ -1063,625 +1063,626 @@ impl Checker:
         ul
 
     fn check_expr(&mut self, id : i64, want : i64):
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
-        if k = ast.Nk.lit_int:
-            if nb >= 2:
-                // the width suffix -- or a character literal -- closed
-                // the type at the lexer; only the big bit stays for
-                // the fit check
-                let st : i64 = nb » 1
-                self.a.nb[id × 1¤ptrdiff] ← nb & 1
-                if st = types.TY_CHAR:
-                    self.set_type(id, types.TY_CHAR)
-                    return
-                if types.ty_is_enum(st):
-                    self.set_type(id, st)
-                    return
-                self.set_type(id, types.TY_UNT)
-                self.adopt(id, st)
-            elif want ≠ types.TY_UNIT and types.ty_is_int(want):
-                self.set_type(id, types.TY_UNT)
-                self.adopt(id, want)
-            else:
-                self.set_type(id, types.TY_UNT)
-        elif k = ast.Nk.lit_bool:
-            self.set_type(id, types.TY_BOOL)
-        elif k = ast.Nk.lit_str:
-            self.set_type(id, types.TY_STR)
-        elif k = ast.Nk.var:
-            self.check_var(id, tok)
-        elif k = ast.Nk.st_if:
-            self.check_ife(id, tok, na, nb, nc, want)
-        elif k = ast.Nk.st_match:
-            self.check_matchv(id, tok, na, nb, want)
-        elif k = ast.Nk.matche:
-            self.check_matche(id, tok, na, nb, false, want)
-        elif k = ast.Nk.arrlit:
-            self.check_arrlit(id, tok, na, want)
-        elif k = ast.Nk.hlit:
-            self.check_hlit(id, tok, na, want)
-        elif k = ast.Nk.tuple:
-            self.check_tuple(id, tok, na, want)
-        elif k = ast.Nk.sizeof:
-            self.check_sizeof(id, tok, na)
-        elif k = ast.Nk.typeof:
-            self.check_expr(na, types.TY_UNIT)
-            let tt : mut i64 = types.ty_strip_ref(self.ty_of(na))
-            let tpre : mut str = ""
-            if self.kind_of(na) = ast.Nk.var:
-                let ts : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
-                if ts ≠ ⁻1:
-                    let trk : i64 = types.ty_ref_kind(self.stype[ts × 1¤ptrdiff])
-                    if trk = 1:
-                        tpre ← "&"
-                    elif trk = 2:
-                        tpre ← "&mut "
-            let sp0 : str = self.ty_spell(tt)
-            let sp : str = if sp0 = "": "" else: tpre ⧺ sp0
-            if sp = "":
-                self.derr(tok, "@typeof of " ⧺ self.tn(tt) ⧺ """ carries the value, not the type
-                        " alone; it is not core-2""")
-                self.set_type(id, types.TY_STR)
-                return
-            // the spelling is a constant the way a literal is
-            self.a.strs.push(sp)
-            self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_str.ord()
-            self.a.na[id × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
-            self.a.nb[id × 1¤ptrdiff] ← 0
-            self.set_type(id, types.TY_STR)
-        elif k = ast.Nk.ifield:
-            // a field of the one being asked about; what it is read out
-            // of is whatever the site has to hand
-            let sd := self.a.structs[nb × 1¤ptrdiff]
-            self.set_type(id, self.a.extra[sd.fields_off + 2 + na × 2¤ptrdiff])
-        elif k = ast.Nk.old:
-            // What a value was when the call began.  A @pre is read
-            // before the call has changed anything and a body is where
-            // things become what they are, so a @post is the only
-            // place in a position to ask.
-            if not self.in_post:
-                self.derr(tok, """@old says what a value was when the call began, and only a @post
-                                " is in a position to ask; a @pre is read before the call has
-                                " changed anything, and a body is where things become what they are""")
-                self.check_expr(na, types.TY_UNIT)
-                self.set_type(id, types.TY_I64)
-                return
-            self.check_expr(na, want)
-            let ot : i64 = self.ty_of(na)
-            if types.ty_is_arr(ot) or types.ty_is_hash(ot) or types.ty_is_struct(ot):
-                self.derr(tok, "@old keeps what a value was, and keeping " ⧺ self.tn(ot) ⧺ " is keeping what it points at; a plain value is what core-2 remembers")
-                self.set_type(id, types.TY_I64)
-                return
-            self.set_type(id, ot)
-        elif k = ast.Nk.dropu:
-            self.check_expr(na, types.TY_UNIT)
-            let dt : i64 = self.ty_of(na)
-            if dt = types.TY_UNT:
-                self.adopt(na, types.TY_I64)
-                self.set_type(id, types.TY_I64)
-            elif not types.ty_is_int(dt):
-                self.derr(tok, "@dropunit unmeasures a number, not " ⧺ self.tn(dt))
-                self.set_type(id, types.TY_I64)
-            else:
-                self.set_type(id, types.ty_drop_unit(dt))
-        elif k = ast.Nk.slit:
-            // The recipe is the one function the checker never walks,
-            // so a std.Build.Executable reaching here is outside one by
-            // construction: it is the build system's struct, and only a
-            // recipe has a build to hand it to.
-            if nb = ast.SLIT_EXE:
-                self.derr(tok, """std.Build.Executable belongs to the @build function; nothing else
-                                " declares a build""")
-                self.set_type(id, types.TY_UNIT)
-            else:
-                self.check_slit(id, tok, na)
-        elif k = ast.Nk.field:
-            self.check_field(id, tok, na)
-        elif k = ast.Nk.op_some:
-            let iw : i64 = if types.ty_is_opt(types.ty_strip_ref(want)): types.ty_opt_base(types.ty_strip_ref(want)) else: types.TY_UNIT
-            self.check_expr(na, iw)
-            if self.ty_of(na) = types.TY_UNT:
-                self.adopt(na, if iw ≠ types.TY_UNIT and types.ty_is_int(iw): iw else: types.TY_I64)
-            let it : i64 = self.ty_of(na)
-            if types.ty_is_arr(it):
-                self.derr(tok, "an optional array is not core-2 yet")
-                self.set_type(id, types.mk_oty(types.TY_I64))
-                return
-            if types.ty_is_hash(it):
-                self.derr(tok, "an optional dictionary is not core-2 yet")
-                self.set_type(id, types.mk_oty(types.TY_I64))
-                return
-            if types.ty_is_opt(it) or it = types.TY_EMPTY:
-                self.derr(tok, "an optional of an optional is not core-2 yet")
-                self.set_type(id, types.mk_oty(types.TY_I64))
-                return
-            self.set_type(id, types.mk_oty(it))
-        elif k = ast.Nk.emptyv:
-            self.set_type(id, if types.ty_is_opt(want): want else: types.TY_EMPTY)
-        elif k = ast.Nk.index:
-            self.check_index(id, tok, na, nb)
-            self.pack_safe(na)
-        elif k = ast.Nk.len:
-            self.check_expr(na, types.TY_UNIT)
-            self.pack_safe(na)
-            let t : i64 = self.ty_of(na)
-            if t = types.TY_STR:
-                self.set_type(id, types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF))
-            elif types.ty_is_arr(t):
-                let u : i64 = if types.ty_drop_unit(self.elem_of(t)) = types.TY_U8: types.UNIT_BYTE else: types.UNIT_PTRDIFF
-                self.set_type(id, types.ty_with_unit(types.TY_I64, u))
-            elif types.ty_is_hash(t) or types.ty_is_tup(t) or types.ty_is_mat(t):
-                self.set_type(id, types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF))
-            else:
-                self.derr(tok, "# counts an array, a dictionary, a tuple or a string; this is " ⧺ self.tn(t))
-                self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.call:
-            self.check_call(id, tok, na × 1¤"aextra")
-        elif k = ast.Nk.run:
-            self.check_run(id, tok, na, nb, nc)
-        elif k = ast.Nk.quant:
-            self.check_quant(id, tok, na, nb, nc)
-        elif k = ast.Nk.callv:
-            self.check_callv(id, tok, na, nb × 1¤"aextra")
-        elif k = ast.Nk.scall:
-            self.check_scall(id, tok, na, nb × 1¤"aextra")
-        elif k = ast.Nk.mcall:
-            self.check_mcall(id, tok, na, nb × 1¤"aextra", false)
-        elif k = ast.Nk.ref:
-            self.derr(tok, "a borrow is an argument, not a value of its own")
-            self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.neg:
-            self.check_expr(na, want)
-            let t : i64 = self.ty_of(na)
-            if t = types.TY_UNT:
-                self.set_type(id, types.TY_UNT)
-                // the parser folds ⁻literal; reaching here means ⁻(expr)
-                if self.kind_of(na) = ast.Nk.lit_int:
-                    self.fold_neg(id, na)
-            elif types.ty_is_int(t):
-                self.set_type(id, t)
-            else:
-                self.derr(tok, "⁻ negates a number, not " ⧺ self.tn(t))
-                self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.bnot:
-            self.check_expr(na, want)
-            let t : i64 = self.ty_of(na)
-            if t = types.TY_UNT:
-                self.a.na[id × 1¤ptrdiff] ← ~(self.a.na[na × 1¤ptrdiff])
-                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
-                self.a.nb[id × 1¤ptrdiff] ← 0
-                self.set_type(id, types.TY_UNT)
-            elif types.ty_is_int(t) and types.ty_unit(t) = 0:
-                self.set_type(id, t)
-            elif types.ty_is_enum(t) and self.enum_is_flag(t):
-                // the complement within the set's own bits
-                self.set_type(id, t)
-            else:
-                self.derr(tok, "~ flips the bits of a plain integer or a @flag enum, not " ⧺ self.tn(t))
-                self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.op_not:
-            self.check_expr(na, types.TY_UNIT)
-            self.want_bool(na, "¬")
-            self.set_type(id, types.TY_BOOL)
-        elif k = ast.Nk.op_wrap:
-            self.check_expr(na, want)
-            let t : i64 = self.ty_of(na)
-            if t = types.TY_UNT:
-                self.derr(tok, "@wrap wants a width to wrap within; state a type")
-                self.set_type(id, types.TY_I64)
-            elif types.ty_is_int(t):
-                self.set_type(id, t)
-            else:
-                self.derr(tok, "@wrap wraps integer arithmetic, not " ⧺ self.tn(t))
-                self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.default:
-            self.check_default(id, tok, na, nb, want)
-        elif k = ast.Nk.div or k = ast.Nk.mod:
-            self.derr(tok, "÷ and % answer a result; write (a ÷ b) ?? default")
-            self.check_expr(na, want)
-            self.check_expr(nb, want)
-            self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.eq or k = ast.Nk.ne:
-            self.check_expr(na, types.TY_UNIT)
-            self.check_expr(nb, types.TY_UNIT)
-            let tl : i64 = self.ty_of(na)
-            let tr : i64 = self.ty_of(nb)
-            if tl = types.TY_EMPTY or tr = types.TY_EMPTY:
-                if tl = types.TY_EMPTY and tr = types.TY_EMPTY:
-                    self.derr(tok, "∅ against ∅ says nothing; state which optional is asked")
-                elif tl = types.TY_EMPTY:
-                    if types.ty_is_opt(tr):
-                        self.adopt(na, tr)
-                    else:
-                        self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tr))
-                elif types.ty_is_opt(tl):
-                    self.adopt(nb, tl)
+        match k:
+            ast.Nk.lit_int:
+                if nb >= 2:
+                    // the width suffix -- or a character literal -- closed
+                    // the type at the lexer; only the big bit stays for
+                    // the fit check
+                    let st : i64 = nb » 1
+                    self.a.nb[id × 1¤ptrdiff] ← nb & 1
+                    if st = types.TY_CHAR:
+                        self.set_type(id, types.TY_CHAR)
+                        return
+                    if types.ty_is_enum(st):
+                        self.set_type(id, st)
+                        return
+                    self.set_type(id, types.TY_UNT)
+                    self.adopt(id, st)
+                elif want ≠ types.TY_UNIT and types.ty_is_int(want):
+                    self.set_type(id, types.TY_UNT)
+                    self.adopt(id, want)
                 else:
-                    self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tl))
+                    self.set_type(id, types.TY_UNT)
+            ast.Nk.lit_bool:
                 self.set_type(id, types.TY_BOOL)
-                return
-            if types.ty_is_opt(tl) or types.ty_is_opt(tr):
-                let ob : i64 = types.ty_opt_base(if types.ty_is_opt(tl): tl else: tr)
-                if tl ≠ tr:
-                    self.derr(tok, "an optional compares with its own kind or ∅; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
-                elif not ((types.ty_is_int(ob) and types.ty_unit(ob) = 0) or ob = types.TY_BOOL or ob = types.TY_CHAR or ob = types.TY_STR):
-                    self.derr(tok, "an optional of " ⧺ self.tn(ob) ⧺ """ is not compared whole;
-                            " match takes it apart""")
-                self.set_type(id, types.TY_BOOL)
-                return
-            if tl = types.TY_STR and tr = types.TY_STR:
-                self.set_type(id, types.TY_BOOL)
-                return
-            if tl = types.TY_BOOL and tr = types.TY_BOOL:
-                self.set_type(id, types.TY_BOOL)
-                return
-            if types.ty_is_hash(tl) or types.ty_is_hash(tr) or types.ty_is_arr(tl) or types.ty_is_arr(tr) or types.ty_is_tup(tl) or types.ty_is_tup(tr) or types.ty_is_mat(tl) or types.ty_is_mat(tr) or types.ty_is_rg(tl) or types.ty_is_rg(tr):
-                self.derr(tok, "core-2 does not compare " ⧺ self.tn(tl) ⧺ " with " ⧺ self.tn(tr) ⧺ "; ask the entries")
-                self.set_type(id, types.TY_BOOL)
-                return
-            self.check_cmp_operands(id, tok, k, na, nb)
-        elif k = ast.Nk.lt or k = ast.Nk.le or k = ast.Nk.gt or k = ast.Nk.ge:
-            self.check_expr(na, types.TY_UNIT)
-            self.check_expr(nb, types.TY_UNIT)
-            self.check_cmp_operands(id, tok, k, na, nb)
-        elif k = ast.Nk.reshape:
-            self.check_reshape(id, tok, na, nb, want)
-        elif k = ast.Nk.iota:
-            // where the wanted value sits in the container, if anywhere
-            self.check_expr(na, types.TY_UNIT)
-            let ct : i64 = self.ty_of(na)
-            if not types.ty_is_arr(ct):
-                self.derr(tok, "⍳ looks through an array; this is " ⧺ self.tn(ct))
-                self.check_expr(nb, types.TY_UNIT)
-                self.set_type(id, types.mk_oty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
-                return
-            let et : i64 = self.elem_of(ct)
-            self.check_expr(nb, et)
-            if self.is_open(self.ty_of(nb)):
-                self.adopt(nb, et)
-            elif not self.try_fit(nb, et):
-                self.derr(tok, "⍳: the container holds " ⧺ self.tn(et) ⧺ ", and what is looked for is " ⧺ self.tn(self.ty_of(nb)))
-            self.set_type(id, types.mk_oty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
-        elif k = ast.Nk.lambda:
-            let loff : i64 = na
-            let np9 : i64 = self.a.extra[loff × 1¤ptrdiff]
-            let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
-            let lret : i64 = self.a.extra[(loff + 2 + np9 × 2 + ncap9) × 1¤ptrdiff]
-            if lret = types.TY_UNIT:
-                self.derrc(tok, 2254, "a lambda must not return ∅; it answers a value")
-                self.set_type(id, types.TY_I64)
-                return
-            // captures resolve outside, before the floor closes: their
-            // values are read where the lambda is written
-            let couter : mut i64[] = []
-            let ctoks : mut i64[] = []
-            let ctys : mut i64[] = []
-            if ncap9 > 0:
-                foreach ci := 0…ncap9:
-                    let ctok : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
-                    let cs : i64 = self.lookup(self.text(ctok))
-                    if cs = ⁻1:
-                        let cf : i64 = self.fn_index(self.text(ctok))
-                        if cf = ⁻1:
-                            self.derrc(ctok, 2111, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
-                            self.set_type(id, types.TY_I64)
-                            return
-                        // a captured function is its value in the box,
-                        // read now -- which is what @replaceable asks
-                        if self.fn_is_generic(cf):
-                            self.derr(ctok, "a generic function has no one shape to capture")
-                            self.set_type(id, types.TY_I64)
-                            return
-                        let cd := self.a.fns[cf × 1¤ptrdiff]
-                        let cnp : i64 ¤ptrdiff = self.a.extra[cd.params_off] × 1¤ptrdiff
-                        let cok : mut bool = cnp >= 1 and cnp <= 5 and types.fnval_ret_ok(cd.ret) and not cd.is_impure
-                        let cpts : mut i64[] = []
-                        foreach cpi := 0…cnp:
-                            let cpty : i64 = self.a.extra[cd.params_off + 2 + cpi × 2]
-                            cok ← cok and types.ty_ref_kind(cpty) = 0 and ((types.ty_is_int(cpty) and types.ty_unit(cpty) = 0) or cpty = types.TY_BOOL or cpty = types.TY_CHAR or cpty = types.TY_STR)
-                            cpts.push(types.ty_strip_ref(cpty))
-                        if not cok:
-                            self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ """' does not travel as a value;
-                                    " only a pure function of up to five plain scalars does""")
-                            self.set_type(id, types.TY_I64)
-                            return
-                        couter.push(0 - cf - 1)
-                        ctoks.push(ctok)
-                        ctys.push(types.mk_lty(self.lam_intern(cpts, cd.ret, if cd.is_listable: 1 else: 0)))
-                    else:
-                        let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
-                        if types.ty_ref_kind(cty0) ≠ 0 or not (types.ty_is_int(cty0) or cty0 = types.TY_BOOL or cty0 = types.TY_CHAR or cty0 = types.TY_STR or types.ty_is_lam(cty0)):
-                            self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ self.tn(cty0))
-                            self.set_type(id, types.TY_I64)
-                            return
-                        // The capture's value is read here, where the
-                        // lambda is written, and a read is what it is:
-                        // a binding used only through one is not a
-                        // binding nothing reads.
-                        self.life_used(self.sslot[cs × 1¤ptrdiff])
-                        couter.push(self.sslot[cs × 1¤ptrdiff])
-                        ctoks.push(ctok)
-                        ctys.push(cty0)
-            self.push_scope()
-            let floor9 : i64 = self.scope_floor
-            self.scope_floor ← @dropunit(#self.snames)
-            foreach pi := 0…np9:
-                let ptok : i64 = self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff]
-                let pty : i64 = self.a.extra[(loff + 2 + pi × 2) × 1¤ptrdiff]
-                let ps : i64 = self.declare(ptok, pty, 0)
-                self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff] ← ps
-            if ncap9 > 0:
-                foreach ci := 0…ncap9:
-                    _ ← self.declare(ctoks[ci × 1¤ptrdiff], ctys[ci × 1¤ptrdiff], 0)
-                    // the cell keeps the outer slot: the value's source
-                    self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
-            let lr_saved : i64 = self.lam_ret
-            self.lam_ret ← lret
-            if self.kind_of(nb) = ast.Nk.block:
-                let ld_saved : i64 = self.loop_depth
-                self.loop_depth ← 0
-                self.check_block(nb, true)
-                self.loop_depth ← ld_saved
-                let boff : i64 = self.a.na[nb × 1¤ptrdiff]
-                let bn : i64 = self.a.extra[boff × 1¤ptrdiff]
-                let last_is_value : mut bool = false
-                if bn > 0:
-                    let blast : i64 = self.a.extra[(boff + bn) × 1¤ptrdiff]
-                    if self.stmt_is_value(blast):
-                        last_is_value ← true
-                if not last_is_value and not self.block_returns(nb):
-                    self.derr(tok, "the lambda answers " ⧺ self.tn(lret) ⧺ " but not on every path")
-            else:
-                self.check_expr(nb, lret)
-                if self.is_open(self.ty_of(nb)):
-                    self.adopt(nb, lret)
-                elif not self.try_fit(nb, lret):
-                    // a bare value under an optional answer wraps itself
-                    if not (types.ty_is_opt(lret) and self.try_fit(nb, types.ty_opt_base(lret))):
-                        self.derr(tok, "the lambda answers " ⧺ self.tn(lret) ⧺ ", not " ⧺ self.tn(self.ty_of(nb)))
-            self.lam_ret ← lr_saved
-            self.scope_floor ← floor9
-            self.pop_scope()
-            self.lams.push(id)
-            self.lamns.push(self.nslots)
-            self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.lams) - 1
-            self.set_type(id, types.mk_lty(nc))
-        elif k = ast.Nk.badlam:
-            if na = 1:
-                self.derrc(tok, 2025, """an empty capture list says nothing; a lambda with no
-                                       " captures leaves the bars off""")
-            elif na = 2:
-                self.derrc(tok, 2024, "a lambda's parameter requires a type")
-            else:
-                self.derrc(tok, 2026, "a lambda states its return type after '→'")
-            self.set_type(id, types.TY_I64)
-        elif k = ast.Nk.try:
-            let rw9 : i64 = if self.lam_ret ≠ ⁻1: self.lam_ret else: self.a.fns[self.cur_fn × 1¤ptrdiff].ret
-            if not types.ty_is_opt(rw9):
-                self.derr(tok, "'?' answers ∅ early, so the function must answer an optional")
-            if self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod:
-                // ÷ under ? answers the quotient, or ∅ for the zero
-                let dl9 : i64 = self.a.na[na × 1¤ptrdiff]
-                let dr9 : i64 = self.a.nb[na × 1¤ptrdiff]
-                self.check_expr(dl9, types.TY_UNIT)
-                self.check_expr(dr9, self.ty_of(dl9))
-                if self.ty_of(dl9) = types.TY_UNT and self.ty_of(dr9) = types.TY_UNT:
-                    self.adopt(dl9, types.TY_I64)
-                    self.adopt(dr9, types.TY_I64)
-                let dt9 : i64 = self.unify_arith(self.a.ntok[na × 1¤ptrdiff], na, self.kind_of(na), self.ty_of(dl9), self.ty_of(dr9))
-                self.set_type(na, if dt9 ≠ types.TY_UNT: dt9 else: types.TY_I64)
-                self.set_type(id, self.ty_of(na))
-            else:
-                self.check_expr(na, types.TY_UNIT)
-                let ot9 : i64 = self.ty_of(na)
-                if not types.ty_is_opt(ot9):
-                    self.derr(tok, "'?' asks an optional; this is " ⧺ self.tn(ot9))
-                    self.set_type(id, types.TY_I64)
-                    return
-                self.set_type(id, types.ty_opt_base(ot9))
-        elif k = ast.Nk.rangev:
-            self.check_expr(na, types.TY_UNIT)
-            self.check_expr(nb, self.ty_of(na))
-            if nc ≠ ⁻1:
-                self.check_expr(nc, self.ty_of(na))
-            let tl9 : i64 = self.ty_of(na)
-            let th9 : i64 = self.ty_of(nb)
-            let vt : mut i64 = ⁻1
-            if tl9 ≠ types.TY_UNT:
-                vt ← tl9
-            elif th9 ≠ types.TY_UNT:
-                vt ← th9
-            elif nc ≠ ⁻1 and self.ty_of(nc) ≠ types.TY_UNT:
-                vt ← self.ty_of(nc)
-            if vt = ⁻1:
-                // ends that state nothing take the binding's element,
-                // where one is stated, and i64 otherwise
-                let w9 : i64 = types.ty_strip_ref(want)
-                vt ← if types.ty_is_int(w9): w9 else: types.TY_I64
-            // A range may count in a measure: `0…#name - 1` counts
-            // ¤ptrdiff because that is what its end is, and what walks
-            // it is handed indices that are indices.  Dropping the
-            // measure to make the range and putting it back at every
-            // subscript is what this saves.
-            if not types.ty_is_int(vt):
-                self.derr(tok, "a range counts numbers; this is " ⧺ self.tn(vt))
-                vt ← types.TY_I64
-            self.adopt(na, vt)
-            self.adopt(nb, vt)
-            if self.ty_of(na) ≠ vt or self.ty_of(nb) ≠ vt:
-                self.derr(tok, "the range's ends say one type between them")
-            if nc ≠ ⁻1:
-                self.adopt(nc, vt)
-                if self.ty_of(nc) ≠ vt:
-                    self.derr(tok, "the step follows the range's type")
-            self.set_type(id, types.mk_rgty(vt))
-        elif k = ast.Nk.mslice:
-            self.check_expr(na, types.TY_UNIT)
-            let mt9 : i64 = self.ty_of(na)
-            let rlo : i64 = self.a.extra[nb × 1¤ptrdiff]
-            let rhi : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
-            let clo : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
-            let chi : i64 = self.a.extra[(nb + 3) × 1¤ptrdiff]
-            if types.ty_is_mat(mt9) and self.mat_rank(mt9) = 3:
-                self.derr(tok, "cutting a rank-3 array with a range is not core-2 yet")
-                self.check_expr(rlo, types.TY_UNIT)
-                self.check_expr(rhi, types.TY_UNIT)
-                self.check_expr(clo, types.TY_UNIT)
-                self.set_type(id, types.mk_aty(types.TY_I64))
-                return
-            if not types.ty_is_mat(mt9):
-                self.derr(tok, "two subscripts take a matrix apart; this is " ⧺ self.tn(mt9))
-                self.check_expr(rlo, types.TY_UNIT)
-                self.check_expr(rhi, types.TY_UNIT)
-                self.check_expr(clo, types.TY_UNIT)
-                self.set_type(id, types.mk_aty(types.TY_I64))
-                return
-            self.check_index_expr(tok, mt9, rlo)
-            self.check_index_expr(tok, mt9, rhi)
-            let rowty : i64 = types.mk_aty(self.mat_elem(mt9))
-            self.check_index_expr(tok, rowty, clo)
-            if chi ≠ ⁻1:
-                self.check_index_expr(tok, rowty, chi)
-            if nc = 1:
-                // one element from each row: an array of them
-                self.set_type(id, types.mk_aty(self.mat_elem(mt9)))
-            else:
-                // neither extent is known before it is cut, so both open
-                self.set_type(id, types.mk_mty(self.mat_intern(self.mat_elem(mt9), ⁻1, ⁻1, ⁻2)))
-        elif k = ast.Nk.slice:
-            self.check_expr(na, types.TY_UNIT)
-            let bt2 : i64 = self.ty_of(na)
-            if bt2 = types.TY_STR:
-                // A string is a sequence of characters and is cut like
-                // one; both ends are counted in characters, as a
-                // subscript of it is, and what comes back is a string.
-                self.check_index_expr(tok, types.TY_STR, nb)
-                self.check_index_expr(tok, types.TY_STR, nc)
+            ast.Nk.lit_str:
                 self.set_type(id, types.TY_STR)
-                return
-            if not types.ty_is_arr(bt2) and not types.ty_is_mat(bt2):
-                self.derr(tok, "a slice takes an array or a string apart; this is " ⧺ self.tn(bt2))
-                self.check_expr(nb, types.TY_UNIT)
-                self.check_expr(nc, types.TY_UNIT)
-                self.set_type(id, types.mk_aty(types.TY_I64))
-                return
-            if types.ty_is_arr(bt2):
-                self.pack_safe(na)
-            self.check_index_expr(tok, bt2, nb)
-            self.check_index_expr(tok, bt2, nc)
-            if types.ty_is_mat(bt2):
-                // fewer rows, the same rows: the row count opens, the
-                // row length is still the type's to say
-                self.set_type(id, types.mk_mty(self.mat_intern(self.mat_elem(bt2), ⁻1, self.mat_cc(bt2), self.mat_dd(bt2))))
-                return
-            self.set_type(id, if types.ty_is_farr(bt2) or types.ty_is_row(bt2): types.mk_aty(self.elem_of(bt2)) else: bt2)
-        elif k = ast.Nk.lxor or k = ast.Nk.lnand or k = ast.Nk.lnor:
-            self.check_expr(na, types.TY_UNIT)
-            self.check_expr(nb, types.TY_UNIT)
-            if self.ty_of(na) ≠ types.TY_BOOL or self.ty_of(nb) ≠ types.TY_BOOL:
-                self.derr(tok, "⊕, ⊼ and ⊽ take truth values on both sides")
-            self.set_type(id, types.TY_BOOL)
-        elif k = ast.Nk.op_and or k = ast.Nk.op_or or k = ast.Nk.land or k = ast.Nk.lor:
-            self.check_expr(na, types.TY_UNIT)
-            self.check_expr(nb, types.TY_UNIT)
-            self.want_bool(na, "a logic operator")
-            self.want_bool(nb, "a logic operator")
-            self.set_type(id, types.TY_BOOL)
-        elif k = ast.Nk.elemof:
-            self.check_expr(nb, types.TY_UNIT)
-            let ht : i64 = self.ty_of(nb)
-            if not types.ty_is_hash(ht):
-                self.derr(tok, "∊ asks a dictionary in core-2; this is " ⧺ self.tn(ht))
+            ast.Nk.var:
+                self.check_var(id, tok)
+            ast.Nk.st_if:
+                self.check_ife(id, tok, na, nb, nc, want)
+            ast.Nk.st_match:
+                self.check_matchv(id, tok, na, nb, want)
+            ast.Nk.matche:
+                self.check_matche(id, tok, na, nb, false, want)
+            ast.Nk.arrlit:
+                self.check_arrlit(id, tok, na, want)
+            ast.Nk.hlit:
+                self.check_hlit(id, tok, na, want)
+            ast.Nk.tuple:
+                self.check_tuple(id, tok, na, want)
+            ast.Nk.sizeof:
+                self.check_sizeof(id, tok, na)
+            ast.Nk.typeof:
                 self.check_expr(na, types.TY_UNIT)
-                self.set_type(id, types.TY_BOOL)
-                return
-            self.check_hash_key(tok, ht, na)
-            self.set_type(id, types.TY_BOOL)
-        elif k = ast.Nk.ccat:
-            // the binding's array type reaches both sides, so a bare
-            // literal operand settles the way a bound one does
-            self.check_expr(na, if types.ty_is_arr(types.ty_strip_ref(want)): want else: types.TY_UNIT)
-            let cl : i64 = self.ty_of(na)
-            if types.ty_is_arr(cl):
-                let ce : i64 = self.elem_of(cl)
-                self.check_expr(nb, types.mk_aty(ce))
-                let cr0 : i64 = self.ty_of(nb)
-                if not types.ty_is_arr(cr0):
-                    self.derrc(tok, 2729, "an array joins an array; the right side is " ⧺ self.tn(cr0))
-                elif self.elem_of(cr0) ≠ ce:
-                    self.derr(tok, "one array holds one element type; " ⧺ self.tn(ce) ⧺ " does not join " ⧺ self.tn(self.elem_of(cr0)))
-                self.pack_safe(na)
-                self.pack_safe(nb)
-                self.set_type(id, types.mk_aty(ce))
-                return
-            self.check_expr(nb, types.TY_UNIT)
-            let cr : i64 = self.ty_of(nb)
-            if not ((cl = types.TY_STR or cl = types.TY_CHAR) and (cr = types.TY_STR or cr = types.TY_CHAR)):
-                self.derrc(tok, 2728, "⧺ joins strings, characters and arrays in core-2")
-            self.set_type(id, types.TY_STR)
-        else:
-            // + - × ÷ % « » & | ^ ⌈ ⌊ over integers.  A sum is of two
-            // of the same thing, so what is wanted of the whole is
-            // wanted of each side; a product is not, and pushing the
-            // wanted measure into its sides would have an untyped
-            // number there come out measured -- which is how
-            // 'n × 1¤ptrdiff' would end up adding a length to a count.
-            // A character wanted of the whole says nothing about the
-            // sides: one of them is the character and the other the
-            // number it moves by, and asking that number for a
-            // character would refuse it where it stands.
-            let want2 : i64 = if want = types.TY_CHAR: types.TY_UNIT else: want
-            let side : i64 = if (k = ast.Nk.mul or k = ast.Nk.satmul or k = ast.Nk.div or k = ast.Nk.mod) and types.ty_is_int(want2): types.ty_drop_unit(want2) else: want2
-            self.check_expr(na, side)
-            self.check_expr(nb, side)
-            let tl : i64 = self.ty_of(na)
-            let tr : i64 = self.ty_of(nb)
-            if types.ty_is_enum(tl) or types.ty_is_enum(tr):
-                // a @flag enum is a set of bits, and the bit operators
-                // are its set operations; anything else two enums
-                // cannot do to each other
-                if not (k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor):
-                    self.derr(tok, "an enum is compared, not computed with")
+                let tt : mut i64 = types.ty_strip_ref(self.ty_of(na))
+                let tpre : mut str = ""
+                if self.kind_of(na) = ast.Nk.var:
+                    let ts : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
+                    if ts ≠ ⁻1:
+                        let trk : i64 = types.ty_ref_kind(self.stype[ts × 1¤ptrdiff])
+                        if trk = 1:
+                            tpre ← "&"
+                        elif trk = 2:
+                            tpre ← "&mut "
+                let sp0 : str = self.ty_spell(tt)
+                let sp : str = if sp0 = "": "" else: tpre ⧺ sp0
+                if sp = "":
+                    self.derr(tok, "@typeof of " ⧺ self.tn(tt) ⧺ """ carries the value, not the type
+                            " alone; it is not core-2""")
+                    self.set_type(id, types.TY_STR)
+                    return
+                // the spelling is a constant the way a literal is
+                self.a.strs.push(sp)
+                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_str
+                self.a.na[id × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
+                self.a.nb[id × 1¤ptrdiff] ← 0
+                self.set_type(id, types.TY_STR)
+            ast.Nk.ifield:
+                // a field of the one being asked about; what it is read out
+                // of is whatever the site has to hand
+                let sd := self.a.structs[nb × 1¤ptrdiff]
+                self.set_type(id, self.a.extra[sd.fields_off + 2 + na × 2¤ptrdiff])
+            ast.Nk.old:
+                // What a value was when the call began.  A @pre is read
+                // before the call has changed anything and a body is where
+                // things become what they are, so a @post is the only
+                // place in a position to ask.
+                if not self.in_post:
+                    self.derr(tok, """@old says what a value was when the call began, and only a @post
+                                    " is in a position to ask; a @pre is read before the call has
+                                    " changed anything, and a body is where things become what they are""")
+                    self.check_expr(na, types.TY_UNIT)
                     self.set_type(id, types.TY_I64)
                     return
-                if tl ≠ tr:
-                    self.derr(tok, "the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr) ⧺ "; a bit operation takes two of the same @flag enum")
-                    self.set_type(id, if types.ty_is_enum(tl): tl else: tr)
+                self.check_expr(na, want)
+                let ot : i64 = self.ty_of(na)
+                if types.ty_is_arr(ot) or types.ty_is_hash(ot) or types.ty_is_struct(ot):
+                    self.derr(tok, "@old keeps what a value was, and keeping " ⧺ self.tn(ot) ⧺ " is keeping what it points at; a plain value is what core-2 remembers")
+                    self.set_type(id, types.TY_I64)
                     return
-                if not self.enum_is_flag(tl):
-                    self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[types.ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
-                self.set_type(id, tl)
-                return
-            if tl = types.TY_CHAR or tr = types.TY_CHAR:
-                self.check_char_arith(id, tok, k, na, nb, tl, tr)
-                return
-            if not (tl = types.TY_UNT or types.ty_is_int(tl) or types.ty_is_bigint(tl)) or not (tr = types.TY_UNT or types.ty_is_int(tr) or types.ty_is_bigint(tr)):
-                self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+                self.set_type(id, ot)
+            ast.Nk.dropu:
+                self.check_expr(na, types.TY_UNIT)
+                let dt : i64 = self.ty_of(na)
+                if dt = types.TY_UNT:
+                    self.adopt(na, types.TY_I64)
+                    self.set_type(id, types.TY_I64)
+                elif not types.ty_is_int(dt):
+                    self.derr(tok, "@dropunit unmeasures a number, not " ⧺ self.tn(dt))
+                    self.set_type(id, types.TY_I64)
+                else:
+                    self.set_type(id, types.ty_drop_unit(dt))
+            ast.Nk.slit:
+                // The recipe is the one function the checker never walks,
+                // so a std.Build.Executable reaching here is outside one by
+                // construction: it is the build system's struct, and only a
+                // recipe has a build to hand it to.
+                if nb = ast.SLIT_EXE:
+                    self.derr(tok, """std.Build.Executable belongs to the @build function; nothing else
+                                    " declares a build""")
+                    self.set_type(id, types.TY_UNIT)
+                else:
+                    self.check_slit(id, tok, na)
+            ast.Nk.field:
+                self.check_field(id, tok, na)
+            ast.Nk.op_some:
+                let iw : i64 = if types.ty_is_opt(types.ty_strip_ref(want)): types.ty_opt_base(types.ty_strip_ref(want)) else: types.TY_UNIT
+                self.check_expr(na, iw)
+                if self.ty_of(na) = types.TY_UNT:
+                    self.adopt(na, if iw ≠ types.TY_UNIT and types.ty_is_int(iw): iw else: types.TY_I64)
+                let it : i64 = self.ty_of(na)
+                if types.ty_is_arr(it):
+                    self.derr(tok, "an optional array is not core-2 yet")
+                    self.set_type(id, types.mk_oty(types.TY_I64))
+                    return
+                if types.ty_is_hash(it):
+                    self.derr(tok, "an optional dictionary is not core-2 yet")
+                    self.set_type(id, types.mk_oty(types.TY_I64))
+                    return
+                if types.ty_is_opt(it) or it = types.TY_EMPTY:
+                    self.derr(tok, "an optional of an optional is not core-2 yet")
+                    self.set_type(id, types.mk_oty(types.TY_I64))
+                    return
+                self.set_type(id, types.mk_oty(it))
+            ast.Nk.emptyv:
+                self.set_type(id, if types.ty_is_opt(want): want else: types.TY_EMPTY)
+            ast.Nk.index:
+                self.check_index(id, tok, na, nb)
+                self.pack_safe(na)
+            ast.Nk.len:
+                self.check_expr(na, types.TY_UNIT)
+                self.pack_safe(na)
+                let t : i64 = self.ty_of(na)
+                if t = types.TY_STR:
+                    self.set_type(id, types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF))
+                elif types.ty_is_arr(t):
+                    let u : i64 = if types.ty_drop_unit(self.elem_of(t)) = types.TY_U8: types.UNIT_BYTE else: types.UNIT_PTRDIFF
+                    self.set_type(id, types.ty_with_unit(types.TY_I64, u))
+                elif types.ty_is_hash(t) or types.ty_is_tup(t) or types.ty_is_mat(t):
+                    self.set_type(id, types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF))
+                else:
+                    self.derr(tok, "# counts an array, a dictionary, a tuple or a string; this is " ⧺ self.tn(t))
+                    self.set_type(id, types.TY_I64)
+            ast.Nk.call:
+                self.check_call(id, tok, na × 1¤"aextra")
+            ast.Nk.run:
+                self.check_run(id, tok, na, nb, nc)
+            ast.Nk.quant:
+                self.check_quant(id, tok, na, nb, nc)
+            ast.Nk.callv:
+                self.check_callv(id, tok, na, nb × 1¤"aextra")
+            ast.Nk.scall:
+                self.check_scall(id, tok, na, nb × 1¤"aextra")
+            ast.Nk.mcall:
+                self.check_mcall(id, tok, na, nb × 1¤"aextra", false)
+            ast.Nk.ref:
+                self.derr(tok, "a borrow is an argument, not a value of its own")
                 self.set_type(id, types.TY_I64)
-                return
-            if tl = types.TY_UNT and tr = types.TY_UNT and self.kind_of(na) = ast.Nk.lit_int and self.kind_of(nb) = ast.Nk.lit_int and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0 and k ≠ ast.Nk.satadd and k ≠ ast.Nk.satsub and k ≠ ast.Nk.satmul:
-                self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
-                              self.a.na[nb × 1¤ptrdiff])
-                return
-            let t : i64 = self.unify_arith(tok, id, k, tl, tr)
-            if (k = ast.Nk.shl or k = ast.Nk.shr or k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor) and t ≠ types.TY_UNT and types.ty_unit(t) ≠ 0:
-                self.derr(tok, "bit operations work plain integers, not measured ones")
-            if k = ast.Nk.shl or k = ast.Nk.shr:
-                // the count is its own number; it does not widen the value
-                self.set_type(id, if tl ≠ types.TY_UNT: tl else: t)
-            else:
-                self.set_type(id, t)
+            ast.Nk.neg:
+                self.check_expr(na, want)
+                let t : i64 = self.ty_of(na)
+                if t = types.TY_UNT:
+                    self.set_type(id, types.TY_UNT)
+                    // the parser folds ⁻literal; reaching here means ⁻(expr)
+                    if self.kind_of(na) = ast.Nk.lit_int:
+                        self.fold_neg(id, na)
+                elif types.ty_is_int(t):
+                    self.set_type(id, t)
+                else:
+                    self.derr(tok, "⁻ negates a number, not " ⧺ self.tn(t))
+                    self.set_type(id, types.TY_I64)
+            ast.Nk.bnot:
+                self.check_expr(na, want)
+                let t : i64 = self.ty_of(na)
+                if t = types.TY_UNT:
+                    self.a.na[id × 1¤ptrdiff] ← ~(self.a.na[na × 1¤ptrdiff])
+                    self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
+                    self.a.nb[id × 1¤ptrdiff] ← 0
+                    self.set_type(id, types.TY_UNT)
+                elif types.ty_is_int(t) and types.ty_unit(t) = 0:
+                    self.set_type(id, t)
+                elif types.ty_is_enum(t) and self.enum_is_flag(t):
+                    // the complement within the set's own bits
+                    self.set_type(id, t)
+                else:
+                    self.derr(tok, "~ flips the bits of a plain integer or a @flag enum, not " ⧺ self.tn(t))
+                    self.set_type(id, types.TY_I64)
+            ast.Nk.op_not:
+                self.check_expr(na, types.TY_UNIT)
+                self.want_bool(na, "¬")
+                self.set_type(id, types.TY_BOOL)
+            ast.Nk.op_wrap:
+                self.check_expr(na, want)
+                let t : i64 = self.ty_of(na)
+                if t = types.TY_UNT:
+                    self.derr(tok, "@wrap wants a width to wrap within; state a type")
+                    self.set_type(id, types.TY_I64)
+                elif types.ty_is_int(t):
+                    self.set_type(id, t)
+                else:
+                    self.derr(tok, "@wrap wraps integer arithmetic, not " ⧺ self.tn(t))
+                    self.set_type(id, types.TY_I64)
+            ast.Nk.default:
+                self.check_default(id, tok, na, nb, want)
+            ast.Nk.div, ast.Nk.mod:
+                self.derr(tok, "÷ and % answer a result; write (a ÷ b) ?? default")
+                self.check_expr(na, want)
+                self.check_expr(nb, want)
+                self.set_type(id, types.TY_I64)
+            ast.Nk.eq, ast.Nk.ne:
+                self.check_expr(na, types.TY_UNIT)
+                self.check_expr(nb, types.TY_UNIT)
+                let tl : i64 = self.ty_of(na)
+                let tr : i64 = self.ty_of(nb)
+                if tl = types.TY_EMPTY or tr = types.TY_EMPTY:
+                    if tl = types.TY_EMPTY and tr = types.TY_EMPTY:
+                        self.derr(tok, "∅ against ∅ says nothing; state which optional is asked")
+                    elif tl = types.TY_EMPTY:
+                        if types.ty_is_opt(tr):
+                            self.adopt(na, tr)
+                        else:
+                            self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tr))
+                    elif types.ty_is_opt(tl):
+                        self.adopt(nb, tl)
+                    else:
+                        self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tl))
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                if types.ty_is_opt(tl) or types.ty_is_opt(tr):
+                    let ob : i64 = types.ty_opt_base(if types.ty_is_opt(tl): tl else: tr)
+                    if tl ≠ tr:
+                        self.derr(tok, "an optional compares with its own kind or ∅; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+                    elif not ((types.ty_is_int(ob) and types.ty_unit(ob) = 0) or ob = types.TY_BOOL or ob = types.TY_CHAR or ob = types.TY_STR):
+                        self.derr(tok, "an optional of " ⧺ self.tn(ob) ⧺ """ is not compared whole;
+                                " match takes it apart""")
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                if tl = types.TY_STR and tr = types.TY_STR:
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                if tl = types.TY_BOOL and tr = types.TY_BOOL:
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                if types.ty_is_hash(tl) or types.ty_is_hash(tr) or types.ty_is_arr(tl) or types.ty_is_arr(tr) or types.ty_is_tup(tl) or types.ty_is_tup(tr) or types.ty_is_mat(tl) or types.ty_is_mat(tr) or types.ty_is_rg(tl) or types.ty_is_rg(tr):
+                    self.derr(tok, "core-2 does not compare " ⧺ self.tn(tl) ⧺ " with " ⧺ self.tn(tr) ⧺ "; ask the entries")
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                self.check_cmp_operands(id, tok, k, na, nb)
+            ast.Nk.lt, ast.Nk.le, ast.Nk.gt, ast.Nk.ge:
+                self.check_expr(na, types.TY_UNIT)
+                self.check_expr(nb, types.TY_UNIT)
+                self.check_cmp_operands(id, tok, k, na, nb)
+            ast.Nk.reshape:
+                self.check_reshape(id, tok, na, nb, want)
+            ast.Nk.iota:
+                // where the wanted value sits in the container, if anywhere
+                self.check_expr(na, types.TY_UNIT)
+                let ct : i64 = self.ty_of(na)
+                if not types.ty_is_arr(ct):
+                    self.derr(tok, "⍳ looks through an array; this is " ⧺ self.tn(ct))
+                    self.check_expr(nb, types.TY_UNIT)
+                    self.set_type(id, types.mk_oty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
+                    return
+                let et : i64 = self.elem_of(ct)
+                self.check_expr(nb, et)
+                if self.is_open(self.ty_of(nb)):
+                    self.adopt(nb, et)
+                elif not self.try_fit(nb, et):
+                    self.derr(tok, "⍳: the container holds " ⧺ self.tn(et) ⧺ ", and what is looked for is " ⧺ self.tn(self.ty_of(nb)))
+                self.set_type(id, types.mk_oty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
+            ast.Nk.lambda:
+                let loff : i64 = na
+                let np9 : i64 = self.a.extra[loff × 1¤ptrdiff]
+                let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
+                let lret : i64 = self.a.extra[(loff + 2 + np9 × 2 + ncap9) × 1¤ptrdiff]
+                if lret = types.TY_UNIT:
+                    self.derrc(tok, 2254, "a lambda must not return ∅; it answers a value")
+                    self.set_type(id, types.TY_I64)
+                    return
+                // captures resolve outside, before the floor closes: their
+                // values are read where the lambda is written
+                let couter : mut i64[] = []
+                let ctoks : mut i64[] = []
+                let ctys : mut i64[] = []
+                if ncap9 > 0:
+                    foreach ci := 0…ncap9:
+                        let ctok : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
+                        let cs : i64 = self.lookup(self.text(ctok))
+                        if cs = ⁻1:
+                            let cf : i64 = self.fn_index(self.text(ctok))
+                            if cf = ⁻1:
+                                self.derrc(ctok, 2111, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
+                                self.set_type(id, types.TY_I64)
+                                return
+                            // a captured function is its value in the box,
+                            // read now -- which is what @replaceable asks
+                            if self.fn_is_generic(cf):
+                                self.derr(ctok, "a generic function has no one shape to capture")
+                                self.set_type(id, types.TY_I64)
+                                return
+                            let cd := self.a.fns[cf × 1¤ptrdiff]
+                            let cnp : i64 ¤ptrdiff = self.a.extra[cd.params_off] × 1¤ptrdiff
+                            let cok : mut bool = cnp >= 1 and cnp <= 5 and types.fnval_ret_ok(cd.ret) and not cd.is_impure
+                            let cpts : mut i64[] = []
+                            foreach cpi := 0…cnp:
+                                let cpty : i64 = self.a.extra[cd.params_off + 2 + cpi × 2]
+                                cok ← cok and types.ty_ref_kind(cpty) = 0 and ((types.ty_is_int(cpty) and types.ty_unit(cpty) = 0) or cpty = types.TY_BOOL or cpty = types.TY_CHAR or cpty = types.TY_STR)
+                                cpts.push(types.ty_strip_ref(cpty))
+                            if not cok:
+                                self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ """' does not travel as a value;
+                                        " only a pure function of up to five plain scalars does""")
+                                self.set_type(id, types.TY_I64)
+                                return
+                            couter.push(0 - cf - 1)
+                            ctoks.push(ctok)
+                            ctys.push(types.mk_lty(self.lam_intern(cpts, cd.ret, if cd.is_listable: 1 else: 0)))
+                        else:
+                            let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
+                            if types.ty_ref_kind(cty0) ≠ 0 or not (types.ty_is_int(cty0) or cty0 = types.TY_BOOL or cty0 = types.TY_CHAR or cty0 = types.TY_STR or types.ty_is_lam(cty0)):
+                                self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ self.tn(cty0))
+                                self.set_type(id, types.TY_I64)
+                                return
+                            // The capture's value is read here, where the
+                            // lambda is written, and a read is what it is:
+                            // a binding used only through one is not a
+                            // binding nothing reads.
+                            self.life_used(self.sslot[cs × 1¤ptrdiff])
+                            couter.push(self.sslot[cs × 1¤ptrdiff])
+                            ctoks.push(ctok)
+                            ctys.push(cty0)
+                self.push_scope()
+                let floor9 : i64 = self.scope_floor
+                self.scope_floor ← @dropunit(#self.snames)
+                foreach pi := 0…np9:
+                    let ptok : i64 = self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff]
+                    let pty : i64 = self.a.extra[(loff + 2 + pi × 2) × 1¤ptrdiff]
+                    let ps : i64 = self.declare(ptok, pty, 0)
+                    self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff] ← ps
+                if ncap9 > 0:
+                    foreach ci := 0…ncap9:
+                        _ ← self.declare(ctoks[ci × 1¤ptrdiff], ctys[ci × 1¤ptrdiff], 0)
+                        // the cell keeps the outer slot: the value's source
+                        self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
+                let lr_saved : i64 = self.lam_ret
+                self.lam_ret ← lret
+                if self.kind_of(nb) = ast.Nk.block:
+                    let ld_saved : i64 = self.loop_depth
+                    self.loop_depth ← 0
+                    self.check_block(nb, true)
+                    self.loop_depth ← ld_saved
+                    let boff : i64 = self.a.na[nb × 1¤ptrdiff]
+                    let bn : i64 = self.a.extra[boff × 1¤ptrdiff]
+                    let last_is_value : mut bool = false
+                    if bn > 0:
+                        let blast : i64 = self.a.extra[(boff + bn) × 1¤ptrdiff]
+                        if self.stmt_is_value(blast):
+                            last_is_value ← true
+                    if not last_is_value and not self.block_returns(nb):
+                        self.derr(tok, "the lambda answers " ⧺ self.tn(lret) ⧺ " but not on every path")
+                else:
+                    self.check_expr(nb, lret)
+                    if self.is_open(self.ty_of(nb)):
+                        self.adopt(nb, lret)
+                    elif not self.try_fit(nb, lret):
+                        // a bare value under an optional answer wraps itself
+                        if not (types.ty_is_opt(lret) and self.try_fit(nb, types.ty_opt_base(lret))):
+                            self.derr(tok, "the lambda answers " ⧺ self.tn(lret) ⧺ ", not " ⧺ self.tn(self.ty_of(nb)))
+                self.lam_ret ← lr_saved
+                self.scope_floor ← floor9
+                self.pop_scope()
+                self.lams.push(id)
+                self.lamns.push(self.nslots)
+                self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.lams) - 1
+                self.set_type(id, types.mk_lty(nc))
+            ast.Nk.badlam:
+                if na = 1:
+                    self.derrc(tok, 2025, """an empty capture list says nothing; a lambda with no
+                                           " captures leaves the bars off""")
+                elif na = 2:
+                    self.derrc(tok, 2024, "a lambda's parameter requires a type")
+                else:
+                    self.derrc(tok, 2026, "a lambda states its return type after '→'")
+                self.set_type(id, types.TY_I64)
+            ast.Nk.try:
+                let rw9 : i64 = if self.lam_ret ≠ ⁻1: self.lam_ret else: self.a.fns[self.cur_fn × 1¤ptrdiff].ret
+                if not types.ty_is_opt(rw9):
+                    self.derr(tok, "'?' answers ∅ early, so the function must answer an optional")
+                if self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod:
+                    // ÷ under ? answers the quotient, or ∅ for the zero
+                    let dl9 : i64 = self.a.na[na × 1¤ptrdiff]
+                    let dr9 : i64 = self.a.nb[na × 1¤ptrdiff]
+                    self.check_expr(dl9, types.TY_UNIT)
+                    self.check_expr(dr9, self.ty_of(dl9))
+                    if self.ty_of(dl9) = types.TY_UNT and self.ty_of(dr9) = types.TY_UNT:
+                        self.adopt(dl9, types.TY_I64)
+                        self.adopt(dr9, types.TY_I64)
+                    let dt9 : i64 = self.unify_arith(self.a.ntok[na × 1¤ptrdiff], na, self.kind_of(na), self.ty_of(dl9), self.ty_of(dr9))
+                    self.set_type(na, if dt9 ≠ types.TY_UNT: dt9 else: types.TY_I64)
+                    self.set_type(id, self.ty_of(na))
+                else:
+                    self.check_expr(na, types.TY_UNIT)
+                    let ot9 : i64 = self.ty_of(na)
+                    if not types.ty_is_opt(ot9):
+                        self.derr(tok, "'?' asks an optional; this is " ⧺ self.tn(ot9))
+                        self.set_type(id, types.TY_I64)
+                        return
+                    self.set_type(id, types.ty_opt_base(ot9))
+            ast.Nk.rangev:
+                self.check_expr(na, types.TY_UNIT)
+                self.check_expr(nb, self.ty_of(na))
+                if nc ≠ ⁻1:
+                    self.check_expr(nc, self.ty_of(na))
+                let tl9 : i64 = self.ty_of(na)
+                let th9 : i64 = self.ty_of(nb)
+                let vt : mut i64 = ⁻1
+                if tl9 ≠ types.TY_UNT:
+                    vt ← tl9
+                elif th9 ≠ types.TY_UNT:
+                    vt ← th9
+                elif nc ≠ ⁻1 and self.ty_of(nc) ≠ types.TY_UNT:
+                    vt ← self.ty_of(nc)
+                if vt = ⁻1:
+                    // ends that state nothing take the binding's element,
+                    // where one is stated, and i64 otherwise
+                    let w9 : i64 = types.ty_strip_ref(want)
+                    vt ← if types.ty_is_int(w9): w9 else: types.TY_I64
+                // A range may count in a measure: `0…#name - 1` counts
+                // ¤ptrdiff because that is what its end is, and what walks
+                // it is handed indices that are indices.  Dropping the
+                // measure to make the range and putting it back at every
+                // subscript is what this saves.
+                if not types.ty_is_int(vt):
+                    self.derr(tok, "a range counts numbers; this is " ⧺ self.tn(vt))
+                    vt ← types.TY_I64
+                self.adopt(na, vt)
+                self.adopt(nb, vt)
+                if self.ty_of(na) ≠ vt or self.ty_of(nb) ≠ vt:
+                    self.derr(tok, "the range's ends say one type between them")
+                if nc ≠ ⁻1:
+                    self.adopt(nc, vt)
+                    if self.ty_of(nc) ≠ vt:
+                        self.derr(tok, "the step follows the range's type")
+                self.set_type(id, types.mk_rgty(vt))
+            ast.Nk.mslice:
+                self.check_expr(na, types.TY_UNIT)
+                let mt9 : i64 = self.ty_of(na)
+                let rlo : i64 = self.a.extra[nb × 1¤ptrdiff]
+                let rhi : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+                let clo : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
+                let chi : i64 = self.a.extra[(nb + 3) × 1¤ptrdiff]
+                if types.ty_is_mat(mt9) and self.mat_rank(mt9) = 3:
+                    self.derr(tok, "cutting a rank-3 array with a range is not core-2 yet")
+                    self.check_expr(rlo, types.TY_UNIT)
+                    self.check_expr(rhi, types.TY_UNIT)
+                    self.check_expr(clo, types.TY_UNIT)
+                    self.set_type(id, types.mk_aty(types.TY_I64))
+                    return
+                if not types.ty_is_mat(mt9):
+                    self.derr(tok, "two subscripts take a matrix apart; this is " ⧺ self.tn(mt9))
+                    self.check_expr(rlo, types.TY_UNIT)
+                    self.check_expr(rhi, types.TY_UNIT)
+                    self.check_expr(clo, types.TY_UNIT)
+                    self.set_type(id, types.mk_aty(types.TY_I64))
+                    return
+                self.check_index_expr(tok, mt9, rlo)
+                self.check_index_expr(tok, mt9, rhi)
+                let rowty : i64 = types.mk_aty(self.mat_elem(mt9))
+                self.check_index_expr(tok, rowty, clo)
+                if chi ≠ ⁻1:
+                    self.check_index_expr(tok, rowty, chi)
+                if nc = 1:
+                    // one element from each row: an array of them
+                    self.set_type(id, types.mk_aty(self.mat_elem(mt9)))
+                else:
+                    // neither extent is known before it is cut, so both open
+                    self.set_type(id, types.mk_mty(self.mat_intern(self.mat_elem(mt9), ⁻1, ⁻1, ⁻2)))
+            ast.Nk.slice:
+                self.check_expr(na, types.TY_UNIT)
+                let bt2 : i64 = self.ty_of(na)
+                if bt2 = types.TY_STR:
+                    // A string is a sequence of characters and is cut like
+                    // one; both ends are counted in characters, as a
+                    // subscript of it is, and what comes back is a string.
+                    self.check_index_expr(tok, types.TY_STR, nb)
+                    self.check_index_expr(tok, types.TY_STR, nc)
+                    self.set_type(id, types.TY_STR)
+                    return
+                if not types.ty_is_arr(bt2) and not types.ty_is_mat(bt2):
+                    self.derr(tok, "a slice takes an array or a string apart; this is " ⧺ self.tn(bt2))
+                    self.check_expr(nb, types.TY_UNIT)
+                    self.check_expr(nc, types.TY_UNIT)
+                    self.set_type(id, types.mk_aty(types.TY_I64))
+                    return
+                if types.ty_is_arr(bt2):
+                    self.pack_safe(na)
+                self.check_index_expr(tok, bt2, nb)
+                self.check_index_expr(tok, bt2, nc)
+                if types.ty_is_mat(bt2):
+                    // fewer rows, the same rows: the row count opens, the
+                    // row length is still the type's to say
+                    self.set_type(id, types.mk_mty(self.mat_intern(self.mat_elem(bt2), ⁻1, self.mat_cc(bt2), self.mat_dd(bt2))))
+                    return
+                self.set_type(id, if types.ty_is_farr(bt2) or types.ty_is_row(bt2): types.mk_aty(self.elem_of(bt2)) else: bt2)
+            ast.Nk.lxor, ast.Nk.lnand, ast.Nk.lnor:
+                self.check_expr(na, types.TY_UNIT)
+                self.check_expr(nb, types.TY_UNIT)
+                if self.ty_of(na) ≠ types.TY_BOOL or self.ty_of(nb) ≠ types.TY_BOOL:
+                    self.derr(tok, "⊕, ⊼ and ⊽ take truth values on both sides")
+                self.set_type(id, types.TY_BOOL)
+            ast.Nk.op_and, ast.Nk.op_or, ast.Nk.land, ast.Nk.lor:
+                self.check_expr(na, types.TY_UNIT)
+                self.check_expr(nb, types.TY_UNIT)
+                self.want_bool(na, "a logic operator")
+                self.want_bool(nb, "a logic operator")
+                self.set_type(id, types.TY_BOOL)
+            ast.Nk.elemof:
+                self.check_expr(nb, types.TY_UNIT)
+                let ht : i64 = self.ty_of(nb)
+                if not types.ty_is_hash(ht):
+                    self.derr(tok, "∊ asks a dictionary in core-2; this is " ⧺ self.tn(ht))
+                    self.check_expr(na, types.TY_UNIT)
+                    self.set_type(id, types.TY_BOOL)
+                    return
+                self.check_hash_key(tok, ht, na)
+                self.set_type(id, types.TY_BOOL)
+            ast.Nk.ccat:
+                // the binding's array type reaches both sides, so a bare
+                // literal operand settles the way a bound one does
+                self.check_expr(na, if types.ty_is_arr(types.ty_strip_ref(want)): want else: types.TY_UNIT)
+                let cl : i64 = self.ty_of(na)
+                if types.ty_is_arr(cl):
+                    let ce : i64 = self.elem_of(cl)
+                    self.check_expr(nb, types.mk_aty(ce))
+                    let cr0 : i64 = self.ty_of(nb)
+                    if not types.ty_is_arr(cr0):
+                        self.derrc(tok, 2729, "an array joins an array; the right side is " ⧺ self.tn(cr0))
+                    elif self.elem_of(cr0) ≠ ce:
+                        self.derr(tok, "one array holds one element type; " ⧺ self.tn(ce) ⧺ " does not join " ⧺ self.tn(self.elem_of(cr0)))
+                    self.pack_safe(na)
+                    self.pack_safe(nb)
+                    self.set_type(id, types.mk_aty(ce))
+                    return
+                self.check_expr(nb, types.TY_UNIT)
+                let cr : i64 = self.ty_of(nb)
+                if not ((cl = types.TY_STR or cl = types.TY_CHAR) and (cr = types.TY_STR or cr = types.TY_CHAR)):
+                    self.derrc(tok, 2728, "⧺ joins strings, characters and arrays in core-2")
+                self.set_type(id, types.TY_STR)
+            _:
+                // + - × ÷ % « » & | ^ ⌈ ⌊ over integers.  A sum is of two
+                // of the same thing, so what is wanted of the whole is
+                // wanted of each side; a product is not, and pushing the
+                // wanted measure into its sides would have an untyped
+                // number there come out measured -- which is how
+                // 'n × 1¤ptrdiff' would end up adding a length to a count.
+                // A character wanted of the whole says nothing about the
+                // sides: one of them is the character and the other the
+                // number it moves by, and asking that number for a
+                // character would refuse it where it stands.
+                let want2 : i64 = if want = types.TY_CHAR: types.TY_UNIT else: want
+                let side : i64 = if (k = ast.Nk.mul or k = ast.Nk.satmul or k = ast.Nk.div or k = ast.Nk.mod) and types.ty_is_int(want2): types.ty_drop_unit(want2) else: want2
+                self.check_expr(na, side)
+                self.check_expr(nb, side)
+                let tl : i64 = self.ty_of(na)
+                let tr : i64 = self.ty_of(nb)
+                if types.ty_is_enum(tl) or types.ty_is_enum(tr):
+                    // a @flag enum is a set of bits, and the bit operators
+                    // are its set operations; anything else two enums
+                    // cannot do to each other
+                    if not (k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor):
+                        self.derr(tok, "an enum is compared, not computed with")
+                        self.set_type(id, types.TY_I64)
+                        return
+                    if tl ≠ tr:
+                        self.derr(tok, "the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr) ⧺ "; a bit operation takes two of the same @flag enum")
+                        self.set_type(id, if types.ty_is_enum(tl): tl else: tr)
+                        return
+                    if not self.enum_is_flag(tl):
+                        self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[types.ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
+                    self.set_type(id, tl)
+                    return
+                if tl = types.TY_CHAR or tr = types.TY_CHAR:
+                    self.check_char_arith(id, tok, k, na, nb, tl, tr)
+                    return
+                if not (tl = types.TY_UNT or types.ty_is_int(tl) or types.ty_is_bigint(tl)) or not (tr = types.TY_UNT or types.ty_is_int(tr) or types.ty_is_bigint(tr)):
+                    self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+                    self.set_type(id, types.TY_I64)
+                    return
+                if tl = types.TY_UNT and tr = types.TY_UNT and self.kind_of(na) = ast.Nk.lit_int and self.kind_of(nb) = ast.Nk.lit_int and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0 and k ≠ ast.Nk.satadd and k ≠ ast.Nk.satsub and k ≠ ast.Nk.satmul:
+                    self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
+                                  self.a.na[nb × 1¤ptrdiff])
+                    return
+                let t : i64 = self.unify_arith(tok, id, k, tl, tr)
+                if (k = ast.Nk.shl or k = ast.Nk.shr or k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor) and t ≠ types.TY_UNT and types.ty_unit(t) ≠ 0:
+                    self.derr(tok, "bit operations work plain integers, not measured ones")
+                if k = ast.Nk.shl or k = ast.Nk.shr:
+                    // the count is its own number; it does not widen the value
+                    self.set_type(id, if tl ≠ types.TY_UNT: tl else: t)
+                else:
+                    self.set_type(id, t)
 
     // as above: the negation of a folded literal wraps rather than
     // reports, since the one value that would report is the one a
     // program is entitled to write
     fn fold_neg(&mut self, id : i64, na : i64):
         let v : i64 = self.a.na[na × 1¤ptrdiff]
-        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+        self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
         self.a.na[id × 1¤ptrdiff] ← @wrap(0 - v)
         self.a.nb[id × 1¤ptrdiff] ← 0
         self.set_type(id, types.TY_UNT)
@@ -1698,7 +1699,7 @@ impl Checker:
             return
         self.derr(self.a.ntok[e × 1¤ptrdiff], "an int meets numbers; this is " ⧺ self.tn(t))
 
-    fn check_cmp_operands(&mut self, id : i64, tok : i64, k : i64, na : i64, nb : i64):
+    fn check_cmp_operands(&mut self, id : i64, tok : i64, k : ast.Nk, na : i64, nb : i64):
         let tl : i64 = self.ty_of(na)
         let tr : i64 = self.ty_of(nb)
         if types.ty_is_bigint(tl) or types.ty_is_bigint(tr):
@@ -1773,7 +1774,7 @@ impl Checker:
     // Nothing else of arithmetic reaches a character.  It is what a
     // string is made of rather than a number, and the operators that
     // scale or combine bits have nothing to say about a code point.
-    fn check_char_arith(&mut self, id : i64, tok : i64, k : i64, na : i64, nb : i64, tl : i64, tr : i64):
+    fn check_char_arith(&mut self, id : i64, tok : i64, k : ast.Nk, na : i64, nb : i64, tl : i64, tr : i64):
         self.set_type(id, types.TY_CHAR)
         if tl = types.TY_CHAR and tr = types.TY_CHAR:
             if k ≠ ast.Nk.sub:
@@ -1863,7 +1864,7 @@ impl Checker:
     // not something the text settles: a literal says so outright, and
     // `n ⍴ x` says so when n is written out
     fn born_count(&self, na : i64) → i64:
-        let k : i64 = self.kind_of(na)
+        let k : ast.Nk = self.kind_of(na)
         if k = ast.Nk.arrlit:
             return self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff]
         if k = ast.Nk.reshape:
@@ -1986,7 +1987,7 @@ impl Checker:
                                                  " function of up to five plain scalars does""")
                     self.set_type(id, types.TY_I64)
                     return
-                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.fnval.ord()
+                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.fnval
                 self.a.na[id × 1¤ptrdiff] ← fidx
                 self.set_type(id, types.mk_lty(self.lam_intern(pts9, fd.ret, if fd.is_listable: 1 else: 0)))
                 return
@@ -2125,8 +2126,8 @@ impl Checker:
             self.sa_fold_typename(y)
             self.check_expr(x, types.TY_UNIT)
             self.check_expr(y, types.TY_UNIT)
-            let kx : i64 = self.kind_of(x)
-            let ky : i64 = self.kind_of(y)
+            let kx : ast.Nk = self.kind_of(x)
+            let ky : ast.Nk = self.kind_of(y)
             if kx = ast.Nk.lit_str and ky = ast.Nk.lit_str:
                 if self.a.strs[self.a.na[x × 1¤ptrdiff] × 1¤ptrdiff] ≠ self.a.strs[self.a.na[y × 1¤ptrdiff] × 1¤ptrdiff]:
                     self.derr(tok, "static assertion failed: \"" ⧺ self.a.strs[self.a.na[x × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\" is not \"" ⧺ self.a.strs[self.a.na[y × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\"")
@@ -2143,7 +2144,7 @@ impl Checker:
             return
         let c : i64 = self.a.extra[args_off + 1]
         self.check_expr(c, types.TY_UNIT)
-        let kc : i64 = self.kind_of(c)
+        let kc : ast.Nk = self.kind_of(c)
         if kc ≠ ast.Nk.lit_bool and kc ≠ ast.Nk.lit_int:
             self.derr(tok, "static_assert reads what the compiler can see: a condition that folds")
             return
@@ -2161,7 +2162,7 @@ impl Checker:
         if not known:
             return
         self.a.strs.push(nm)
-        self.a.nkind[e × 1¤ptrdiff] ← ast.Nk.lit_str.ord()
+        self.a.nkind[e × 1¤ptrdiff] ← ast.Nk.lit_str
         self.a.na[e × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
         self.a.nb[e × 1¤ptrdiff] ← 0
         self.set_type(e, types.TY_STR)
@@ -2541,7 +2542,7 @@ impl Checker:
                                                      " value; this one is empty""")
         else:
             let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
-            let lk : i64 = self.kind_of(last)
+            let lk : ast.Nk = self.kind_of(last)
             let ltok : i64 = self.a.ntok[last × 1¤ptrdiff]
             if lk = ast.Nk.exprstmt or lk = ast.Nk.st_if:
                 self.val_want ← settled
@@ -2693,7 +2694,7 @@ impl Checker:
                         self.derr(tok, "'" ⧺ bn ⧺ "' does not hold '" ⧺ m ⧺ "'")
                         self.set_type(id, types.mk_ety(ei))
                         return
-                    self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+                    self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
                     self.a.na[id × 1¤ptrdiff] ← self.a.evalues[(self.a.estart[ei × 1¤ptrdiff] + k) × 1¤ptrdiff]
                     self.a.nb[id × 1¤ptrdiff] ← 0
                     self.set_type(id, types.mk_ety(ei))
@@ -3704,7 +3705,7 @@ impl Checker:
     // neither and is left to the run.
     // The node kinds a condition is read through: a comparison or an
     // arithmetic operator, each of which holds a left and a right.
-    fn pre_reads(&self, k : i64) → bool:
+    fn pre_reads(&self, k : ast.Nk) → bool:
         if k = ast.Nk.eq or k = ast.Nk.ne or k = ast.Nk.lt or k = ast.Nk.le:
             return true
         if k = ast.Nk.gt or k = ast.Nk.ge or k = ast.Nk.add or k = ast.Nk.sub:
@@ -3712,7 +3713,7 @@ impl Checker:
         k = ast.Nk.mul or k = ast.Nk.div or k = ast.Nk.mod
 
     fn pre_const(&self, e : i64, poff : i64 ¤"aextra", np : i64 ¤ptrdiff, vals : i64[]) → i64:
-        let k : i64 = self.kind_of(e)
+        let k : ast.Nk = self.kind_of(e)
         let na : i64 = self.a.na[e × 1¤ptrdiff]
         let nb : i64 = self.a.nb[e × 1¤ptrdiff]
         if k = ast.Nk.lit_int or k = ast.Nk.lit_bool:
@@ -3809,12 +3810,12 @@ impl Checker:
     fn bind_ifields(&mut self, e : i64, si : i64):
         if e = ⁻1:
             return
-        let k : i64 = self.kind_of(e)
+        let k : ast.Nk = self.kind_of(e)
         if k = ast.Nk.var:
             let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
             let fi : i64 = self.field_index(si, nm)
             if fi ≠ ⁻1:
-                self.a.nkind[e × 1¤ptrdiff] ← ast.Nk.ifield.ord()
+                self.a.nkind[e × 1¤ptrdiff] ← ast.Nk.ifield
                 self.a.na[e × 1¤ptrdiff] ← fi
                 self.a.nb[e × 1¤ptrdiff] ← si
             return
@@ -4141,7 +4142,7 @@ impl Checker:
                 elif v >= 55296 and v <= 57343:
                     self.derr(tok, "chr: " ⧺ tokens.i64_str(v) ⧺ """ is a surrogate, which encodes half of
                             " a character in UTF-16 rather than being one""")
-                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
                 self.a.na[id × 1¤ptrdiff] ← v
                 self.a.nb[id × 1¤ptrdiff] ← 0
                 self.set_type(id, types.TY_CHAR)
@@ -4162,7 +4163,7 @@ impl Checker:
             // too, and a table of them may stand where the compiler
             // wants a constant it can see.
             if self.kind_of(na) = ast.Nk.lit_int:
-                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
                 self.a.na[id × 1¤ptrdiff] ← self.a.na[na × 1¤ptrdiff]
                 self.a.nb[id × 1¤ptrdiff] ← 0
                 self.a.nc[id × 1¤ptrdiff] ← 0
@@ -4175,7 +4176,7 @@ impl Checker:
             if argc0 ≠ 0:
                 self.derr(tok, "ord takes nothing")
             if self.kind_of(na) = ast.Nk.lit_int:
-                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int.ord()
+                self.a.nkind[id × 1¤ptrdiff] ← ast.Nk.lit_int
                 self.a.na[id × 1¤ptrdiff] ← self.a.na[na × 1¤ptrdiff]
                 self.a.nb[id × 1¤ptrdiff] ← 0
                 self.set_type(id, types.TY_U32)
@@ -4531,7 +4532,7 @@ impl Checker:
             self.derr(self.a.ntok[na × 1¤ptrdiff], "the function answers " ⧺ self.tn(want) ⧺ ", but the division works " ⧺ self.tn(self.ty_of(na)))
 
     fn check_default(&mut self, id : i64, tok : i64, na : i64, nb : i64, want : i64):
-        let ik : i64 = self.kind_of(na)
+        let ik : ast.Nk = self.kind_of(na)
         if ik = ast.Nk.div or ik = ast.Nk.mod:
             let dl : i64 = self.a.na[na × 1¤ptrdiff]
             let dr : i64 = self.a.nb[na × 1¤ptrdiff]
@@ -4743,7 +4744,7 @@ impl Checker:
     // `n ⍴ 0` lays out storage of its own; `(2, 2) ⍴ a` shares a's
     fn reshape_is_fresh(&self, e : i64) → bool:
         let src : i64 = self.a.nb[e × 1¤ptrdiff]
-        let k : i64 = self.kind_of(src)
+        let k : ast.Nk = self.kind_of(src)
         k ≠ ast.Nk.var and k ≠ ast.Nk.field and k ≠ ast.Nk.index and k ≠ ast.Nk.ref
 
     fn is_blet(&self, id : i64) → bool:
@@ -4832,7 +4833,7 @@ impl Checker:
     // reached from one, or what a borrow-returning call answers when
     // rooted in one -- never something the function made itself.
     fn rooted(&mut self, e : i64) → bool:
-        let k : i64 = self.kind_of(e)
+        let k : ast.Nk = self.kind_of(e)
         if k = ast.Nk.var:
             let s : i64 = self.lookup(self.text(self.a.ntok[e × 1¤ptrdiff]))
             if s = ⁻1:
@@ -4893,7 +4894,7 @@ impl Checker:
         if self.kind_of(s) = ast.Nk.st_let:
             self.bind_lend(s)
             let ls : i64 = self.nslot[s × 1¤ptrdiff]
-            let lk : i64 = self.kind_of(self.a.na[s × 1¤ptrdiff])
+            let lk : ast.Nk = self.kind_of(self.a.na[s × 1¤ptrdiff])
             if ls >= 0:
                 while #self.lfresh <= ls × 1¤ptrdiff:
                     self.lfresh.push(0)
@@ -4985,7 +4986,7 @@ impl Checker:
 
     // whether an expression certainly allocates what it answers
     fn allocates(&self, na : i64) → bool:
-        let k : i64 = self.kind_of(na)
+        let k : ast.Nk = self.kind_of(na)
         k = ast.Nk.arrlit or k = ast.Nk.reshape or k = ast.Nk.ccat or k = ast.Nk.slice
 
     fn own_note(&mut self, slot : i64, na : i64):
@@ -5133,614 +5134,615 @@ impl Checker:
 
     fn check_stmt(&mut self, id : i64, trailing : bool):
         self.stmt_seq ← self.stmt_seq + 1
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         self.cur_stmt ← k
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
-        if k = ast.Nk.hinted:
-            // the hint says nothing about what is checked
-            self.check_stmt(na, trailing)
-            return
-        if k = ast.Nk.expects:
-            // A statement expected to draw an error is parsed and left
-            // alone, as a definition marked the same way is: it does
-            // not check, so there is nothing to check it against, and
-            // which diagnostic it was is the interpreter's to say.
-            // One expecting only a warning is an ordinary statement
-            // here -- core-2 has no warnings to draw -- so it is
-            // checked and reported on as any other, rather than having
-            // its refusals quietly swallowed.
-            if nb = 0:
-                self.check_stmt(na, false)
-            return
-        if k = ast.Nk.st_let:
-            if nc <= ⁻2:
-                // `let m : ¤meter = e`: the right side says the type
-                // and the colon says what it measures
-                let mu9 : i64 = ⁻2 - nc
-                self.check_expr(na, types.TY_UNIT)
-                let it9 : i64 = self.ty_of(na)
-                if not types.ty_is_int(it9) or it9 = types.TY_UNT:
-                    self.derr(tok, "a measure belongs to a number, and this binding's value is " ⧺ self.tn(it9) ⧺ "; state the type, as 'let " ⧺ self.text(tok) ⧺ " : i64 ¤… = …'")
-                    _ ← self.declare(tok, types.TY_I64, nb)
-                    return
-                if types.ty_unit(it9) ≠ 0 and types.ty_unit(it9) ≠ mu9:
-                    self.derr(tok, "the value is measured " ⧺ self.tn(it9) ⧺ ", and the binding says another measure")
-                    _ ← self.declare(tok, it9, nb)
-                    return
-                let mslot : i64 = self.declare(tok, types.ty_with_unit(it9, mu9), nb)
-                self.nslot[id × 1¤ptrdiff] ← mslot
+        match k:
+            ast.Nk.hinted:
+                // the hint says nothing about what is checked
+                self.check_stmt(na, trailing)
                 return
-            if nc = ⁻1:
-                // := and : mut =: the right side says the type; what
-                // it does not say is refused with the stated-form cure
-                self.check_expr(na, types.TY_UNIT)
-                let it : i64 = self.ty_of(na)
-                if it = types.TY_UNT:
-                    self.derr(tok, """a binding with no type written down settles on 'int'; state a
-                                    " sized type, as 'let """ ⧺ self.text(tok) ⧺ " : i64 = …'")
-                    _ ← self.declare(tok, types.TY_I64, nb)
-                    return
-                if it = types.TY_EMPTY:
-                    self.derr(tok, "∅ alone says no type; state the optional, as 'let " ⧺ self.text(tok) ⧺ " : i64? = ∅'")
-                    _ ← self.declare(tok, types.mk_oty(types.TY_I64), nb)
-                    return
-                if it = types.TY_UNIT:
-                    self.derr(tok, "the right side answers nothing; there is nothing to bind")
-                    _ ← self.declare(tok, types.TY_I64, nb)
-                    return
-                if types.ty_is_hash(it) and nb = 1 and self.kind_of(na) ≠ ast.Nk.hlit:
-                    self.derr(tok, """a mut dictionary binding is born from its literal; borrow with
-                                    " &mut to change a shared one""")
-                    _ ← self.declare(tok, it, nb)
-                    return
-                if types.ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ ast.Nk.arrlit and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall and self.kind_of(na) ≠ ast.Nk.reshape and self.kind_of(na) ≠ ast.Nk.ccat and self.kind_of(na) ≠ ast.Nk.slice and self.kind_of(na) ≠ ast.Nk.scall:
-                    self.derr(tok, """a mut array binding is born fresh, from its literal or a call;
-                                    " borrow with &mut to change a shared one""")
-                    _ ← self.declare(tok, it, nb)
-                    return
-                if types.ty_is_struct(it) and nb = 1 and not self.is_fresh_struct(na):
-                    self.derr(tok, """a mut struct binding is born fresh, from its literal or a
-                                    " call; borrow with &mut to change a shared one""")
-                let islot : i64 = self.declare(tok, it, nb)
-                self.nslot[id × 1¤ptrdiff] ← islot
-                self.pack_note(id, islot, it, na)
-                self.own_note(islot, na)
+            ast.Nk.expects:
+                // A statement expected to draw an error is parsed and left
+                // alone, as a definition marked the same way is: it does
+                // not check, so there is nothing to check it against, and
+                // which diagnostic it was is the interpreter's to say.
+                // One expecting only a warning is an ordinary statement
+                // here -- core-2 has no warnings to draw -- so it is
+                // checked and reported on as any other, rather than having
+                // its refusals quietly swallowed.
+                if nb = 0:
+                    self.check_stmt(na, false)
                 return
-            if types.ty_is_hash(nc):
-                if nb = 1 and self.kind_of(na) ≠ ast.Nk.hlit:
-                    self.derr(tok, """a mut dictionary binding is born from its literal; borrow with
-                                    " &mut to change a shared one""")
-                self.check_expr(na, nc)
-                if self.kind_of(na) ≠ ast.Nk.hlit and self.ty_of(na) ≠ nc:
-                    self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
-                let slot1 : i64 = self.declare(tok, nc, nb)
-                self.nslot[id × 1¤ptrdiff] ← slot1
-                return
-            if types.ty_is_struct(nc):
-                // a struct value is a reference, as the bootstrap has
-                // it: a read-only binding may name one held anywhere;
-                // only a mut binding must be born fresh, so a mutable
-                // alias cannot arise from a let
-                if nb = 1 and not self.is_fresh_struct(na):
-                    self.derr(tok, """a mut struct binding is born fresh, from its literal or a
-                                    " call; borrow with &mut to change a shared one""")
-                self.check_expr(na, nc)
-                if self.ty_of(na) ≠ nc and not types.ty_is_arr(self.ty_of(na)):
-                    if self.ty_of(na) ≠ types.TY_I64:
-                        self.derr(tok, "the binding says " ⧺ self.sname_of(nc) ⧺ " but the value is " ⧺ self.sname_of(self.ty_of(na)))
-                let slot0 : i64 = self.declare(tok, nc, nb)
-                self.nslot[id × 1¤ptrdiff] ← slot0
-                return
-            if types.ty_is_arr(nc):
-                if self.kind_of(na) = ast.Nk.ccat:
-                    self.check_expr(na, nc)
-                    if self.ty_of(na) ≠ nc and not types.ty_is_farr(nc):
-                        self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
-                    let slot8 : i64 = self.declare(tok, nc, nb)
-                    self.nslot[id × 1¤ptrdiff] ← slot8
+            ast.Nk.st_let:
+                if nc <= ⁻2:
+                    // `let m : ¤meter = e`: the right side says the type
+                    // and the colon says what it measures
+                    let mu9 : i64 = ⁻2 - nc
+                    self.check_expr(na, types.TY_UNIT)
+                    let it9 : i64 = self.ty_of(na)
+                    if not types.ty_is_int(it9) or it9 = types.TY_UNT:
+                        self.derr(tok, "a measure belongs to a number, and this binding's value is " ⧺ self.tn(it9) ⧺ "; state the type, as 'let " ⧺ self.text(tok) ⧺ " : i64 ¤… = …'")
+                        _ ← self.declare(tok, types.TY_I64, nb)
+                        return
+                    if types.ty_unit(it9) ≠ 0 and types.ty_unit(it9) ≠ mu9:
+                        self.derr(tok, "the value is measured " ⧺ self.tn(it9) ⧺ ", and the binding says another measure")
+                        _ ← self.declare(tok, it9, nb)
+                        return
+                    let mslot : i64 = self.declare(tok, types.ty_with_unit(it9, mu9), nb)
+                    self.nslot[id × 1¤ptrdiff] ← mslot
                     return
-                if self.kind_of(na) = ast.Nk.reshape:
-                    self.check_expr(na, nc)
-                    let slot9 : i64 = self.declare(tok, nc, nb)
-                    self.nslot[id × 1¤ptrdiff] ← slot9
-                    self.pack_note(id, slot9, nc, na)
-                    self.own_note(slot9, na)
-                    return
-                if self.kind_of(na) ≠ ast.Nk.arrlit:
-                    // a call answers a fresh array; any other right side
-                    // names a shared one, which a mut binding may not
-                    self.check_expr(na, nc)
-                    if nb = 1 and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall:
-                        self.derr(tok, """a mut array binding is born fresh, from its literal or a
+                if nc = ⁻1:
+                    // := and : mut =: the right side says the type; what
+                    // it does not say is refused with the stated-form cure
+                    self.check_expr(na, types.TY_UNIT)
+                    let it : i64 = self.ty_of(na)
+                    if it = types.TY_UNT:
+                        self.derr(tok, """a binding with no type written down settles on 'int'; state a
+                                        " sized type, as 'let """ ⧺ self.text(tok) ⧺ " : i64 = …'")
+                        _ ← self.declare(tok, types.TY_I64, nb)
+                        return
+                    if it = types.TY_EMPTY:
+                        self.derr(tok, "∅ alone says no type; state the optional, as 'let " ⧺ self.text(tok) ⧺ " : i64? = ∅'")
+                        _ ← self.declare(tok, types.mk_oty(types.TY_I64), nb)
+                        return
+                    if it = types.TY_UNIT:
+                        self.derr(tok, "the right side answers nothing; there is nothing to bind")
+                        _ ← self.declare(tok, types.TY_I64, nb)
+                        return
+                    if types.ty_is_hash(it) and nb = 1 and self.kind_of(na) ≠ ast.Nk.hlit:
+                        self.derr(tok, """a mut dictionary binding is born from its literal; borrow with
+                                        " &mut to change a shared one""")
+                        _ ← self.declare(tok, it, nb)
+                        return
+                    if types.ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ ast.Nk.arrlit and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall and self.kind_of(na) ≠ ast.Nk.reshape and self.kind_of(na) ≠ ast.Nk.ccat and self.kind_of(na) ≠ ast.Nk.slice and self.kind_of(na) ≠ ast.Nk.scall:
+                        self.derr(tok, """a mut array binding is born fresh, from its literal or a call;
+                                        " borrow with &mut to change a shared one""")
+                        _ ← self.declare(tok, it, nb)
+                        return
+                    if types.ty_is_struct(it) and nb = 1 and not self.is_fresh_struct(na):
+                        self.derr(tok, """a mut struct binding is born fresh, from its literal or a
                                         " call; borrow with &mut to change a shared one""")
-                    if self.ty_of(na) ≠ nc:
+                    let islot : i64 = self.declare(tok, it, nb)
+                    self.nslot[id × 1¤ptrdiff] ← islot
+                    self.pack_note(id, islot, it, na)
+                    self.own_note(islot, na)
+                    return
+                if types.ty_is_hash(nc):
+                    if nb = 1 and self.kind_of(na) ≠ ast.Nk.hlit:
+                        self.derr(tok, """a mut dictionary binding is born from its literal; borrow with
+                                        " &mut to change a shared one""")
+                    self.check_expr(na, nc)
+                    if self.kind_of(na) ≠ ast.Nk.hlit and self.ty_of(na) ≠ nc:
                         self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
+                    let slot1 : i64 = self.declare(tok, nc, nb)
+                    self.nslot[id × 1¤ptrdiff] ← slot1
+                    return
+                if types.ty_is_struct(nc):
+                    // a struct value is a reference, as the bootstrap has
+                    // it: a read-only binding may name one held anywhere;
+                    // only a mut binding must be born fresh, so a mutable
+                    // alias cannot arise from a let
+                    if nb = 1 and not self.is_fresh_struct(na):
+                        self.derr(tok, """a mut struct binding is born fresh, from its literal or a
+                                        " call; borrow with &mut to change a shared one""")
+                    self.check_expr(na, nc)
+                    if self.ty_of(na) ≠ nc and not types.ty_is_arr(self.ty_of(na)):
+                        if self.ty_of(na) ≠ types.TY_I64:
+                            self.derr(tok, "the binding says " ⧺ self.sname_of(nc) ⧺ " but the value is " ⧺ self.sname_of(self.ty_of(na)))
+                    let slot0 : i64 = self.declare(tok, nc, nb)
+                    self.nslot[id × 1¤ptrdiff] ← slot0
+                    return
+                if types.ty_is_arr(nc):
+                    if self.kind_of(na) = ast.Nk.ccat:
+                        self.check_expr(na, nc)
+                        if self.ty_of(na) ≠ nc and not types.ty_is_farr(nc):
+                            self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
+                        let slot8 : i64 = self.declare(tok, nc, nb)
+                        self.nslot[id × 1¤ptrdiff] ← slot8
+                        return
+                    if self.kind_of(na) = ast.Nk.reshape:
+                        self.check_expr(na, nc)
+                        let slot9 : i64 = self.declare(tok, nc, nb)
+                        self.nslot[id × 1¤ptrdiff] ← slot9
+                        self.pack_note(id, slot9, nc, na)
+                        self.own_note(slot9, na)
+                        return
+                    if self.kind_of(na) ≠ ast.Nk.arrlit:
+                        // a call answers a fresh array; any other right side
+                        // names a shared one, which a mut binding may not
+                        self.check_expr(na, nc)
+                        if nb = 1 and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall:
+                            self.derr(tok, """a mut array binding is born fresh, from its literal or a
+                                            " call; borrow with &mut to change a shared one""")
+                        if self.ty_of(na) ≠ nc:
+                            self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
+                    else:
+                        self.check_expr(na, nc)
+                        if self.ty_of(na) ≠ nc and self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff] > 0:
+                            self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
+                        self.set_type(na, nc)
                 else:
                     self.check_expr(na, nc)
-                    if self.ty_of(na) ≠ nc and self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff] > 0:
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, nc)
+                    elif not self.try_fit(na, nc):
                         self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
-                    self.set_type(na, nc)
-            else:
-                self.check_expr(na, nc)
-                if self.is_open(self.ty_of(na)):
-                    self.adopt(na, nc)
-                elif not self.try_fit(na, nc):
-                    self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
-            let slot : i64 = self.declare(tok, nc, nb)
-            self.nslot[id × 1¤ptrdiff] ← slot
-            self.pack_note(id, slot, nc, na)
-            self.own_note(slot, na)
-        elif k = ast.Nk.st_lett:
-            let n : i64 = self.a.extra[nc × 1¤ptrdiff]
-            let styp : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
-            self.check_expr(na, if styp ≠ ⁻1: styp else: types.TY_UNIT)
-            let it : i64 = self.ty_of(na)
-            if not types.ty_is_tup(it):
-                self.derr(tok, "the names take a tuple apart; the right side is " ⧺ self.tn(it))
-                foreach j := 0…n:
-                    let tj : i64 = self.a.extra[(nc + 2 + j) × 1¤ptrdiff]
-                    if self.text(tj) ≠ "_":
-                        _ ← self.declare(tj, types.TY_I64, nb)
-                return
-            if styp ≠ ⁻1 and it ≠ styp:
-                self.derr(tok, "the binding says " ⧺ self.tn(styp) ⧺ " but the value is " ⧺ self.tn(it))
-            if self.tup_len(it) ≠ n:
-                self.derr(tok, "the tuple holds " ⧺ tokens.i64_str(self.tup_len(it)) ⧺ " elements; " ⧺ tokens.i64_str(n) ⧺ " names try to take it")
-                foreach j2 := 0…n:
-                    let tj2 : i64 = self.a.extra[(nc + 2 + j2) × 1¤ptrdiff]
-                    if self.text(tj2) ≠ "_":
-                        _ ← self.declare(tj2, if j2 < self.tup_len(it): self.tup_elem(it, j2) else: types.TY_I64, nb)
-                return
-            let slot0 : mut i64 = ⁻1
-            foreach i := 0…n:
-                let t2 : i64 = self.a.extra[(nc + 2 + i) × 1¤ptrdiff]
-                let sl : mut i64 = 0
-                if self.text(t2) = "_":
-                    // '_' takes no name but keeps the row of slots whole
-                    sl ← self.nslots
-                    self.nslots ← self.nslots + 1
-                else:
-                    sl ← self.declare(t2, self.tup_elem(it, i), nb)
-                if i = 0:
-                    slot0 ← sl
-            assert(self.nslots = slot0 + n, "the names' slots sit side by side")
-            self.nslot[id × 1¤ptrdiff] ← slot0
-        elif k = ast.Nk.assign:
-            let name := self.text(tok)
-            let s : i64 = self.lookup(name)
-            let asl : i64 = if s ≠ ⁻1: self.sslot[s × 1¤ptrdiff] else: ⁻1
-            self.life_used(asl)
-            self.pack_kill(asl)
-            self.own_keep(asl, na)
-            self.walk_wrote(asl)
-            if s = ⁻1:
-                let g : i64 = self.global_here(name)
-                if g = ⁻1:
-                    self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
+                let slot : i64 = self.declare(tok, nc, nb)
+                self.nslot[id × 1¤ptrdiff] ← slot
+                self.pack_note(id, slot, nc, na)
+                self.own_note(slot, na)
+            ast.Nk.st_lett:
+                let n : i64 = self.a.extra[nc × 1¤ptrdiff]
+                let styp : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
+                self.check_expr(na, if styp ≠ ⁻1: styp else: types.TY_UNIT)
+                let it : i64 = self.ty_of(na)
+                if not types.ty_is_tup(it):
+                    self.derr(tok, "the names take a tuple apart; the right side is " ⧺ self.tn(it))
+                    foreach j := 0…n:
+                        let tj : i64 = self.a.extra[(nc + 2 + j) × 1¤ptrdiff]
+                        if self.text(tj) ≠ "_":
+                            _ ← self.declare(tj, types.TY_I64, nb)
+                    return
+                if styp ≠ ⁻1 and it ≠ styp:
+                    self.derr(tok, "the binding says " ⧺ self.tn(styp) ⧺ " but the value is " ⧺ self.tn(it))
+                if self.tup_len(it) ≠ n:
+                    self.derr(tok, "the tuple holds " ⧺ tokens.i64_str(self.tup_len(it)) ⧺ " elements; " ⧺ tokens.i64_str(n) ⧺ " names try to take it")
+                    foreach j2 := 0…n:
+                        let tj2 : i64 = self.a.extra[(nc + 2 + j2) × 1¤ptrdiff]
+                        if self.text(tj2) ≠ "_":
+                            _ ← self.declare(tj2, if j2 < self.tup_len(it): self.tup_elem(it, j2) else: types.TY_I64, nb)
+                    return
+                let slot0 : mut i64 = ⁻1
+                foreach i := 0…n:
+                    let t2 : i64 = self.a.extra[(nc + 2 + i) × 1¤ptrdiff]
+                    let sl : mut i64 = 0
+                    if self.text(t2) = "_":
+                        // '_' takes no name but keeps the row of slots whole
+                        sl ← self.nslots
+                        self.nslots ← self.nslots + 1
+                    else:
+                        sl ← self.declare(t2, self.tup_elem(it, i), nb)
+                    if i = 0:
+                        slot0 ← sl
+                assert(self.nslots = slot0 + n, "the names' slots sit side by side")
+                self.nslot[id × 1¤ptrdiff] ← slot0
+            ast.Nk.assign:
+                let name := self.text(tok)
+                let s : i64 = self.lookup(name)
+                let asl : i64 = if s ≠ ⁻1: self.sslot[s × 1¤ptrdiff] else: ⁻1
+                self.life_used(asl)
+                self.pack_kill(asl)
+                self.own_keep(asl, na)
+                self.walk_wrote(asl)
+                if s = ⁻1:
+                    let g : i64 = self.global_here(name)
+                    if g = ⁻1:
+                        self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
+                        self.check_expr(na, types.TY_UNIT)
+                        return
+                    let gd := self.a.globals[g × 1¤ptrdiff]
+                    if not gd.is_mut:
+                        self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
+                    if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                        self.derr(tok, "writing a global is an effect; the function wants @impure")
+                    self.check_expr(na, gd.ty)
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, gd.ty)
+                    elif not self.try_fit(na, gd.ty):
+                        self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ self.tn(gd.ty) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
+                    self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
+                    return
+                let st : i64 = self.stype[s × 1¤ptrdiff]
+                if types.ty_ref_kind(st) = 2 and not types.ty_is_arr(types.ty_strip_ref(st)) and not types.ty_is_hash(types.ty_strip_ref(st)) and not types.ty_is_struct(types.ty_strip_ref(st)):
+                    // through the element's address, back into the array
+                    self.check_expr(na, types.ty_strip_ref(st))
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, types.ty_strip_ref(st))
+                    elif not self.try_fit(na, types.ty_strip_ref(st)):
+                        self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ self.tn(types.ty_strip_ref(st)) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
+                    self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+                    self.a.nb[id × 1¤ptrdiff] ← 1
+                    self.set_type(id, types.TY_UNIT)
+                    return
+                if types.ty_ref_kind(st) = 1 and not types.ty_is_arr(types.ty_strip_ref(st)) and not types.ty_is_hash(types.ty_strip_ref(st)) and not types.ty_is_struct(types.ty_strip_ref(st)):
+                    self.derr(tok, "'" ⧺ name ⧺ "' is a shared borrow; & reads and &mut changes")
                     self.check_expr(na, types.TY_UNIT)
                     return
-                let gd := self.a.globals[g × 1¤ptrdiff]
-                if not gd.is_mut:
+                if types.ty_is_struct(types.ty_strip_ref(st)) and not self.is_fresh_struct(na):
+                    self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
+                if types.ty_is_hash(types.ty_strip_ref(st)):
+                    self.derr(tok, "a core-2 dictionary is built once and changed in place")
+                if (types.ty_is_arr(types.ty_strip_ref(st)) or types.ty_is_mat(types.ty_strip_ref(st))) and not (self.kind_of(na) = ast.Nk.arrlit or self.kind_of(na) = ast.Nk.call or self.kind_of(na) = ast.Nk.mcall or self.kind_of(na) = ast.Nk.reshape or self.kind_of(na) = ast.Nk.ccat or self.kind_of(na) = ast.Nk.slice):
+                    self.derr(tok, """a mut array binding takes a fresh array; borrow with &mut to
+                                    " change a shared one""")
+                if self.smut[s × 1¤ptrdiff] = 0:
                     self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
-                if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
-                    self.derr(tok, "writing a global is an effect; the function wants @impure")
-                self.check_expr(na, gd.ty)
-                if self.is_open(self.ty_of(na)):
-                    self.adopt(na, gd.ty)
-                elif not self.try_fit(na, gd.ty):
-                    self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ self.tn(gd.ty) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
-                self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
-                return
-            let st : i64 = self.stype[s × 1¤ptrdiff]
-            if types.ty_ref_kind(st) = 2 and not types.ty_is_arr(types.ty_strip_ref(st)) and not types.ty_is_hash(types.ty_strip_ref(st)) and not types.ty_is_struct(types.ty_strip_ref(st)):
-                // through the element's address, back into the array
                 self.check_expr(na, types.ty_strip_ref(st))
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, types.ty_strip_ref(st))
                 elif not self.try_fit(na, types.ty_strip_ref(st)):
                     self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ self.tn(types.ty_strip_ref(st)) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
                 self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
-                self.a.nb[id × 1¤ptrdiff] ← 1
-                self.set_type(id, types.TY_UNIT)
-                return
-            if types.ty_ref_kind(st) = 1 and not types.ty_is_arr(types.ty_strip_ref(st)) and not types.ty_is_hash(types.ty_strip_ref(st)) and not types.ty_is_struct(types.ty_strip_ref(st)):
-                self.derr(tok, "'" ⧺ name ⧺ "' is a shared borrow; & reads and &mut changes")
+            ast.Nk.storeidxp:
                 self.check_expr(na, types.TY_UNIT)
-                return
-            if types.ty_is_struct(types.ty_strip_ref(st)) and not self.is_fresh_struct(na):
-                self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
-            if types.ty_is_hash(types.ty_strip_ref(st)):
-                self.derr(tok, "a core-2 dictionary is built once and changed in place")
-            if (types.ty_is_arr(types.ty_strip_ref(st)) or types.ty_is_mat(types.ty_strip_ref(st))) and not (self.kind_of(na) = ast.Nk.arrlit or self.kind_of(na) = ast.Nk.call or self.kind_of(na) = ast.Nk.mcall or self.kind_of(na) = ast.Nk.reshape or self.kind_of(na) = ast.Nk.ccat or self.kind_of(na) = ast.Nk.slice):
-                self.derr(tok, """a mut array binding takes a fresh array; borrow with &mut to
-                                " change a shared one""")
-            if self.smut[s × 1¤ptrdiff] = 0:
-                self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
-            self.check_expr(na, types.ty_strip_ref(st))
-            if self.is_open(self.ty_of(na)):
-                self.adopt(na, types.ty_strip_ref(st))
-            elif not self.try_fit(na, types.ty_strip_ref(st)):
-                self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ self.tn(types.ty_strip_ref(st)) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
-            self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
-        elif k = ast.Nk.storeidxp:
-            self.check_expr(na, types.TY_UNIT)
-            self.pack_safe(na)
-            let bt0 : i64 = types.ty_strip_ref(self.ty_of(na))
-            if types.ty_is_hash(bt0):
-                self.require_mut_base(na, tok)
-                self.check_hash_key(tok, bt0, nb)
-                let vt : i64 = types.ty_hval(bt0)
-                self.check_expr(nc, vt)
-                if self.is_open(self.ty_of(nc)):
-                    self.adopt(nc, vt)
-                elif not self.try_fit(nc, vt):
-                    self.derr(tok, "the dictionary holds " ⧺ self.tn(vt) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
-                self.set_type(id, bt0)
-                return
-            if types.ty_is_tup(bt0):
-                self.derr(tok, "a tuple's element is fixed at its birth")
-                self.check_expr(nc, types.TY_UNIT)
-                return
-            if bt0 = types.TY_STR:
-                self.derr(tok, """a string cannot be written through; build the one that is wanted
-                                " with ⧺""")
-                self.check_expr(nc, types.TY_UNIT)
-                return
-            if types.ty_is_mat(bt0):
+                self.pack_safe(na)
+                let bt0 : i64 = types.ty_strip_ref(self.ty_of(na))
+                if types.ty_is_hash(bt0):
+                    self.require_mut_base(na, tok)
+                    self.check_hash_key(tok, bt0, nb)
+                    let vt : i64 = types.ty_hval(bt0)
+                    self.check_expr(nc, vt)
+                    if self.is_open(self.ty_of(nc)):
+                        self.adopt(nc, vt)
+                    elif not self.try_fit(nc, vt):
+                        self.derr(tok, "the dictionary holds " ⧺ self.tn(vt) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
+                    self.set_type(id, bt0)
+                    return
+                if types.ty_is_tup(bt0):
+                    self.derr(tok, "a tuple's element is fixed at its birth")
+                    self.check_expr(nc, types.TY_UNIT)
+                    return
+                if bt0 = types.TY_STR:
+                    self.derr(tok, """a string cannot be written through; build the one that is wanted
+                                    " with ⧺""")
+                    self.check_expr(nc, types.TY_UNIT)
+                    return
+                if types.ty_is_mat(bt0):
+                    self.require_mut_base(na, tok)
+                    self.check_index_expr(tok, bt0, nb)
+                    if self.mat_cc(bt0) = ⁻1:
+                        self.derr(tok, """the matrix leaves its row length open, so a stored row has
+                                        " nothing to be measured against; state the extent in the type""")
+                        self.check_expr(nc, types.TY_UNIT)
+                        return
+                    if self.kind_of(nc) ≠ ast.Nk.arrlit:
+                        self.derr(tok, """a stored row is written out, so its length is seen where it is
+                                        " stored""")
+                        self.check_expr(nc, types.TY_UNIT)
+                        return
+                    let rl9 : i64 = self.a.extra[self.a.na[nc × 1¤ptrdiff] × 1¤ptrdiff]
+                    if rl9 ≠ self.mat_cc(bt0):
+                        self.derr(tok, "array size mismatch: the type says rows of " ⧺ tokens.i64_str(self.mat_cc(bt0)) ⧺ ", got " ⧺ tokens.i64_str(rl9))
+                    self.check_expr(nc, types.mk_aty(self.mat_elem(bt0)))
+                    self.set_type(id, bt0)
+                    return
+                if not types.ty_is_arr(bt0):
+                    self.derr(tok, "only an array or a dictionary is written by element; this is " ⧺ self.tn(bt0))
+                    self.check_expr(nc, types.TY_UNIT)
+                    return
                 self.require_mut_base(na, tok)
                 self.check_index_expr(tok, bt0, nb)
-                if self.mat_cc(bt0) = ⁻1:
-                    self.derr(tok, """the matrix leaves its row length open, so a stored row has
-                                    " nothing to be measured against; state the extent in the type""")
-                    self.check_expr(nc, types.TY_UNIT)
-                    return
-                if self.kind_of(nc) ≠ ast.Nk.arrlit:
-                    self.derr(tok, """a stored row is written out, so its length is seen where it is
-                                    " stored""")
-                    self.check_expr(nc, types.TY_UNIT)
-                    return
-                let rl9 : i64 = self.a.extra[self.a.na[nc × 1¤ptrdiff] × 1¤ptrdiff]
-                if rl9 ≠ self.mat_cc(bt0):
-                    self.derr(tok, "array size mismatch: the type says rows of " ⧺ tokens.i64_str(self.mat_cc(bt0)) ⧺ ", got " ⧺ tokens.i64_str(rl9))
-                self.check_expr(nc, types.mk_aty(self.mat_elem(bt0)))
+                self.check_expr(nc, self.elem_of(bt0))
+                if self.ty_of(nc) = types.TY_UNT:
+                    self.adopt(nc, self.elem_of(bt0))
+                elif not self.try_fit(nc, self.elem_of(bt0)):
+                    self.derr(tok, "the array holds " ⧺ self.tn(self.elem_of(bt0)) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
                 self.set_type(id, bt0)
-                return
-            if not types.ty_is_arr(bt0):
-                self.derr(tok, "only an array or a dictionary is written by element; this is " ⧺ self.tn(bt0))
-                self.check_expr(nc, types.TY_UNIT)
-                return
-            self.require_mut_base(na, tok)
-            self.check_index_expr(tok, bt0, nb)
-            self.check_expr(nc, self.elem_of(bt0))
-            if self.ty_of(nc) = types.TY_UNT:
-                self.adopt(nc, self.elem_of(bt0))
-            elif not self.try_fit(nc, self.elem_of(bt0)):
-                self.derr(tok, "the array holds " ⧺ self.tn(self.elem_of(bt0)) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
-            self.set_type(id, bt0)
-        elif k = ast.Nk.storefld:
-            self.check_expr(na, types.TY_UNIT)
-            let bt : i64 = types.ty_strip_ref(self.ty_of(na))
-            if not types.ty_is_struct(bt):
-                self.derr(tok, "only a struct's field is stored into; this is " ⧺ self.tn(bt))
-                self.check_expr(nb, types.TY_UNIT)
-                return
-            self.require_mut_base(na, tok)
-            let (fidx, fty) := self.field_of(types.ty_sidx(bt), self.text(tok))
-            if fidx = ⁻1:
-                self.derr(tok, "'" ⧺ self.sname_of(bt) ⧺ "' has no field '" ⧺ self.text(tok) ⧺ "'")
-                self.check_expr(nb, types.TY_UNIT)
-                return
-            self.a.nc[id × 1¤ptrdiff] ← fidx
-            self.check_expr(nb, fty)
-            if self.is_open(self.ty_of(nb)):
-                self.adopt(nb, fty)
-            elif not self.try_fit(nb, fty):
-                self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ self.tn(fty) ⧺ ", not " ⧺ self.tn(self.ty_of(nb)))
-        elif k = ast.Nk.discard:
-            if self.kind_of(na) = ast.Nk.mcall:
-                // Not under a default: nothing supplies one here, and a
-                // get told that one is coming answers the element type
-                // while leaving lowering no default to reach for.  What
-                // is discarded is the optional, which is what it is.
-                self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
-                                 self.a.na[na × 1¤ptrdiff],
-                                 self.a.nb[na × 1¤ptrdiff] × 1¤"aextra", false)
-            else:
+            ast.Nk.storefld:
                 self.check_expr(na, types.TY_UNIT)
-            if self.ty_of(na) = types.TY_UNT:
-                self.adopt(na, types.TY_I64)
-            // '_ ← …' answers for anything worth computing.  A partial
-            // application is not one: dropping it drops the whole of
-            // what the line did.
-            self.unused_value(tok, na, true)
-        elif k = ast.Nk.st_if:
-            if self.val_want ≠ ⁻1:
-                // this if is the value of the block holding it
-                let vw : i64 = self.val_want
-                self.val_want ← ⁻1
-                self.check_ife(id, tok, na, nb, nc, vw)
-                return
-            if trailing and nc = ⁻1 and self.answer_ty() ≠ types.TY_UNIT and self.block_arrives(nb):
-                // An if with no else standing last in a body answers ∅
-                // where it falls past its branch, so what it hands the
-                // caller is optional -- and that is what is checked
-                // against the signature, rather than the branch alone.
-                let awant : i64 = self.answer_ty()
-                self.check_ife(id, tok, na, nb, nc, awant)
-                if not self.try_fit(id, awant):
-                    self.derr(tok, "the function answers " ⧺ self.sname_of(awant) ⧺ ", but this if answers " ⧺ self.sname_of(self.ty_of(id)))
-                return
-            self.check_expr(na, types.TY_UNIT)
-            self.want_truthy(na, "the condition")
-            // An if standing last in a body hands each branch's value
-            // on as the function's answer, as a match does.
-            self.check_block(nb, trailing)
-            if nc ≠ ⁻1:
-                self.check_block(nc, trailing)
-            if trailing and nc ≠ ⁻1:
-                // What it hands on is what its branches hand on.  It is
-                // written down so that lowering may take the whole if
-                // as one value where both sides are small enough to be
-                // read without harm, and choose rather than branch.
-                let tv : i64 = self.block_value_node(nb)
-                if tv ≠ ⁻1:
-                    if (self.nhold[tv × 1¤ptrdiff] & 1) = 1:
-                        // the branch is held on its way out, so what the
-                        // if hands on is the optional, already made
-                        self.set_type(id, types.mk_oty(self.ty_of(tv)))
-                    else:
-                        self.set_type(id, self.ty_of(tv))
-        elif k = ast.Nk.st_while:
-            self.check_expr(na, types.TY_UNIT)
-            self.want_truthy(na, "the condition")
-            self.loop_depth ← self.loop_depth + 1
-            self.loop_enter()
-            self.check_block(nb, false)
-            self.loop_depth ← self.loop_depth - 1
-            self.loop_leave()
-        elif k = ast.Nk.st_match:
-            self.check_expr(na, types.TY_UNIT)
-            let t : i64 = self.ty_of(na)
-            if not types.ty_is_opt(t):
-                self.derr(tok, "match asks an optional which it is; this is " ⧺ self.tn(t))
-                return
-            let some_blk : i64 = self.a.extra[nb × 1¤ptrdiff]
-            let empty_blk : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
-            self.push_scope()
-            let slot : i64 = self.declare(tok, types.ty_opt_base(t), 0)
-            self.nslot[id × 1¤ptrdiff] ← slot
-            // a trailing match hands each arm's value on as the
-            // function's answer
-            self.check_block(some_blk, trailing)
-            self.pop_scope()
-            self.check_block(empty_blk, trailing)
-            if trailing and self.a.fns[self.cur_fn × 1¤ptrdiff].ret ≠ types.TY_UNIT:
-                if not self.block_yields(some_blk):
-                    self.derr(tok, "the ⊨ arm answers nothing on some path")
-                if not self.block_yields(empty_blk):
-                    self.derr(tok, "the ∅ arm answers nothing on some path")
-        elif k = ast.Nk.matche:
-            self.check_matche(id, tok, na, nb, trailing, ⁻1)
-        elif k = ast.Nk.st_foreach:
-            self.check_foreach(id, tok, na, nb)
-        elif k = ast.Nk.whileb:
-            // pop unwraps here the way ?? unwraps it: the loop's own
-            // test is what a default would be
-            let ismc : bool = self.kind_of(na) = ast.Nk.mcall
-            if ismc:
-                self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
-                                 self.a.na[na × 1¤ptrdiff],
-                                 self.a.nb[na × 1¤ptrdiff] × 1¤"aextra", true)
-            else:
+                let bt : i64 = types.ty_strip_ref(self.ty_of(na))
+                if not types.ty_is_struct(bt):
+                    self.derr(tok, "only a struct's field is stored into; this is " ⧺ self.tn(bt))
+                    self.check_expr(nb, types.TY_UNIT)
+                    return
+                self.require_mut_base(na, tok)
+                let (fidx, fty) := self.field_of(types.ty_sidx(bt), self.text(tok))
+                if fidx = ⁻1:
+                    self.derr(tok, "'" ⧺ self.sname_of(bt) ⧺ "' has no field '" ⧺ self.text(tok) ⧺ "'")
+                    self.check_expr(nb, types.TY_UNIT)
+                    return
+                self.a.nc[id × 1¤ptrdiff] ← fidx
+                self.check_expr(nb, fty)
+                if self.is_open(self.ty_of(nb)):
+                    self.adopt(nb, fty)
+                elif not self.try_fit(nb, fty):
+                    self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ self.tn(fty) ⧺ ", not " ⧺ self.tn(self.ty_of(nb)))
+            ast.Nk.discard:
+                if self.kind_of(na) = ast.Nk.mcall:
+                    // Not under a default: nothing supplies one here, and a
+                    // get told that one is coming answers the element type
+                    // while leaving lowering no default to reach for.  What
+                    // is discarded is the optional, which is what it is.
+                    self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
+                                     self.a.na[na × 1¤ptrdiff],
+                                     self.a.nb[na × 1¤ptrdiff] × 1¤"aextra", false)
+                else:
+                    self.check_expr(na, types.TY_UNIT)
+                if self.ty_of(na) = types.TY_UNT:
+                    self.adopt(na, types.TY_I64)
+                // '_ ← …' answers for anything worth computing.  A partial
+                // application is not one: dropping it drops the whole of
+                // what the line did.
+                self.unused_value(tok, na, true)
+            ast.Nk.st_if:
+                if self.val_want ≠ ⁻1:
+                    // this if is the value of the block holding it
+                    let vw : i64 = self.val_want
+                    self.val_want ← ⁻1
+                    self.check_ife(id, tok, na, nb, nc, vw)
+                    return
+                if trailing and nc = ⁻1 and self.answer_ty() ≠ types.TY_UNIT and self.block_arrives(nb):
+                    // An if with no else standing last in a body answers ∅
+                    // where it falls past its branch, so what it hands the
+                    // caller is optional -- and that is what is checked
+                    // against the signature, rather than the branch alone.
+                    let awant : i64 = self.answer_ty()
+                    self.check_ife(id, tok, na, nb, nc, awant)
+                    if not self.try_fit(id, awant):
+                        self.derr(tok, "the function answers " ⧺ self.sname_of(awant) ⧺ ", but this if answers " ⧺ self.sname_of(self.ty_of(id)))
+                    return
                 self.check_expr(na, types.TY_UNIT)
-            let wct : i64 = self.ty_of(na)
-            let wmid : i64 = if ismc: self.a.nc[na × 1¤ptrdiff] else: 0
-            let wbt : mut i64 = types.TY_I64
-            if ismc and (wmid = MID_POP or wmid = MID_NEXT or wmid = MID_GET):
-                wbt ← wct
-            elif types.ty_is_opt(wct):
-                wbt ← types.ty_opt_base(wct)
-            elif (types.ty_is_int(wct) and types.ty_unit(wct) = 0) or wct = types.TY_BOOL:
-                // a number loops while it is not zero, a truth while it
-                // holds; the binding is the value itself
-                wbt ← wct
-            else:
-                self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ self.tn(wct) ⧺ ", not an optional")
-            let wmut : i64 = self.a.extra[nc × 1¤ptrdiff]
-            if wmut = 1 and not (ismc and wmid = MID_NEXT):
-                // only an iterator's next hands an element to write
-                // back through; everything else hands values
-                self.derrc(tok, 2245, """a mut while binding writes back through the element; this
-                                       " loop hands values""")
-            let wsty : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
-            if wsty ≠ ⁻1 and wsty ≠ wbt:
-                self.derr(tok, "the binding says " ⧺ self.tn(wsty) ⧺ " but the loop answers " ⧺ self.tn(wbt))
-            self.push_scope()
-            let wdty : i64 = if wmut = 1 and ismc and wmid = MID_NEXT: wbt + 262144 × 2 else: wbt
-            let wslot : i64 = self.declare(tok, wdty, wmut)
-            self.nslot[id × 1¤ptrdiff] ← wslot
-            self.loop_depth ← self.loop_depth + 1
-            self.loop_enter()
-            self.check_block(nb, false)
-            self.loop_depth ← self.loop_depth - 1
-            self.loop_leave()
-            self.pop_scope()
-        elif k = ast.Nk.foreacha:
-            self.pack_safe(na)
-            let frk : mut i64 = 0
-            let fiter : mut i64 = na
-            if self.kind_of(na) = ast.Nk.ref:
-                frk ← self.a.nb[na × 1¤ptrdiff]
-                fiter ← self.a.na[na × 1¤ptrdiff]
-                self.check_expr(fiter, types.TY_UNIT)
-                let ft0 : i64 = self.ty_of(fiter)
-                if not types.ty_is_arr(ft0):
-                    self.derr(tok, "a borrowed walk lends an array's elements; this is " ⧺ self.tn(ft0))
-                    return
-                if types.ty_is_struct(self.elem_of(ft0)):
-                    self.derr(tok, "a struct element is already shared; change its fields in place")
-                    return
-                if frk = 2:
-                    self.require_mut_base(fiter, tok)
-                self.a.na[id × 1¤ptrdiff] ← fiter
-                self.a.nc[id × 1¤ptrdiff] ← frk
-                // The walk holds what it walks.  Lending the elements
-                // mutably lends the array, so its name reaches nothing
-                // for the body; lending them for reading leaves the
-                // name readable and nothing more.
-                self.push_scope()
-                self.hold(fiter, if frk = 2: HOLD_NONE else: HOLD_READ)
-                let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, if frk = 2: 1 else: 0)
-                self.nslot[id × 1¤ptrdiff] ← rslot
+                self.want_truthy(na, "the condition")
+                // An if standing last in a body hands each branch's value
+                // on as the function's answer, as a match does.
+                self.check_block(nb, trailing)
+                if nc ≠ ⁻1:
+                    self.check_block(nc, trailing)
+                if trailing and nc ≠ ⁻1:
+                    // What it hands on is what its branches hand on.  It is
+                    // written down so that lowering may take the whole if
+                    // as one value where both sides are small enough to be
+                    // read without harm, and choose rather than branch.
+                    let tv : i64 = self.block_value_node(nb)
+                    if tv ≠ ⁻1:
+                        if (self.nhold[tv × 1¤ptrdiff] & 1) = 1:
+                            // the branch is held on its way out, so what the
+                            // if hands on is the optional, already made
+                            self.set_type(id, types.mk_oty(self.ty_of(tv)))
+                        else:
+                            self.set_type(id, self.ty_of(tv))
+            ast.Nk.st_while:
+                self.check_expr(na, types.TY_UNIT)
+                self.want_truthy(na, "the condition")
                 self.loop_depth ← self.loop_depth + 1
                 self.loop_enter()
-                self.walk_open(self.walked_slot(fiter))
+                self.check_block(nb, false)
+                self.loop_depth ← self.loop_depth - 1
+                self.loop_leave()
+            ast.Nk.st_match:
+                self.check_expr(na, types.TY_UNIT)
+                let t : i64 = self.ty_of(na)
+                if not types.ty_is_opt(t):
+                    self.derr(tok, "match asks an optional which it is; this is " ⧺ self.tn(t))
+                    return
+                let some_blk : i64 = self.a.extra[nb × 1¤ptrdiff]
+                let empty_blk : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+                self.push_scope()
+                let slot : i64 = self.declare(tok, types.ty_opt_base(t), 0)
+                self.nslot[id × 1¤ptrdiff] ← slot
+                // a trailing match hands each arm's value on as the
+                // function's answer
+                self.check_block(some_blk, trailing)
+                self.pop_scope()
+                self.check_block(empty_blk, trailing)
+                if trailing and self.a.fns[self.cur_fn × 1¤ptrdiff].ret ≠ types.TY_UNIT:
+                    if not self.block_yields(some_blk):
+                        self.derr(tok, "the ⊨ arm answers nothing on some path")
+                    if not self.block_yields(empty_blk):
+                        self.derr(tok, "the ∅ arm answers nothing on some path")
+            ast.Nk.matche:
+                self.check_matche(id, tok, na, nb, trailing, ⁻1)
+            ast.Nk.st_foreach:
+                self.check_foreach(id, tok, na, nb)
+            ast.Nk.whileb:
+                // pop unwraps here the way ?? unwraps it: the loop's own
+                // test is what a default would be
+                let ismc : bool = self.kind_of(na) = ast.Nk.mcall
+                if ismc:
+                    self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
+                                     self.a.na[na × 1¤ptrdiff],
+                                     self.a.nb[na × 1¤ptrdiff] × 1¤"aextra", true)
+                else:
+                    self.check_expr(na, types.TY_UNIT)
+                let wct : i64 = self.ty_of(na)
+                let wmid : i64 = if ismc: self.a.nc[na × 1¤ptrdiff] else: 0
+                let wbt : mut i64 = types.TY_I64
+                if ismc and (wmid = MID_POP or wmid = MID_NEXT or wmid = MID_GET):
+                    wbt ← wct
+                elif types.ty_is_opt(wct):
+                    wbt ← types.ty_opt_base(wct)
+                elif (types.ty_is_int(wct) and types.ty_unit(wct) = 0) or wct = types.TY_BOOL:
+                    // a number loops while it is not zero, a truth while it
+                    // holds; the binding is the value itself
+                    wbt ← wct
+                else:
+                    self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ self.tn(wct) ⧺ ", not an optional")
+                let wmut : i64 = self.a.extra[nc × 1¤ptrdiff]
+                if wmut = 1 and not (ismc and wmid = MID_NEXT):
+                    // only an iterator's next hands an element to write
+                    // back through; everything else hands values
+                    self.derrc(tok, 2245, """a mut while binding writes back through the element; this
+                                           " loop hands values""")
+                let wsty : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
+                if wsty ≠ ⁻1 and wsty ≠ wbt:
+                    self.derr(tok, "the binding says " ⧺ self.tn(wsty) ⧺ " but the loop answers " ⧺ self.tn(wbt))
+                self.push_scope()
+                let wdty : i64 = if wmut = 1 and ismc and wmid = MID_NEXT: wbt + 262144 × 2 else: wbt
+                let wslot : i64 = self.declare(tok, wdty, wmut)
+                self.nslot[id × 1¤ptrdiff] ← wslot
+                self.loop_depth ← self.loop_depth + 1
+                self.loop_enter()
+                self.check_block(nb, false)
+                self.loop_depth ← self.loop_depth - 1
+                self.loop_leave()
+                self.pop_scope()
+            ast.Nk.foreacha:
+                self.pack_safe(na)
+                let frk : mut i64 = 0
+                let fiter : mut i64 = na
+                if self.kind_of(na) = ast.Nk.ref:
+                    frk ← self.a.nb[na × 1¤ptrdiff]
+                    fiter ← self.a.na[na × 1¤ptrdiff]
+                    self.check_expr(fiter, types.TY_UNIT)
+                    let ft0 : i64 = self.ty_of(fiter)
+                    if not types.ty_is_arr(ft0):
+                        self.derr(tok, "a borrowed walk lends an array's elements; this is " ⧺ self.tn(ft0))
+                        return
+                    if types.ty_is_struct(self.elem_of(ft0)):
+                        self.derr(tok, "a struct element is already shared; change its fields in place")
+                        return
+                    if frk = 2:
+                        self.require_mut_base(fiter, tok)
+                    self.a.na[id × 1¤ptrdiff] ← fiter
+                    self.a.nc[id × 1¤ptrdiff] ← frk
+                    // The walk holds what it walks.  Lending the elements
+                    // mutably lends the array, so its name reaches nothing
+                    // for the body; lending them for reading leaves the
+                    // name readable and nothing more.
+                    self.push_scope()
+                    self.hold(fiter, if frk = 2: HOLD_NONE else: HOLD_READ)
+                    let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, if frk = 2: 1 else: 0)
+                    self.nslot[id × 1¤ptrdiff] ← rslot
+                    self.loop_depth ← self.loop_depth + 1
+                    self.loop_enter()
+                    self.walk_open(self.walked_slot(fiter))
+                    self.check_block(nb, false)
+                    self.nfree[id × 1¤ptrdiff] ← self.walk_close()
+                    self.loop_depth ← self.loop_depth - 1
+                    self.loop_leave()
+                    self.pop_scope()
+                    return
+                self.check_expr(na, types.TY_UNIT)
+                let t : i64 = self.ty_of(na)
+                if not types.ty_is_arr(t) and t ≠ types.TY_STR and not types.ty_is_mat(t) and not types.ty_is_rg(t):
+                    self.derr(tok, "foreach walks an array, a string or a range; this is " ⧺ self.tn(t))
+                    return
+                // a walk that copies each element still reads the whole of
+                // what it walks, turn by turn, so the body may read it and
+                // not change it
+                self.push_scope()
+                self.hold(na, HOLD_READ)
+                let slot : i64 = self.declare(tok, if t = types.TY_STR: types.TY_CHAR else: (if types.ty_is_rg(t): types.ty_rgelem(t) else: self.elem_of(t)), 0)
+                self.nslot[id × 1¤ptrdiff] ← slot
+                self.loop_depth ← self.loop_depth + 1
+                self.loop_enter()
+                self.walk_open(if types.ty_is_arr(t): self.walked_slot(na) else: ⁻1)
                 self.check_block(nb, false)
                 self.nfree[id × 1¤ptrdiff] ← self.walk_close()
                 self.loop_depth ← self.loop_depth - 1
                 self.loop_leave()
                 self.pop_scope()
-                return
-            self.check_expr(na, types.TY_UNIT)
-            let t : i64 = self.ty_of(na)
-            if not types.ty_is_arr(t) and t ≠ types.TY_STR and not types.ty_is_mat(t) and not types.ty_is_rg(t):
-                self.derr(tok, "foreach walks an array, a string or a range; this is " ⧺ self.tn(t))
-                return
-            // a walk that copies each element still reads the whole of
-            // what it walks, turn by turn, so the body may read it and
-            // not change it
-            self.push_scope()
-            self.hold(na, HOLD_READ)
-            let slot : i64 = self.declare(tok, if t = types.TY_STR: types.TY_CHAR else: (if types.ty_is_rg(t): types.ty_rgelem(t) else: self.elem_of(t)), 0)
-            self.nslot[id × 1¤ptrdiff] ← slot
-            self.loop_depth ← self.loop_depth + 1
-            self.loop_enter()
-            self.walk_open(if types.ty_is_arr(t): self.walked_slot(na) else: ⁻1)
-            self.check_block(nb, false)
-            self.nfree[id × 1¤ptrdiff] ← self.walk_close()
-            self.loop_depth ← self.loop_depth - 1
-            self.loop_leave()
-            self.pop_scope()
-        elif k = ast.Nk.st_return:
-            if self.lam_ret ≠ ⁻1:
-                // inside a lambda's block a return answers the lambda
-                let lwant : i64 = self.lam_ret
+            ast.Nk.st_return:
+                if self.lam_ret ≠ ⁻1:
+                    // inside a lambda's block a return answers the lambda
+                    let lwant : i64 = self.lam_ret
+                    if na = ⁻1:
+                        self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ "; a bare return does not")
+                        return
+                    if types.ty_is_opt(lwant) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
+                        self.check_retdiv(na, lwant)
+                        return
+                    self.check_expr(na, lwant)
+                    if self.is_open(self.ty_of(na)):
+                        // where the answer is optional a bare number settles
+                        // on what the optional holds; the return holds it
+                        self.adopt(na, self.value_hint(lwant))
+                    elif not self.try_fit(na, lwant):
+                        if not (types.ty_is_opt(lwant) and self.try_fit(na, types.ty_opt_base(lwant))):
+                            self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
+                    return
+                if types.ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret) and na ≠ ⁻1:
+                    // the first answer settles a T' return
+                    self.check_expr(na, types.TY_UNIT)
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, types.TY_I64)
+                    self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
+                    return
+                let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
+                if na ≠ ⁻1:
+                    if self.a.fns[self.cur_fn × 1¤ptrdiff].ret_ref ≠ 0:
+                        self.require_rooted(tok, na)
+                    else:
+                        self.refuse_kept(na, "what the function answers")
                 if na = ⁻1:
-                    self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ "; a bare return does not")
-                    return
-                if types.ty_is_opt(lwant) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
-                    self.check_retdiv(na, lwant)
-                    return
-                self.check_expr(na, lwant)
-                if self.is_open(self.ty_of(na)):
-                    // where the answer is optional a bare number settles
-                    // on what the optional holds; the return holds it
-                    self.adopt(na, self.value_hint(lwant))
-                elif not self.try_fit(na, lwant):
-                    if not (types.ty_is_opt(lwant) and self.try_fit(na, types.ty_opt_base(lwant))):
-                        self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ ", not " ⧺ self.tn(self.ty_of(na)))
-                return
-            if types.ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret) and na ≠ ⁻1:
-                // the first answer settles a T' return
-                self.check_expr(na, types.TY_UNIT)
-                if self.is_open(self.ty_of(na)):
-                    self.adopt(na, types.TY_I64)
-                self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
-                return
-            let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
-            if na ≠ ⁻1:
-                if self.a.fns[self.cur_fn × 1¤ptrdiff].ret_ref ≠ 0:
-                    self.require_rooted(tok, na)
+                    if want ≠ types.TY_UNIT:
+                        self.derr(tok, "the function answers " ⧺ self.tn(want) ⧺ "; a bare return does not")
+                elif types.ty_is_opt(want) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
+                    self.check_retdiv(na, want)
                 else:
-                    self.refuse_kept(na, "what the function answers")
-            if na = ⁻1:
-                if want ≠ types.TY_UNIT:
-                    self.derr(tok, "the function answers " ⧺ self.tn(want) ⧺ "; a bare return does not")
-            elif types.ty_is_opt(want) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
-                self.check_retdiv(na, want)
-            else:
-                self.check_expr(na, want)
-                if want = types.TY_UNIT:
-                    self.derr(tok, "the function answers nothing, but this return carries a value")
-                elif self.is_open(self.ty_of(na)):
-                    // where the answer is optional a bare number settles
-                    // on what the optional holds; the return holds it
-                    self.adopt(na, self.value_hint(want))
-                elif not self.try_fit(na, want):
-                    if not (types.ty_is_opt(want) and self.try_fit(na, types.ty_opt_base(want))):
-                        self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
-        elif k = ast.Nk.st_break or k = ast.Nk.st_continue:
-            if self.loop_depth = 0:
-                self.derr(tok, "there is no loop here to act on")
-        elif k = ast.Nk.exprstmt:
-            // A statement a ';' ended, where a line would have, says
-            // its value is dropped: it is not what the body hands back,
-            // and nothing is missing from a program that says so.
-            let dropped : bool = self.a.nb[id × 1¤ptrdiff] = 1
-            if dropped:
-                self.val_want ← ⁻1
-                self.check_expr(na, types.TY_UNIT)
-                return
-            if self.val_want ≠ ⁻1:
-                // this expression is the value of the block holding it
-                let vw : i64 = self.val_want
-                self.val_want ← ⁻1
-                self.check_expr(na, vw)
-                return
-            if trailing and self.lam_ret ≠ ⁻1:
-                let lwant : i64 = self.lam_ret
-                if types.ty_is_opt(lwant) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
-                    self.check_retdiv(na, lwant)
+                    self.check_expr(na, want)
+                    if want = types.TY_UNIT:
+                        self.derr(tok, "the function answers nothing, but this return carries a value")
+                    elif self.is_open(self.ty_of(na)):
+                        // where the answer is optional a bare number settles
+                        // on what the optional holds; the return holds it
+                        self.adopt(na, self.value_hint(want))
+                    elif not self.try_fit(na, want):
+                        if not (types.ty_is_opt(want) and self.try_fit(na, types.ty_opt_base(want))):
+                            self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
+            ast.Nk.st_break, ast.Nk.st_continue:
+                if self.loop_depth = 0:
+                    self.derr(tok, "there is no loop here to act on")
+            ast.Nk.exprstmt:
+                // A statement a ';' ended, where a line would have, says
+                // its value is dropped: it is not what the body hands back,
+                // and nothing is missing from a program that says so.
+                let dropped : bool = self.a.nb[id × 1¤ptrdiff] = 1
+                if dropped:
+                    self.val_want ← ⁻1
+                    self.check_expr(na, types.TY_UNIT)
                     return
-                self.check_expr(na, lwant)
-                if self.is_open(self.ty_of(na)):
-                    // where the answer is optional a bare number settles
-                    // on what the optional holds; the return holds it
-                    self.adopt(na, self.value_hint(lwant))
-                elif not self.try_fit(na, lwant):
-                    if not (types.ty_is_opt(lwant) and self.try_fit(na, types.ty_opt_base(lwant))):
-                        self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ ", but its last expression is " ⧺ self.tn(self.ty_of(na)))
-                return
-            if trailing and types.ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret):
-                // the trailing value settles a T' return
-                self.check_expr(na, types.TY_UNIT)
-                if self.is_open(self.ty_of(na)):
-                    self.adopt(na, types.TY_I64)
-                self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
-                return
-            let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
-            if trailing and want ≠ types.TY_UNIT and types.ty_is_opt(want) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
-                self.check_retdiv(na, want)
-            elif trailing and want ≠ types.TY_UNIT:
-                self.check_expr(na, want)
-                if self.is_open(self.ty_of(na)):
-                    // where the answer is optional a bare number settles
-                    // on what the optional holds; the return holds it
-                    self.adopt(na, self.value_hint(want))
-                elif not self.try_fit(na, want):
-                    if not (types.ty_is_opt(want) and self.try_fit(na, types.ty_opt_base(want))):
-                        self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
-            else:
-                self.check_expr(na, types.TY_UNIT)
-                let t : i64 = self.ty_of(na)
-                if t ≠ types.TY_UNIT and self.kind_of(na) ≠ ast.Nk.emptyv:
-                    // a bare ∅ says "nothing here", which is exactly
-                    // what a unit position holds.  Anything else here
-                    // computes a value nothing reads, standing last or
-                    // not: where the body hands nothing back, the last
-                    // statement is not a return value either.
-                    self.unused_value(tok, na, false)
-        else:
-            self.derr(tok, "this statement kind escaped the checker; that is an ngplc bug")
+                if self.val_want ≠ ⁻1:
+                    // this expression is the value of the block holding it
+                    let vw : i64 = self.val_want
+                    self.val_want ← ⁻1
+                    self.check_expr(na, vw)
+                    return
+                if trailing and self.lam_ret ≠ ⁻1:
+                    let lwant : i64 = self.lam_ret
+                    if types.ty_is_opt(lwant) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
+                        self.check_retdiv(na, lwant)
+                        return
+                    self.check_expr(na, lwant)
+                    if self.is_open(self.ty_of(na)):
+                        // where the answer is optional a bare number settles
+                        // on what the optional holds; the return holds it
+                        self.adopt(na, self.value_hint(lwant))
+                    elif not self.try_fit(na, lwant):
+                        if not (types.ty_is_opt(lwant) and self.try_fit(na, types.ty_opt_base(lwant))):
+                            self.derr(tok, "the lambda answers " ⧺ self.tn(lwant) ⧺ ", but its last expression is " ⧺ self.tn(self.ty_of(na)))
+                    return
+                if trailing and types.ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret):
+                    // the trailing value settles a T' return
+                    self.check_expr(na, types.TY_UNIT)
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, types.TY_I64)
+                    self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
+                    return
+                let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
+                if trailing and want ≠ types.TY_UNIT and types.ty_is_opt(want) and (self.kind_of(na) = ast.Nk.div or self.kind_of(na) = ast.Nk.mod):
+                    self.check_retdiv(na, want)
+                elif trailing and want ≠ types.TY_UNIT:
+                    self.check_expr(na, want)
+                    if self.is_open(self.ty_of(na)):
+                        // where the answer is optional a bare number settles
+                        // on what the optional holds; the return holds it
+                        self.adopt(na, self.value_hint(want))
+                    elif not self.try_fit(na, want):
+                        if not (types.ty_is_opt(want) and self.try_fit(na, types.ty_opt_base(want))):
+                            self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
+                else:
+                    self.check_expr(na, types.TY_UNIT)
+                    let t : i64 = self.ty_of(na)
+                    if t ≠ types.TY_UNIT and self.kind_of(na) ≠ ast.Nk.emptyv:
+                        // a bare ∅ says "nothing here", which is exactly
+                        // what a unit position holds.  Anything else here
+                        // computes a value nothing reads, standing last or
+                        // not: where the body hands nothing back, the last
+                        // statement is not a return value either.
+                        self.unused_value(tok, na, false)
+            _:
+                self.derr(tok, "this statement kind escaped the checker; that is an ngplc bug")
 
     // Which function a call reaches, where that is knowable, and ⁻1
     // otherwise.  A method call carries the index it resolved to; a
     // plain one is found by the name it was written with.
     fn call_target(&self, na : i64) → i64:
-        let k : i64 = self.kind_of(na)
+        let k : ast.Nk = self.kind_of(na)
         if k = ast.Nk.mcall:
             let mid : i64 = self.a.nc[na × 1¤ptrdiff]
             if mid >= 1000:
@@ -5825,12 +5827,12 @@ impl Checker:
     // ------------------------------------------------------------------
 
     fn always_returns(&self, id : i64) → bool:
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         if k = ast.Nk.st_return:
             return true
         if k = ast.Nk.exprstmt:
             let e : i64 = self.a.na[id × 1¤ptrdiff]
-            let ek : i64 = self.kind_of(e)
+            let ek : ast.Nk = self.kind_of(e)
             if ek = ast.Nk.scall and self.a.na[e × 1¤ptrdiff] = ast.SB_EXIT:
                 return true
             if ek = ast.Nk.call:
@@ -5909,7 +5911,7 @@ impl Checker:
         false
 
     fn stmt_breaks(&self, id : i64) → bool:
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         if k = ast.Nk.st_break:
             return true
         if k = ast.Nk.st_while or k = ast.Nk.whileb or k = ast.Nk.st_foreach or k = ast.Nk.foreacha:
@@ -5949,7 +5951,7 @@ impl Checker:
     // other.  An elif chain is a block holding one if, so a chain is
     // read by the same two steps as far as it goes.
     fn stmt_is_value(&self, id : i64) → bool:
-        let k : i64 = self.kind_of(id)
+        let k : ast.Nk = self.kind_of(id)
         // a statement a ';' ended, where a line would have, dropped its
         // value and hands nothing back
         if k = ast.Nk.exprstmt and self.a.nb[id × 1¤ptrdiff] = 1:
@@ -6150,7 +6152,7 @@ impl Checker:
                 self.gvals.push(0)
                 self.ginit.push(g)
                 return
-            let ik0 : i64 = self.kind_of(gd.init)
+            let ik0 : ast.Nk = self.kind_of(gd.init)
             if (types.ty_is_int(it) or it = types.TY_BOOL) and (ik0 = ast.Nk.lit_int or ik0 = ast.Nk.lit_bool):
                 self.gvals.push(self.a.na[gd.init × 1¤ptrdiff])
                 return
@@ -6191,7 +6193,7 @@ impl Checker:
             self.adopt(gd.init, gd.ty)
         elif self.ty_of(gd.init) ≠ gd.ty:
             self.derr(gd.tok, "the binding says " ⧺ self.tn(gd.ty) ⧺ " but the value is " ⧺ self.tn(self.ty_of(gd.init)))
-        let ik : i64 = self.kind_of(gd.init)
+        let ik : ast.Nk = self.kind_of(gd.init)
         if ik = ast.Nk.lit_int or ik = ast.Nk.lit_bool:
             self.gvals.push(self.a.na[gd.init × 1¤ptrdiff])
         else:
@@ -6339,7 +6341,7 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
                                    nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,
                                    pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
                                    pnode_slot: [], pnode_id: [],
-                                   stmt_seq: 0, cur_stmt: ⁻1,
+                                   stmt_seq: 0, cur_stmt: ast.Nk.none,
                                    lbirth: [], llast: [], luse: [],
                                    lesc: [], lwarn: [], ltok: [], log: [],
                                    lown: [], wslot: [], wreb: [],

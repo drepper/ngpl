@@ -18,7 +18,7 @@ struct Parser:
     toks : lex.Toks
     src : byte[]
     pos : i64
-    nkind : i64[]
+    nkind : ast.Nk[]
     ntok : i64[]
     na : i64[]
     nb : i64[]
@@ -141,10 +141,10 @@ impl Parser:
         let f : str = self.mod_at(at)
         if f = "": name else: f ⧺ "." ⧺ name
 
-    fn peek(&self) → i64:
+    fn peek(&self) → tokens.Tk:
         self.toks.kind[self.pos × 1¤ptrdiff]
 
-    fn peek2(&self) → i64:
+    fn peek2(&self) → tokens.Tk:
         self.toks.kind[(self.pos + 1) × 1¤ptrdiff]
 
     // A '{' after a name opens a struct literal when what stands
@@ -179,7 +179,7 @@ impl Parser:
             return
         if self.toks.kind[(self.pos - 1) × 1¤ptrdiff] ≠ tokens.Tk.rbrace:
             return
-        let nx : i64 = self.toks.kind[(self.pos + 1) × 1¤ptrdiff]
+        let nx : tokens.Tk = self.toks.kind[(self.pos + 1) × 1¤ptrdiff]
         if nx = tokens.Tk.kw_else or nx = tokens.Tk.kw_elif:
             self.pos ← self.pos + 1
 
@@ -224,7 +224,7 @@ impl Parser:
     fn sync(&mut self):
         self.poisoned ← false
         while true:
-            let k : i64 = self.peek()
+            let k : tokens.Tk = self.peek()
             if k = tokens.Tk.eof or k = tokens.Tk.dedent:
                 return
             self.pos ← self.pos + 1
@@ -266,12 +266,9 @@ impl Parser:
         self.pos ← self.pos + 1
         at
 
-    // The kind arrives as what it is and is written down as the number
-    // behind it: the tree is parallel arrays of numbers, which is what
-    // every walk over it indexes.
     fn mknode(&mut self, k : ast.Nk, tok : i64, a : i64, b : i64, c : i64) → i64:
         let id : i64 = @dropunit(#self.nkind)
-        self.nkind.push(k.ord())
+        self.nkind.push(k)
         self.ntok.push(tok)
         self.na.push(a)
         self.nb.push(b)
@@ -999,7 +996,7 @@ impl Parser:
         e
 
     fn parse_primary(&mut self) → i64:
-        let k : i64 = self.peek()
+        let k : tokens.Tk = self.peek()
         let at : i64 = self.pos
         if k = tokens.Tk.lambda:
             return self.parse_lambda(at, 0)
@@ -1421,69 +1418,71 @@ impl Parser:
 
     // binding power of a binary operator token; ⁻1 when it is none.
     // The numbers follow the bootstrap parser's ladder.
-    fn bin_bp(&self, k : i64) → i64:
-        if k = tokens.Tk.kw_or or k = tokens.Tk.coalesce: return 2
-        if k = tokens.Tk.kw_and: return 3
-        if k = tokens.Tk.lor: return 4
-        if k = tokens.Tk.land: return 6
-        if k = tokens.Tk.lxor or k = tokens.Tk.lnand or k = tokens.Tk.lnor: return 5
-        if k = tokens.Tk.eq or k = tokens.Tk.ne or k = tokens.Tk.lt or k = tokens.Tk.gt or k = tokens.Tk.le or k = tokens.Tk.ge: return 7
-        // a relational test between two sequences, where the other
-        // relational tests are
-        if k = tokens.Tk.prefix or k = tokens.Tk.suffix: return 7
-        if k = tokens.Tk.max or k = tokens.Tk.min or k = tokens.Tk.elem or k = tokens.Tk.iota: return 9
-        if k = tokens.Tk.shl or k = tokens.Tk.shr: return 10
-        if k = tokens.Tk.bor: return 11
-        if k = tokens.Tk.bxor: return 12
-        if k = tokens.Tk.band: return 13
-        if k = tokens.Tk.plus or k = tokens.Tk.minus or k = tokens.Tk.satadd or k = tokens.Tk.satsub: return 14
-        if k = tokens.Tk.concat: return 15
-        if k = tokens.Tk.mult or k = tokens.Tk.divide or k = tokens.Tk.mod or k = tokens.Tk.satmul: return 16
-        if k = tokens.Tk.reshape: return 17
-        ⁻1
+    fn bin_bp(&self, k : tokens.Tk) → i64:
+        match k:
+            tokens.Tk.kw_or, tokens.Tk.coalesce: 2
+            tokens.Tk.kw_and: 3
+            tokens.Tk.lor: 4
+            tokens.Tk.lxor, tokens.Tk.lnand, tokens.Tk.lnor: 5
+            tokens.Tk.land: 6
+            // the relational tests, and the two between sequences
+            // where the other relational tests are
+            tokens.Tk.eq, tokens.Tk.ne, tokens.Tk.lt, tokens.Tk.gt, tokens.Tk.le, tokens.Tk.ge, tokens.Tk.prefix, tokens.Tk.suffix: 7
+            tokens.Tk.max, tokens.Tk.min, tokens.Tk.elem, tokens.Tk.iota: 9
+            tokens.Tk.shl, tokens.Tk.shr: 10
+            tokens.Tk.bor: 11
+            tokens.Tk.bxor: 12
+            tokens.Tk.band: 13
+            tokens.Tk.plus, tokens.Tk.minus, tokens.Tk.satadd, tokens.Tk.satsub: 14
+            tokens.Tk.concat: 15
+            tokens.Tk.mult, tokens.Tk.divide, tokens.Tk.mod, tokens.Tk.satmul: 16
+            tokens.Tk.reshape: 17
+            _: ⁻1
 
-    fn bin_nk(&self, k : i64) → ast.Nk:
-        if k = tokens.Tk.prefix: return ast.Nk.run
-        if k = tokens.Tk.suffix: return ast.Nk.run
-        if k = tokens.Tk.kw_or: return ast.Nk.op_or
-        if k = tokens.Tk.coalesce: return ast.Nk.default
-        if k = tokens.Tk.kw_and: return ast.Nk.op_and
-        if k = tokens.Tk.lor: return ast.Nk.lor
-        if k = tokens.Tk.land: return ast.Nk.land
-        if k = tokens.Tk.eq: return ast.Nk.eq
-        if k = tokens.Tk.ne: return ast.Nk.ne
-        if k = tokens.Tk.lt: return ast.Nk.lt
-        if k = tokens.Tk.gt: return ast.Nk.gt
-        if k = tokens.Tk.le: return ast.Nk.le
-        if k = tokens.Tk.ge: return ast.Nk.ge
-        if k = tokens.Tk.max: return ast.Nk.maxop
-        if k = tokens.Tk.min: return ast.Nk.minop
-        if k = tokens.Tk.elem: return ast.Nk.elemof
-        if k = tokens.Tk.iota: return ast.Nk.iota
-        if k = tokens.Tk.satadd: return ast.Nk.satadd
-        if k = tokens.Tk.satsub: return ast.Nk.satsub
-        if k = tokens.Tk.satmul: return ast.Nk.satmul
-        if k = tokens.Tk.lxor: return ast.Nk.lxor
-        if k = tokens.Tk.lnand: return ast.Nk.lnand
-        if k = tokens.Tk.lnor: return ast.Nk.lnor
-        if k = tokens.Tk.reshape: return ast.Nk.reshape
-        if k = tokens.Tk.shl: return ast.Nk.shl
-        if k = tokens.Tk.shr: return ast.Nk.shr
-        if k = tokens.Tk.bor: return ast.Nk.bor
-        if k = tokens.Tk.bxor: return ast.Nk.bxor
-        if k = tokens.Tk.band: return ast.Nk.band
-        if k = tokens.Tk.plus: return ast.Nk.add
-        if k = tokens.Tk.minus: return ast.Nk.sub
-        if k = tokens.Tk.concat: return ast.Nk.ccat
-        if k = tokens.Tk.mult: return ast.Nk.mul
-        if k = tokens.Tk.divide: return ast.Nk.div
-        if k = tokens.Tk.mod: return ast.Nk.mod
-        ast.Nk.none
+    // the node a binary operator makes; several operators make one
+    // node where the difference is carried elsewhere
+    fn bin_nk(&self, k : tokens.Tk) → ast.Nk:
+        match k:
+            tokens.Tk.prefix, tokens.Tk.suffix: ast.Nk.run
+            tokens.Tk.kw_or: ast.Nk.op_or
+            tokens.Tk.coalesce: ast.Nk.default
+            tokens.Tk.kw_and: ast.Nk.op_and
+            tokens.Tk.lor: ast.Nk.lor
+            tokens.Tk.land: ast.Nk.land
+            tokens.Tk.eq: ast.Nk.eq
+            tokens.Tk.ne: ast.Nk.ne
+            tokens.Tk.lt: ast.Nk.lt
+            tokens.Tk.gt: ast.Nk.gt
+            tokens.Tk.le: ast.Nk.le
+            tokens.Tk.ge: ast.Nk.ge
+            tokens.Tk.max: ast.Nk.maxop
+            tokens.Tk.min: ast.Nk.minop
+            tokens.Tk.elem: ast.Nk.elemof
+            tokens.Tk.iota: ast.Nk.iota
+            tokens.Tk.satadd: ast.Nk.satadd
+            tokens.Tk.satsub: ast.Nk.satsub
+            tokens.Tk.satmul: ast.Nk.satmul
+            tokens.Tk.lxor: ast.Nk.lxor
+            tokens.Tk.lnand: ast.Nk.lnand
+            tokens.Tk.lnor: ast.Nk.lnor
+            tokens.Tk.reshape: ast.Nk.reshape
+            tokens.Tk.shl: ast.Nk.shl
+            tokens.Tk.shr: ast.Nk.shr
+            tokens.Tk.bor: ast.Nk.bor
+            tokens.Tk.bxor: ast.Nk.bxor
+            tokens.Tk.band: ast.Nk.band
+            tokens.Tk.plus: ast.Nk.add
+            tokens.Tk.minus: ast.Nk.sub
+            tokens.Tk.concat: ast.Nk.ccat
+            tokens.Tk.mult: ast.Nk.mul
+            tokens.Tk.divide: ast.Nk.div
+            tokens.Tk.mod: ast.Nk.mod
+            _: ast.Nk.none
 
     fn parse_bin(&mut self, min_bp : i64) → i64:
         let lhs : mut i64 = self.parse_primary()
         while not self.failed():
-            let k : i64 = self.peek()
+            let k : tokens.Tk = self.peek()
             if k = tokens.Tk.ellipsis and min_bp <= 8:
                 // a…b, and a…step…b when a second … follows: the range
                 // binds tighter than comparison, looser than arithmetic
@@ -1906,7 +1905,7 @@ impl Parser:
         self.mknode(ast.Nk.matche, at, subject, off, ⁻1)
 
     fn parse_stmt(&mut self) → i64:
-        let k : i64 = self.peek()
+        let k : tokens.Tk = self.peek()
         let at : i64 = self.pos
         if k = tokens.Tk.at and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
             // @likely and @unlikely say which way a condition is
@@ -2062,7 +2061,7 @@ impl Parser:
             self.pos ← self.pos + 1
             let v : i64 = self.parse_expr()
             self.end_stmt()
-            let ek : i64 = self.nkind[e × 1¤ptrdiff]
+            let ek : ast.Nk = self.nkind[e × 1¤ptrdiff]
             if ek = ast.Nk.field:
                 return self.mknode(ast.Nk.storefld, self.ntok[e × 1¤ptrdiff],
                                    self.na[e × 1¤ptrdiff], v, 0)
@@ -3217,7 +3216,7 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
                 p.poisoned ← false
                 // hunt for the next definition at the left margin
                 while p.peek() ≠ tokens.Tk.eof:
-                    let k2 : i64 = p.peek()
+                    let k2 : tokens.Tk = p.peek()
                     if k2 = tokens.Tk.indent:
                         p.skip_block()
                     elif k2 = tokens.Tk.kw_fn or k2 = tokens.Tk.kw_struct or k2 = tokens.Tk.kw_impl or k2 = tokens.Tk.kw_let or k2 = tokens.Tk.at:

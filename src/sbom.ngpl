@@ -108,15 +108,13 @@ fn colon_opens(t : lex.Toks, i : i64 ¤ptrdiff) → bool:
     j < n and t.kind[j] = tokens.Tk.indent
 
 @post(r: r >= 0)
-fn canon_kind(k : i64) → i64:
-    if k = tokens.Tk.indent or k = tokens.Tk.lbrace:
-        return TC_OPEN
-    if k = tokens.Tk.dedent or k = tokens.Tk.rbrace:
-        return TC_CLOSE
-    if k = tokens.Tk.nl or k = tokens.Tk.semi:
-        return TC_SEP
-    // the rest keep their own kind, moved past the three codes above
-    k + 8
+fn canon_kind(k : tokens.Tk) → i64:
+    match k:
+        tokens.Tk.indent, tokens.Tk.lbrace: TC_OPEN
+        tokens.Tk.dedent, tokens.Tk.rbrace: TC_CLOSE
+        tokens.Tk.nl, tokens.Tk.semi: TC_SEP
+        // the rest keep their own kind, moved past the three codes above
+        _: k.ord() + 8
 
 // The bytes a token contributes: what kind it is, and what it says.
 // Layout contributes nothing, and neither does a comment, since the
@@ -124,7 +122,7 @@ fn canon_kind(k : i64) → i64:
 // as it was spelled, so 0x10 and 16 hash alike if the lexer read them
 // alike.
 fn token_bytes(t : lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
-    let k0 : i64 = t.kind[i]
+    let k0 : tokens.Tk = t.kind[i]
     let k : i64 = canon_kind(k0)
     into.push(k & 255)
     into.push((k » 8) & 255)

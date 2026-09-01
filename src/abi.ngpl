@@ -74,7 +74,7 @@ fn analyze_abi(a : ast.Ast, toks : lex.Toks, argregs : i64, extra : i64, want_lo
     let nnodes : i64 ¤ptrdiff = #a.nkind
     if nnodes > 0:
         foreach i := 0…nnodes:
-            let k : i64 = a.nkind[i]
+            let k : ast.Nk = a.nkind[i]
             if k = ast.Nk.fnval:
                 let fi : i64 = a.na[i]
                 if fi >= 0 and fi < @dropunit(nfns):
