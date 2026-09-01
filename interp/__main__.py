@@ -3175,27 +3175,6 @@ class LoadedProgram:
         self.warnings: list[tuple[str, tuple | None]] = []
 
 
-def _trailing_semi_check(func_def) -> str | None:
-    """A last expression with ';' where the function promises a value.
-
-    The full language's trailing semicolon discards the value, so this
-    function would answer ∅ there and the expression here -- the same
-    program with two meanings.  The bootstrap refuses it instead.
-    """
-    ret = getattr(func_def, "ret_type", None)
-    if ret in (None, "\N{EMPTY SET}"):
-        return None
-    body = func_def.body
-    if not body:
-        return None
-    last = body[-1]
-    if isinstance(last, _ast.ExprStmt) and getattr(last, "had_semi", False):
-        return (f"'{func_def.name}' answers {ret}, but the trailing ';' "
-                f"discards its last expression in the full language; drop "
-                f"the ';' so the value is the answer, or return it")
-    return None
-
-
 def _int_type_range(type_name: str) -> tuple[int, int]:
     """The inclusive range of a sized integer type, by its name."""
     bits = int(type_name[1:]) if type_name[1:].isdigit() else 64
@@ -3869,9 +3848,6 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if chr_err is not None:
                     raise DefinitionError(f"in {defn.name}: {chr_err}",
                                           _finding_pos(chr_err) or _node_pos(defn))
-                semi_err = _trailing_semi_check(defn)
-                if semi_err is not None:
-                    raise DefinitionError(semi_err, _node_pos(defn))
                 struct_vars = _struct_vars_of(defn, env)
                 purity_err = _static_purity_check(defn, env, struct_vars)
                 if purity_err is not None:

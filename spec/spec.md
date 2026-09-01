@@ -3133,15 +3133,21 @@ let cold := 2
 
 ### Function Return Values
 
-The `return` keyword is used for early returns from a function — exiting before the end of the function body.  For the final expression in a function body, the `return` keyword is optional: the last expression in the body, written without a trailing semicolon, is the function's return value.
+The `return` keyword is used for early returns from a function — exiting before the end of the function body.  For the final expression in a function body, the `return` keyword is optional: the last expression in the body is the function's return value.
 
 This is consistent with expression-oriented languages like Rust, Haskell, and Zig where the last expression in a block is its value.  The rule is:
 
 1. **Explicit return.**  `return expr;` exits the function immediately with the given value.  Required for early returns (e.g., inside an `if` branch before the end of the function body).
 
-2. **Implicit return.**  The last statement in a function body, if it is a bare expression without a trailing semicolon, becomes the function's return value.  No `return` keyword is needed.
+2. **Implicit return.**  The last statement in a function body, if it is a bare expression, becomes the function's return value.  No `return` keyword is needed.
 
-3. **Semicolon distinction.**  A trailing semicolon after the last expression discards its value — the function returns `∅`.  Omitting the semicolon makes the expression the return value.  This mirrors Rust's semicolon semantics.
+3. **A semicolon ends a statement and says nothing else.**  It may stand after the last one, where a line would otherwise have ended it, and the expression is still the value:
+
+   ```
+   fn add(a : int, b : int) → int { a + b; }   // answers a + b
+   ```
+
+   This is where the language parts company with Rust, whose trailing semicolon discards the value.  A separator that changes what a function answers makes two programs of one that differ by a keystroke, and the difference is invisible at the call.  What a function answers is said in its signature: a function that answers nothing says `∅` there, and one that answers a value hands back its last expression however the line ended.
 
 Eliding the `return` keyword only really comes into its own when functions are small and can be written
 in possibly just a single function.  Requiring the use `return` in an inline-defined anonymous function
@@ -3163,7 +3169,7 @@ fn greet(name):
     std.println("hello {}", name);
 ```
 
-In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.println(...)` discards the result, so the function returns `∅`.
+In `add`, the expression `a + b` is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  `greet` states no return type, so it answers `∅` whatever its last statement is, and the semicolon after `std.println(…)` merely ends it.
 
 The same functions can equivalently be written with braces:
 

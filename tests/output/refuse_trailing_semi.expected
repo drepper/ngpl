@@ -1,7 +1,0 @@
-error: 'discards' answers i64, but the trailing ';' discards its last expression in the full language; drop the ';' so the value is the answer, or return it
-  --> tests/output/refuse_trailing_semi.ngpl:1:1
-    |
-  1 | fn discards() → i64:
-    | ^^
-  2 |     5;
-    |

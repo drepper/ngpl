@@ -239,3 +239,27 @@ fn test_a_match_either_way():
     assert_eq(matched_braces(⊨(7)), 7)
     assert_eq(matched_layout(∅), 0)
     assert_eq(matched_braces(∅), 0)
+
+// ---------------------------------------------------------------------
+// The semicolon after the last statement
+// ---------------------------------------------------------------------
+//
+// A ';' ends a statement wherever it stands, and a line ends one too.
+// It may stand after the last statement of a body, where a line would
+// otherwise have ended it, and what the body answers is unchanged:
+// what ends a statement is not what gives a block its value.
+
+fn kept_layout() → i64:
+    let a : i64 = 1;
+    a;
+
+fn kept_brace() → i64 { let a : i64 = 1; a; }
+
+fn kept_arm(c : bool) → i64 { if c { 1; } else { 0; } }
+
+@test
+fn test_a_trailing_semicolon_keeps_the_value():
+    assert_eq(kept_layout(), 1)
+    assert_eq(kept_brace(), 1)
+    assert_eq(kept_arm(true), 1)
+    assert_eq(kept_arm(false), 0)

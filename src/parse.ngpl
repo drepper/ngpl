@@ -1623,6 +1623,16 @@ impl Parser:
             return
         if self.lent ≠ 0:
             return
+        // A ';' ends a statement wherever it stands, laid out or not.
+        // A line ends one too, so a statement may carry both, and the
+        // last statement of a block may carry the ';' and nothing
+        // after it: what ends a statement is not what gives a block
+        // its value.
+        if self.peek() = tokens.TK_SEMI:
+            self.pos ← self.pos + 1
+            if self.peek() = tokens.TK_NL:
+                self.pos ← self.pos + 1
+            return
         if self.peek() = tokens.TK_NL:
             self.pos ← self.pos + 1
         elif self.peek() = tokens.TK_DEDENT or self.peek() = tokens.TK_EOF:

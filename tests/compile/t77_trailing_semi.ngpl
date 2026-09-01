@@ -1,0 +1,22 @@
+// A ';' ends a statement wherever it stands, and a line ends one too.
+// It may stand after the last statement of a body -- laid out, in
+// braces, or in an arm -- and what the body answers is unchanged: what
+// ends a statement is not what gives a block its value.
+
+fn kept_layout() → i64:
+    let a : i64 = 1;
+    a;
+
+fn kept_brace() → i64 { let a : i64 = 1; a; }
+
+fn kept_arm(c : bool) → i64 { if c { 1; } else { 0; } }
+
+fn two_on_a_line() → i64:
+    let a : i64 = 2; let b : i64 = 3
+    a × b
+
+@start
+@impure
+fn main():
+    std.println("{} {} {} {} {}", kept_layout(), kept_brace(),
+                kept_arm(true), kept_arm(false), two_on_a_line())

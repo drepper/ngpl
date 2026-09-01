@@ -2027,8 +2027,10 @@ class Parser:
                 return ("assign_stmt", lhs, rhs)
 
         expr = self._parse_expr()
-        had_semi = self._try_eat(TokenType.PUNCT, ";")
-        return ExprStmt(expr, had_semi=bool(had_semi))
+        # A ';' ends the statement wherever it stands; what ends a
+        # statement is not what gives a block its value.
+        self._try_eat(TokenType.PUNCT, ";")
+        return ExprStmt(expr)
 
     def _arm_alike(self, braced: bool):
         """Hold this arm to the way the if opened its first.

@@ -303,12 +303,8 @@ class DestructureDef:
 class ExprStmt:
     """An expression used as a statement (discard result)."""
 
-    def __init__(self, expr, had_semi=False):
+    def __init__(self, expr):
         self.expr = expr
-        # Whether a ';' followed: the full language's semicolon
-        # discards the value, which matters when this is the last
-        # statement of a body.
-        self.had_semi = had_semi
 
 
 class FuncCall:
