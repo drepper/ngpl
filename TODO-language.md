@@ -143,16 +143,6 @@ Source Text
 Operators and Notation
 ----------------------
 
-[ ] boolean operations beside the binary ones, spelled with a `₁` after the glyph -- `∧₁ ∨₁ ⊕₁
-    ⊼₁ ⊽₁ ¬₁` -- answering 0 or 1 whatever the width of the operands, where the binary ones
-    answer bit by bit.  The two have the same range of operations, which is what the subscript
-    says: the same question asked of the value rather than of every bit of it.
-
-[ ] a flag enum's operations are written `|`, `&`, `^` and `~`, which are C's spellings in a
-    language whose binary logic is written `∧ ∨ ⊕ ¬`.  Two spellings for one operation is what
-    `==` was taken out for; the glyphs should reach the flag enums, and whether the ASCII forms
-    stay as operators at all is the question this raises.
-
 [ ] the remainder is written `%`, the last of the ASCII arithmetic operators, in a language that
     writes multiplication `×` and division `÷` because a program is read more often than it is
     typed.  Decide the glyph.  It cannot be `mod` written as a word without deciding the wider
