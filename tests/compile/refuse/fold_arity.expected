@@ -1,0 +1,3 @@
+tests/compile/refuse/fold_arity.ngpl:10:29: error: 'twice' takes 1 parameters; a fold's function takes what has been folded so far and the next element
+  10 |     std.println("{}", twice ⌿ v)
+     |                             ^

@@ -1,0 +1,43 @@
+// f ¨ v asks f of each element and collects the answers; f ⌿ v folds
+// the elements into one from the left, f ⍀ v from the right, and an
+// operator may stand where the function goes: +⌿ v is the sum.  A
+// two-tuple on the right, (v, init), says what the fold starts from,
+// which is also what lets an empty array fold to something.
+//
+// The compiler's subset takes a function's name or an operator before
+// the glyph; the full language takes a λ or a name holding a function
+// as well.  What both must agree on is every answer below.
+
+fn twice(n : i64) → i64:
+    n × 2
+
+fn name_of(n : i64) → str:
+    if n = 1: "one" else: "many"
+
+fn joined(acc : str, s : str) → str:
+    acc ⧺ "-" ⧺ s
+
+fn longest(acc : i64, s : str) → i64:
+    acc ⌈ @dropunit(#s)
+
+fn pair(a : i64, b : i64) → i64:
+    a × 10 + b
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3, 4]
+    let d : i64[] = twice ¨ v
+    std.println("{} {} {}", @dropunit(#d), d[0¤ptrdiff], d[3¤ptrdiff])
+    let ns : str[] = name_of ¨ v
+    std.println("{} {}", ns[0¤ptrdiff], ns[1¤ptrdiff])
+    std.println("{} {} {}", +⌿ v, ×⌿ v, ⌈⌿ v)
+    std.println("{} {}", +⌿ (v, 100), ⧺⌿ ns)
+    std.println("{}", joined ⌿ ns)
+    std.println("{}", longest ⌿ (ns, 0))
+    std.println("{} {}", pair ⌿ v, pair ⍀ v)
+    std.println("{} {}", -⌿ v, -⍀ v)
+    let e : i64[] = []
+    std.println("{} {}", +⌿ (e, 7), @dropunit(#(twice ¨ e)))
+    let bs : bool[] = [true, false, true]
+    std.println("{} {}", ∧⌿ bs, ∨⌿ bs)

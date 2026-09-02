@@ -1,0 +1,3 @@
+tests/compile/refuse/each_lambda.ngpl:7:45: error: in core-2 what stands before ¨ is a function's name
+  7 |     let d : i64[] = (λx : i64 → i64: x × 2) ¨ v
+    |                                             ^

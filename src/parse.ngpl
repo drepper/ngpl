@@ -1490,8 +1490,25 @@ impl Parser:
             tokens.Tk.mod: ast.Nk.mod
             _: ast.Nk.none
 
+    // the binary operators that may stand where a fold's function
+    // goes: `+⌿ v` says what a λ repeating the operator would
+    fn foldable(&self, k : tokens.Tk) → bool:
+        match k:
+            tokens.Tk.plus, tokens.Tk.minus, tokens.Tk.mult, tokens.Tk.divide, tokens.Tk.mod, tokens.Tk.satadd, tokens.Tk.satsub, tokens.Tk.satmul, tokens.Tk.max, tokens.Tk.min, tokens.Tk.concat, tokens.Tk.band, tokens.Tk.bor, tokens.Tk.bxor, tokens.Tk.land, tokens.Tk.lor, tokens.Tk.shl, tokens.Tk.shr:
+                true
+            _:
+                false
+
     fn parse_bin(&mut self, min_bp : i64) → i64:
-        let lhs : mut i64 = self.parse_primary()
+        // An operator is a value only before a fold glyph, which is
+        // the one place an operator could not otherwise stand
+        let k0 : tokens.Tk = self.peek()
+        let lhs : mut i64 = if self.foldable(k0) and (self.peek2() = tokens.Tk.foldl or self.peek2() = tokens.Tk.foldr):
+            let at0 : i64 = self.pos
+            self.pos ← self.pos + 1
+            self.mknode(ast.Nk.opval, at0, self.bin_nk(k0).ord(), 0, 0)
+        else:
+            self.parse_primary()
         while not self.failed():
             let k : tokens.Tk = self.peek()
             if k = tokens.Tk.ellipsis and min_bp <= 8:
@@ -1508,6 +1525,32 @@ impl Parser:
                     lhs ← self.mknode(ast.Nk.rangev, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
                 else:
                     lhs ← self.mknode(ast.Nk.rangev, at, lhs, rhs, ⁻1)
+            elif k = tokens.Tk.each and min_bp <= 17:
+                // f ¨ v: what follows is the container, read at the
+                // range's level as a fold's is
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                let rhs : i64 = self.parse_bin(8)
+                lhs ← self.mknode(ast.Nk.each, at, lhs, rhs, ⁻1)
+            elif (k = tokens.Tk.foldl or k = tokens.Tk.foldr) and min_bp <= 17:
+                // f ⌿ v and f ⌿ (v, init): a two-tuple on the right is
+                // the container and the value the fold starts from
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                let rhs : i64 = self.parse_bin(8)
+                let off : i64 = @dropunit(#self.extra)
+                let is_op : bool = self.nkind[lhs × 1¤ptrdiff] = ast.Nk.opval
+                self.extra.push(if is_op: 1 else: 0)
+                self.extra.push(if is_op: self.na[lhs × 1¤ptrdiff] else: lhs)
+                if self.nkind[rhs × 1¤ptrdiff] = ast.Nk.tuple and self.extra[self.na[rhs × 1¤ptrdiff] × 1¤ptrdiff] = 2:
+                    let toff : i64 = self.na[rhs × 1¤ptrdiff]
+                    self.extra.push(self.extra[(toff + 2) × 1¤ptrdiff])
+                    self.extra.push(if k = tokens.Tk.foldr: 1 else: 0)
+                    lhs ← self.mknode(ast.Nk.fold, at, self.extra[(toff + 1) × 1¤ptrdiff], off, 0)
+                else:
+                    self.extra.push(⁻1)
+                    self.extra.push(if k = tokens.Tk.foldr: 1 else: 0)
+                    lhs ← self.mknode(ast.Nk.fold, at, rhs, off, 0)
             elif (k = tokens.Tk.forall or k = tokens.Tk.exists or k = tokens.Tk.notex) and min_bp <= 17:
                 // f ∀ v, f ∃ v and f ∄ v.  The right operand is read at
                 // the range's level, so `f ∀ 1…5` needs no parentheses

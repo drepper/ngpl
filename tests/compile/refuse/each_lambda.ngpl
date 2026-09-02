@@ -1,0 +1,8 @@
+// The compiler's subset takes a function's name before ¨; a λ standing
+// there is the full language's, and is said so by name.
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    let d : i64[] = (λx : i64 → i64: x × 2) ¨ v
+    std.println("{}", d[0¤ptrdiff])

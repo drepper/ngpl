@@ -1,0 +1,9 @@
+// ¨ asks something of each element of an array; a number holds none.
+fn twice(n : i64) → i64:
+    n × 2
+
+@start
+@impure
+fn main():
+    let n : i64 = 5
+    std.println("{}", @dropunit(#(twice ¨ n)))

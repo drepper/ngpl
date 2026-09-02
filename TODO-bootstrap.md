@@ -332,3 +332,9 @@ Outstanding
     through names.Names, which grows now and lets a name answer a value of its own.  `⍴`
     in the interpreter takes any scalar filler and a measured count, as the compiler
     does.  design/array-ops/README.md holds the census and what waits on the language.
+
+[x] the compiler reads `f ¨ v`, `f ⌿ v`, `f ⍀ v`, `f ⌿ (v, init)` and an operator before a
+    fold glyph (`+⌿ v`), with a function's name or an operator on the left; a λ there is
+    the full language's and is refused by name.  Each lowers to a loop with a direct call
+    or the operator's instruction per element, so the six backends see nothing new.
+    tests/compile/t85_each_fold and refuse/{each_lambda,fold_arity,each_not_array}.

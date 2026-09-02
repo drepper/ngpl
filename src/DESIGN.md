@@ -164,6 +164,16 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `_start` hands to `exit`.  Unit-suffixed literals (`1¤ptrdiff`,
   `0¤byte`) close their type at the lexer like width suffixes, and
   `byte` names `u8`.
+- **each and fold**: `f ¨ v` collects what `f` says of each element,
+  `f ⌿ v` and `f ⍀ v` fold the elements into one from the left or the
+  right, `(v, init)` on the right says what a fold starts from, and an
+  operator may stand where the function goes -- `+⌿ v`, `⧺⌿ parts`,
+  `∧⌿ flags`.  The compiler's subset takes a function's name or an
+  operator before the glyph (a λ or a name holding a function is the
+  full language's); both lower to a loop over the elements with a
+  direct call or the operator's own instruction per turn, so nothing
+  new reaches the backends.  An empty array without a starting value
+  stops the program, as the interpreter's does.
 - **finding, holding, slicing**: `container ⍳ wanted` answers the
   position as an optional ¤ptrdiff (string elements compared by
   content), `⊞ ⊟ ⊠` hold arithmetic at the type's edge — narrow

@@ -1310,6 +1310,13 @@ impl Checker:
                 self.check_cmp_operands(id, tok, k, na, nb)
             ast.Nk.reshape:
                 self.check_reshape(id, tok, na, nb, want)
+            ast.Nk.each:
+                self.check_each(id, tok, na, nb)
+            ast.Nk.fold:
+                self.check_fold(id, tok, na, nb)
+            ast.Nk.opval:
+                self.derr(tok, "an operator stands on its own only before ⌿ or ⍀")
+                self.set_type(id, types.TY_I64)
             ast.Nk.iota:
                 // where the wanted value sits in the container, if anywhere
                 self.check_expr(na, types.TY_UNIT)
@@ -2278,6 +2285,119 @@ impl Checker:
         elif not self.try_fit(nb, ew):
             self.derr(tok, "the filler is " ⧺ self.tn(ft) ⧺ ", but the binding wants " ⧺ self.tn(ew))
         self.set_type(id, w)
+
+    // The function that stands before ¨ or ⌿: in core-2 a function's
+    // name, and nothing else -- a λ or a name holding a function is the
+    // full language's.  Answers its index, or ⁻1 having said why.
+    fn fn_before(&mut self, tok : i64, e : i64, glyph : str) → i64:
+        if self.kind_of(e) ≠ ast.Nk.var:
+            self.derr(tok, "in core-2 what stands before " ⧺ glyph ⧺ " is a function's name")
+            return ⁻1
+        let name := self.text(self.a.ntok[e × 1¤ptrdiff])
+        let f : i64 = self.fn_index_here(name)
+        if f = ⁻1:
+            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this program defines, and " ⧺ glyph ⧺ " asks one")
+        f
+
+    // whether parameter i of the function at params_off takes a value
+    // of type t: by value, and of that type exactly
+    fn takes(&self, params_off : i64 ¤"aextra", i : i64, t : i64) → bool:
+        let pty : i64 = self.a.extra[(@dropunit(params_off) + 2 + i × 2) × 1¤ptrdiff]
+        types.ty_ref_kind(pty) = 0 and types.ty_strip_ref(pty) = t
+
+    // f ¨ v: what f says of each element, as an array of the answers
+    fn check_each(&mut self, id : i64, tok : i64, na : i64, nb : i64):
+        self.check_expr(nb, types.TY_UNIT)
+        let ct : i64 = types.ty_strip_ref(self.ty_of(nb))
+        if not types.ty_is_arr(ct):
+            self.derr(tok, "¨ asks something of each element of an array; this is " ⧺ self.tn(ct))
+            self.set_type(id, types.mk_aty(types.TY_I64))
+            return
+        let et : i64 = self.elem_of(ct)
+        let f : i64 = self.fn_before(tok, na, "¨")
+        if f = ⁻1:
+            self.set_type(id, types.mk_aty(types.TY_I64))
+            return
+        let fd := self.a.fns[f × 1¤ptrdiff]
+        let np : i64 = self.a.extra[fd.params_off]
+        if np ≠ 1:
+            self.derr(tok, "'" ⧺ fd.name ⧺ "' takes " ⧺ tokens.i64_str(np) ⧺ " parameters; what ¨ asks of each element takes that element alone")
+        elif not self.takes(fd.params_off, 0, et):
+            self.derr(tok, "the array holds " ⧺ self.tn(et) ⧺ ", and '" ⧺ fd.name ⧺ "' takes " ⧺ self.tn(types.ty_strip_ref(self.a.extra[fd.params_off + 2])))
+        if fd.ret = types.TY_UNIT:
+            self.derr(tok, "'" ⧺ fd.name ⧺ "' answers nothing, so ¨ has nothing to collect")
+        self.a.nc[id × 1¤ptrdiff] ← f
+        self.set_type(id, types.mk_aty(fd.ret))
+
+    // whether an operator written before a fold works over elements
+    // of type t: the arithmetic and bitwise ones over integers, ∧ and
+    // ∨ over truth values, ⧺ over strings and arrays
+    fn fold_op_admits(&self, op : i64, t : i64) → bool:
+        if op = ast.Nk.land.ord() or op = ast.Nk.lor.ord():
+            return t = types.TY_BOOL
+        if op = ast.Nk.ccat.ord():
+            return t = types.TY_STR or types.ty_is_arr(t)
+        if op = ast.Nk.add.ord() or op = ast.Nk.sub.ord() or op = ast.Nk.mul.ord() or op = ast.Nk.satadd.ord() or op = ast.Nk.satsub.ord() or op = ast.Nk.satmul.ord() or op = ast.Nk.maxop.ord() or op = ast.Nk.minop.ord() or op = ast.Nk.band.ord() or op = ast.Nk.bor.ord() or op = ast.Nk.bxor.ord() or op = ast.Nk.shl.ord() or op = ast.Nk.shr.ord():
+            return types.ty_is_int(t) and not types.ty_is_bigint(t)
+        false
+
+    // f ⌿ v, f ⍀ v, and either with (v, init): the elements folded
+    // into one value, by a function of two or by an operator
+    fn check_fold(&mut self, id : i64, tok : i64, na : i64, nb : i64):
+        let what : i64 = self.a.extra[nb × 1¤ptrdiff]
+        let fo : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+        let init : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
+        self.check_expr(na, types.TY_UNIT)
+        let ct : i64 = types.ty_strip_ref(self.ty_of(na))
+        if not types.ty_is_arr(ct):
+            self.derr(tok, "a fold reads an array; this is " ⧺ self.tn(ct))
+            if init ≠ ⁻1:
+                self.check_expr(init, types.TY_UNIT)
+            self.set_type(id, types.TY_I64)
+            return
+        let et : i64 = self.elem_of(ct)
+        if what = 1:
+            if not self.fold_op_admits(fo, et):
+                self.derr(tok, "this operator does not fold " ⧺ self.tn(et))
+            if init ≠ ⁻1:
+                self.check_expr(init, et)
+                if self.is_open(self.ty_of(init)):
+                    self.adopt(init, et)
+                elif not self.try_fit(init, et):
+                    self.derr(tok, "the fold starts from " ⧺ self.tn(self.ty_of(init)) ⧺ " and its elements are " ⧺ self.tn(et))
+            self.set_type(id, et)
+            return
+        let f : i64 = self.fn_before(tok, fo, "⌿")
+        if f = ⁻1:
+            if init ≠ ⁻1:
+                self.check_expr(init, types.TY_UNIT)
+            self.set_type(id, et)
+            return
+        let fd := self.a.fns[f × 1¤ptrdiff]
+        let np : i64 = self.a.extra[fd.params_off]
+        if np ≠ 2:
+            self.derr(tok, "'" ⧺ fd.name ⧺ "' takes " ⧺ tokens.i64_str(np) ⧺ " parameters; a fold's function takes what has been folded so far and the next element")
+            if init ≠ ⁻1:
+                self.check_expr(init, types.TY_UNIT)
+            self.set_type(id, et)
+            return
+        let acc : i64 = types.ty_strip_ref(self.a.extra[fd.params_off + 2])
+        if types.ty_ref_kind(self.a.extra[fd.params_off + 2]) ≠ 0:
+            self.derr(tok, "'" ⧺ fd.name ⧺ "' borrows what has been folded so far; a fold hands it over by value")
+        if not self.takes(fd.params_off, 1, et):
+            self.derr(tok, "the array holds " ⧺ self.tn(et) ⧺ ", and '" ⧺ fd.name ⧺ "' takes " ⧺ self.tn(types.ty_strip_ref(self.a.extra[fd.params_off + 4])) ⧺ " as its second")
+        if fd.ret ≠ acc:
+            self.derr(tok, "'" ⧺ fd.name ⧺ "' answers " ⧺ self.tn(fd.ret) ⧺ " and takes " ⧺ self.tn(acc) ⧺ " first; a fold's function answers what it took")
+        if init ≠ ⁻1:
+            self.check_expr(init, acc)
+            if self.is_open(self.ty_of(init)):
+                self.adopt(init, acc)
+            elif not self.try_fit(init, acc):
+                self.derr(tok, "the fold starts from " ⧺ self.tn(self.ty_of(init)) ⧺ " and '" ⧺ fd.name ⧺ "' takes " ⧺ self.tn(acc))
+        elif acc ≠ et:
+            self.derr(tok, "without a value to start from the fold starts from an element, which is " ⧺ self.tn(et) ⧺ ", and '" ⧺ fd.name ⧺ "' takes " ⧺ self.tn(acc))
+        self.a.nc[id × 1¤ptrdiff] ← f
+        self.set_type(id, acc)
 
     fn check_reshape(&mut self, id : i64, tok : i64, na : i64, nb : i64, want : i64):
         if self.kind_of(na) = ast.Nk.tuple:

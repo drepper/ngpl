@@ -1,0 +1,10 @@
+// A fold's function takes what has been folded so far and the next
+// element; one that takes a single thing cannot fold.
+fn twice(n : i64) → i64:
+    n × 2
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    std.println("{}", twice ⌿ v)

@@ -138,6 +138,9 @@ enum Tk : i8:
     kw_type = 103    // type: a name standing for a type
     kw_enum = 104    // enum
     kw_unit = 105    // unit: a measure the file gives a name
+    each = 112    // ¨ -- f ¨ v, what f says of each
+    foldl = 113    // ⌿ -- f ⌿ v, folded from the left
+    foldr = 114    // ⍀ -- f ⍀ v, folded from the right
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -166,7 +169,8 @@ let GLYPHS2 : std.dict(i32, Tk) = ⸨
     49828: Tk.currency,  // ¤
     50071: Tk.mult,      // ×
     50103: Tk.divide,    // ÷
-    52923: Tk.lambda⸩    // λ
+    52923: Tk.lambda,    // λ
+    49832: Tk.each⸩      // ¨
 
 @export
 let GLYPHS3 : std.dict(i32, Tk) = ⸨
@@ -197,7 +201,9 @@ let GLYPHS3 : std.dict(i32, Tk) = ⸨
     14846085: Tk.empty,     // ∅
     14858408: Tk.lhash,     // ⸨
     14858409: Tk.rhash,     // ⸩
-    14846090: Tk.elem⸩      // ∊
+    14846090: Tk.elem,      // ∊
+    14847167: Tk.foldl,     // ⌿
+    14847360: Tk.foldr⸩     // ⍀
 
 // ===========================================================================
 // Small helpers

@@ -244,6 +244,160 @@ impl Lower:
     // negative id.  Lowering reaches for one where the work is the
     // runtime's rather than the machine's: int's arithmetic is all of
     // it so far.
+    // the width a call of function f answers at; see callw
+    fn retw(&self, f : i64) → i64:
+        let rt : i64 = self.a.fns[f × 1¤ptrdiff].ret
+        if types.ty_is_int(rt) and types.ty_bits(rt) < 64:
+            return width_of(rt)
+        0
+
+    // f ¨ v: what f says of each element, collected in a fresh array
+    fn lower_each(&mut self, nid : i64, nb : i64) → i64:
+        let f : i64 = self.a.nc[nid × 1¤ptrdiff]
+        let cv : i64 = self.lower_expr(nb)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, cv, 0, 0, n, 0)
+        let out : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, out, 0)
+        let i : i64 = self.iconst(0)
+        let one : i64 = self.iconst(1)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(ir.Ir.label, ltop, 0, 0, 0, 0)
+        let more : i64 = self.tmp()
+        self.ir(ir.Ir.clt, i, n, 0, more, 64 + 256)
+        self.ir(ir.Ir.jz, more, lend, 0, 0, 0)
+        let e : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, cv, i, 0, e, 0)
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(1)
+        self.extra.push(e)
+        let r : i64 = self.tmp()
+        self.ir(ir.Ir.call, f, off, 0, r, self.retw(f))
+        self.ir(ir.Ir.apush, out, r, 0, 0, 0)
+        let ni : i64 = self.tmp()
+        self.ir(ir.Ir.addw, i, one, 0, ni, 64 + 256)
+        self.ir(ir.Ir.mov, ni, 0, 0, i, 0)
+        self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
+        out
+
+    // one step of an operator fold: acc op e, at the elements' width
+    fn fold_op(&mut self, op : i64, acc : i64, e : i64, et : i64) → i64:
+        let d : i64 = self.tmp()
+        let w : i64 = width_of(et)
+        if op = ast.Nk.ccat.ord():
+            if et = types.TY_STR:
+                self.ir(ir.Ir.sccat, acc, e, 0, d, 0)
+            else:
+                self.ir(ir.Ir.acat, acc, e, 0, d, 0)
+            return d
+        let o : ir.Ir = if op = ast.Nk.add.ord():
+            ir.Ir.add
+        elif op = ast.Nk.sub.ord():
+            ir.Ir.sub
+        elif op = ast.Nk.mul.ord():
+            ir.Ir.mul
+        elif op = ast.Nk.satadd.ord():
+            ir.Ir.satadd
+        elif op = ast.Nk.satsub.ord():
+            ir.Ir.satsub
+        elif op = ast.Nk.satmul.ord():
+            ir.Ir.satmul
+        elif op = ast.Nk.maxop.ord():
+            ir.Ir.maxx
+        elif op = ast.Nk.minop.ord():
+            ir.Ir.minn
+        elif op = ast.Nk.band.ord() or op = ast.Nk.land.ord():
+            ir.Ir.band
+        elif op = ast.Nk.bor.ord() or op = ast.Nk.lor.ord():
+            ir.Ir.borr
+        elif op = ast.Nk.bxor.ord():
+            ir.Ir.bxorr
+        elif op = ast.Nk.shl.ord():
+            ir.Ir.shll
+        else:
+            ir.Ir.shrr
+        self.ir(o, acc, e, 0, d, if et = types.TY_BOOL: 64 else: w)
+        d
+
+    // f ⌿ v and f ⍀ v: the elements folded into one value.  Left, the
+    // first element (or the value given) starts it and each next one
+    // is folded in as f(acc, e); right, the last starts it and each
+    // earlier one as f(e, acc).  Without a value to start from, an
+    // empty array is nothing to fold and stops the program.
+    fn lower_fold(&mut self, nid : i64, na : i64, nb : i64) → i64:
+        let what : i64 = self.a.extra[nb × 1¤ptrdiff]
+        let fo : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+        let init : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
+        let down : bool = self.a.extra[(nb + 3) × 1¤ptrdiff] = 1
+        let f : i64 = self.a.nc[nid × 1¤ptrdiff]
+        let et : i64 = self.elem_of(types.ty_strip_ref(self.tof(na)))
+        let cv : i64 = self.lower_expr(na)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, cv, 0, 0, n, 0)
+        let acc : i64 = self.tmp()
+        let one : i64 = self.iconst(1)
+        let i : i64 = self.tmp()
+        // where the fold starts, and which element comes first
+        if init ≠ ⁻1:
+            let iv : i64 = self.lower_expr(init)
+            self.ir(ir.Ir.mov, iv, 0, 0, acc, 0)
+            if down:
+                self.ir(ir.Ir.subw, n, one, 0, i, 64 + 256)
+            else:
+                self.ir(ir.Ir.const, 0, 0, 0, i, 0)
+        else:
+            let lok : i64 = self.label()
+            self.ir(ir.Ir.jnz, n, lok, 0, 0, 0)
+            let m : i64 = self.intern("a fold of nothing has nothing to start from (line " ⧺ tokens.i64_str(@dropunit(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]))) ⧺ ")\n")
+            self.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+            self.ir(ir.Ir.label, lok, 0, 0, 0, 0)
+            let first : i64 = self.tmp()
+            if down:
+                self.ir(ir.Ir.subw, n, one, 0, first, 64 + 256)
+                self.ir(ir.Ir.subw, first, one, 0, i, 64 + 256)
+            else:
+                self.ir(ir.Ir.const, 0, 0, 0, first, 0)
+                self.ir(ir.Ir.mov, one, 0, 0, i, 0)
+            self.ir(ir.Ir.aidx, cv, first, 0, acc, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(ir.Ir.label, ltop, 0, 0, 0, 0)
+        let more : i64 = self.tmp()
+        if down:
+            let z : i64 = self.iconst(0)
+            self.ir(ir.Ir.cge, i, z, 0, more, 64 + 256)
+        else:
+            self.ir(ir.Ir.clt, i, n, 0, more, 64 + 256)
+        self.ir(ir.Ir.jz, more, lend, 0, 0, 0)
+        let e : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, cv, i, 0, e, 0)
+        let r : i64 = self.tmp()
+        if what = 1:
+            let r1 : i64 = if down: self.fold_op(fo, e, acc, et) else: self.fold_op(fo, acc, e, et)
+            self.ir(ir.Ir.mov, r1, 0, 0, r, 0)
+        else:
+            let off : i64 = @dropunit(#self.extra)
+            self.extra.push(2)
+            if down:
+                self.extra.push(e)
+                self.extra.push(acc)
+            else:
+                self.extra.push(acc)
+                self.extra.push(e)
+            self.ir(ir.Ir.call, f, off, 0, r, self.retw(f))
+        self.ir(ir.Ir.mov, r, 0, 0, acc, 0)
+        let ni : i64 = self.tmp()
+        if down:
+            self.ir(ir.Ir.subw, i, one, 0, ni, 64 + 256)
+        else:
+            self.ir(ir.Ir.addw, i, one, 0, ni, 64 + 256)
+        self.ir(ir.Ir.mov, ni, 0, 0, i, 0)
+        self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
+        acc
+
     fn iconst(&mut self, v : i64) → i64:
         let d : i64 = self.tmp()
         self.ir(ir.Ir.const, v, 0, 0, d, 0)
@@ -378,6 +532,10 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(ir.Ir.aslice, av, lo, hi, d, 0)
             return d
+        if k = ast.Nk.each:
+            return self.lower_each(nid, nb)
+        if k = ast.Nk.fold:
+            return self.lower_fold(nid, na, nb)
         if k = ast.Nk.reshape:
             if types.ty_is_mat(self.tof(nid)):
                 return self.lower_mreshape(nid, na, nb)

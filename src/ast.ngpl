@@ -11,6 +11,9 @@ let diag := @import("diag")
 enum Nk : u8:
     none = 0    // no node kind: what a lookup answers for nothing
     lit_int = 1    // na = value (wrapped), nb = big flag
+    each = 8    // f ¨ v: na = f (a function's name), nb = the container; nc = the function, once checked
+    fold = 9    // f ⌿ v: na = the container, nb = extra [what, f or op, init or ⁻1, direction]
+    opval = 44    // an operator standing where a fold's function goes: na = the node kind it makes
     lit_bool = 2    // na = 0 or 1
     lit_str = 3    // na = string table index
     var = 4    // name is the token
