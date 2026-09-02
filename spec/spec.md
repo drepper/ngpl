@@ -2990,6 +2990,32 @@ A lambda cannot be `@listable` — there is no place to write an annotation on o
 
 The attribute is Wolfram's, and so is the rule. NGPL does **not** broadcast the way NumPy does: nothing is stretched to fit, so lengths that disagree are an error rather than a shape to reconcile. The decision sits at the definition, where a reader meets it, rather than at each call as Julia's `.` does — and putting it there is what lets the operators be marked with it rather than each carrying an element-wise loop of its own.
 
+#### Written Back Into What It Read
+
+A threaded operator answers a container of its own, and whoever holds
+the ones it read goes on seeing what they held.  The exception is the
+answer assigned back to a container the operator reads:
+
+```
+v ← v + 1                       /* v's own elements, each one more */
+v ← 10 - v                      /* the same, with v on the right */
+t.extra ← t.extra × 2           /* and a field's */
+```
+
+There the array on the left is one the operator reads, so the answers
+are written into that array, element for element, rather than into
+another one of the same length.  This is the rule `⧺` follows for a
+join written back into what it joins, and it holds under the same
+conditions: the place written is a binding or a field of one, spelled
+the same way on both sides, and the container is one that may be
+written — not a string, not an array whose type names its length,
+not a slice of another array.  Anything else answers into a container
+of its own.
+
+The length does not change, so nothing else has to be said about it:
+the two sides were already the same length or one of them was a single
+value.
+
 
 ### A Statement Whose Value Nothing Reads
 

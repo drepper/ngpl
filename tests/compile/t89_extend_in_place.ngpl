@@ -47,3 +47,28 @@ fn main():
     let s : mut str = "ab"
     s ← s ⧺ "cd"
     std.println("{}", s)
+
+    // and the listable operators, which write their answers into the
+    // array they read rather than building one of the same length
+    let o : mut i64[] = [1, 2, 3]
+    o ← o + 10
+    show(o)
+    o ← 100 - o
+    show(o)
+    o ← o × o
+    show(o)
+    let p : i64[] = [1, 2, 3]
+    o ← o + p
+    show(o)
+    o ← p × o
+    show(o)
+
+    let q : mut Table = Table{names: [], extra: [5, 6]}
+    q.extra ← q.extra + 1
+    show(q.extra)
+
+    // neither side names the place written, so this one builds its own
+    let r : mut i64[] = [0, 0, 0]
+    r ← p + p
+    show(r)
+    show(p)

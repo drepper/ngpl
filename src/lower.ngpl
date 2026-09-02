@@ -420,9 +420,13 @@ impl Lower:
     fn extends_itself(&self, sid : i64, val : i64) → bool:
         if self.kof(val) ≠ ast.Nk.ccat or not types.ty_is_arr(types.ty_strip_ref(self.tof(val))):
             return false
-        let l : i64 = self.a.na[val × 1¤ptrdiff]
-        // a sized array lives in the frame as its elements and does not
-        // grow, so it is not this
+        self.same_dest(sid, self.a.na[val × 1¤ptrdiff])
+
+    // Whether an operand names the very place a store writes: the
+    // binding the store names, or the field of the place it names.
+    fn same_dest(&self, sid : i64, l : i64) → bool:
+        // a sized array lives in the frame as its elements and is not
+        // an object to write through
         if self.packed_n(l) >= 0:
             return false
         match self.kof(sid):
@@ -432,6 +436,32 @@ impl Lower:
                 self.kof(l) = ast.Nk.field and self.a.nb[l × 1¤ptrdiff] = self.a.nc[sid × 1¤ptrdiff] and self.same_place(self.a.na[l × 1¤ptrdiff], self.a.na[sid × 1¤ptrdiff])
             _:
                 false
+
+    // Whether this node is an operator the checker marked as threading.
+    // The mark is one bit of nc, which other node kinds put other things
+    // in, so the kind is asked as well as the mark.
+    fn threaded_op(&self, val : i64) → bool:
+        if self.a.nc[val × 1¤ptrdiff] ≠ 1:
+            return false
+        match self.kof(val):
+            ast.Nk.add, ast.Nk.sub, ast.Nk.mul, ast.Nk.shl, ast.Nk.shr, ast.Nk.band, ast.Nk.bor, ast.Nk.bxor, ast.Nk.satadd, ast.Nk.satsub, ast.Nk.satmul, ast.Nk.maxop, ast.Nk.minop, ast.Nk.eq, ast.Nk.ne, ast.Nk.lt, ast.Nk.le, ast.Nk.gt, ast.Nk.ge:
+                true
+            _:
+                false
+
+    // `v ← v + w` and `v ← w + v`: which side of a threaded operator
+    // names the place the answer is stored into -- 0 the left, 1 the
+    // right, ⁻1 neither.  Where one of them does, the loop writes its
+    // answers into that array instead of building another.
+    // @post @result >= ⁻1 and @result <= 1
+    fn threads_itself(&self, sid : i64, val : i64) → i64:
+        if not self.threaded_op(val) or not types.ty_is_arr(types.ty_strip_ref(self.tof(val))):
+            return ⁻1
+        if self.same_dest(sid, self.a.na[val × 1¤ptrdiff]):
+            return 0
+        if self.same_dest(sid, self.a.nb[val × 1¤ptrdiff]):
+            return 1
+        ⁻1
 
     // Whether two expressions name one place: a binding, a global, or a
     // field of a place.  Anything else answers no, which only costs the
@@ -1245,7 +1275,7 @@ impl Lower:
         // a listable operator handed an array is the loop that asks
         // it of each element; the checker marked the node where it is
         if nc = 1:
-            return self.lower_thread_op(nid, k, na, nb)
+            return self.lower_thread_op(nid, k, na, nb, ⁻1)
         // the remaining family evaluates both sides
         let av : i64 = self.lower_expr(na)
         let bv : i64 = self.lower_expr(nb)
@@ -1378,10 +1408,13 @@ impl Lower:
     // says how many turns; a value operand stands still and is read
     // once, outside the loop, since it is the same at every turn.
     // Where both sides are containers they meet element against
-    // element, so their lengths have to agree.
+    // element, so their lengths have to agree.  dstside says which
+    // side's array the answers are written into -- 0 the left, 1 the
+    // right, ⁻1 for an array of its own.
     // @pre self.a.nc[nid × 1¤ptrdiff] = 1
+    // @pre dstside >= ⁻1 and dstside <= 1
     // @post @result >= 0
-    fn lower_thread_op(&mut self, nid : i64, k : ast.Nk, na : i64, nb : i64) → i64:
+    fn lower_thread_op(&mut self, nid : i64, k : ast.Nk, na : i64, nb : i64, dstside : i64) → i64:
         // a sized array lives in the frame as its elements; the loop
         // reads an object, so it is made into one first
         let av : i64 = self.lower_arr_operand(na)
@@ -1408,8 +1441,13 @@ impl Lower:
                                        " its operands are of different lengths\n""")
             self.ir(ir.Ir.abort, m, 0, 0, 0, 0)
             self.ir(ir.Ir.label, lok, 0, 0, 0, 0)
-        let d : i64 = self.tmp()
-        self.ir(ir.Ir.anew, 4, 0, 0, d, 0)
+        // where the answer goes: the array one side already names, or
+        // a fresh one where neither side is the place being written
+        let d : mut i64 = if dstside = 1: bv else: av
+        if dstside < 0:
+            let fresh : i64 = self.tmp()
+            self.ir(ir.Ir.anew, 4, 0, 0, fresh, 0)
+            d ← fresh
         let iv : i64 = self.tmp()
         self.ir(ir.Ir.const, 0, 0, 0, iv, 0)
         let ltop : i64 = self.label()
@@ -1429,7 +1467,12 @@ impl Lower:
             self.ir(ir.Ir.aidx, bv, iv, 0, e2, 0)
             xb ← e2
         let r : i64 = self.lower_binop_vals(k, xa, xb, ea, eb, er, ew)
-        self.ir(ir.Ir.apush, d, r, 0, 0, 0)
+        // into the array that is already the right length, or onto the
+        // end of the one being built
+        if dstside < 0:
+            self.ir(ir.Ir.apush, d, r, 0, 0, 0)
+        else:
+            self.ir(ir.Ir.asto, d, iv, r, 0, 0)
         let one : i64 = self.tmp()
         self.ir(ir.Ir.const, 1, 0, 0, one, 0)
         let ni : i64 = self.tmp()
@@ -2959,6 +3002,13 @@ impl Lower:
                 let src0 : i64 = self.lower_arr_operand(self.a.nb[na × 1¤ptrdiff])
                 _ ← self.rt2(emit.RT_AEXT, dst0, src0)
                 return
+            // `v ← v + w` and `v ← w + v`: the loop writes its answers
+            // into the array v already names, element for element,
+            // rather than building another of the same length
+            let ds0 : i64 = self.threads_itself(sid, na)
+            if ds0 >= 0:
+                _ ← self.lower_thread_op(na, self.kof(na), self.a.na[na × 1¤ptrdiff], self.a.nb[na × 1¤ptrdiff], ds0)
+                return
             let v : i64 = self.lower_expr(na)
             let slot : i64 = self.nslot[sid × 1¤ptrdiff]
             if slot <= ⁻2:
@@ -2974,6 +3024,11 @@ impl Lower:
                 let dst1 : i64 = self.lower_expr(self.a.na[nb × 1¤ptrdiff])
                 let src1 : i64 = self.lower_arr_operand(self.a.nb[nb × 1¤ptrdiff])
                 _ ← self.rt2(emit.RT_AEXT, dst1, src1)
+                return
+            // and the same, for `b.xs ← b.xs + w`
+            let ds1 : i64 = self.threads_itself(sid, nb)
+            if ds1 >= 0:
+                _ ← self.lower_thread_op(nb, self.kof(nb), self.a.na[nb × 1¤ptrdiff], self.a.nb[nb × 1¤ptrdiff], ds1)
                 return
             let bv : i64 = self.lower_expr(na)
             let vv : i64 = self.field_val(self.lower_expr(nb), self.tof(nb))

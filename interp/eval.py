@@ -5306,7 +5306,7 @@ class Evaluator:
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
             pre = self._c_assign_pre(target_ast)
-            if self._c_extend_in_place(target_ast, rhs_ast):
+            if self._c_assign_in_place(target_ast, rhs_ast):
                 return none()
             rhs = self.eval_expr(rhs_ast)
             return self._c_assign_post(target_ast, rhs, pre)
@@ -5341,18 +5341,51 @@ class Evaluator:
             return a.attr == b.attr and Evaluator._same_place(a.obj, b.obj)
         return False
 
+    def _c_assign_in_place(self, target_ast, rhs_ast) -> bool:
+        """An operator assigned back to an array it reads works on that
+        array rather than building another.
+
+        `v \N{DOUBLE PLUS} w` grows the v it reads; `v + w` and `w + v` write
+        their answers into the v they read, element for element.  Answers
+        whether the assignment was carried out this way; a string, a
+        fixed-size array, a slice of another array and any other shape
+        answer no and are computed as before.
+        """
+        if not (isinstance(rhs_ast, BinOp)
+                and isinstance(target_ast, (VarRef, GetAttr))):
+            return False
+        if rhs_ast.op == "\N{DOUBLE PLUS}":
+            return self._c_extend_in_place(target_ast, rhs_ast)
+        if rhs_ast.op not in self._LISTABLE_BINOPS:
+            return False
+        # which side names the place being written; the other is what it
+        # meets, an array element for element or one value throughout
+        left = self._same_place(target_ast, rhs_ast.left)
+        if not (left or self._same_place(target_ast, rhs_ast.right)):
+            return False
+        arr = self._writable_array(target_ast)
+        if arr is None:
+            return False
+        other = self.eval_expr(rhs_ast.right if left else rhs_ast.left)
+        rank = self._as_array(other)
+        if rank is not None and rank.sizeof != arr.sizeof:
+            # the lengths disagree, which is the ordinary path's to say
+            return False
+        for i in range(arr.sizeof):
+            mine = arr.get(i)
+            theirs = rank.get(i) if rank is not None else other
+            arr.set(i, self._apply_operator(rhs_ast.op,
+                                            mine if left else theirs,
+                                            theirs if left else mine))
+        return True
+
     def _c_extend_in_place(self, target_ast, rhs_ast) -> bool:
         """`v \N{DOUBLE PLUS} w` assigned back to the v it reads is that array,
-        grown, rather than a fresh one built out of two.  Answers whether
-        the assignment was carried out this way; a string, a fixed-size
-        array and any other shape answer no and are joined as before."""
-        if not (isinstance(rhs_ast, BinOp)
-                and rhs_ast.op == "\N{DOUBLE PLUS}"
-                and isinstance(target_ast, (VarRef, GetAttr))
-                and self._same_place(target_ast, rhs_ast.left)):
+        grown, rather than a fresh one built out of two."""
+        if not self._same_place(target_ast, rhs_ast.left):
             return False
-        arr = self._as_array(self.eval_expr(target_ast))
-        if arr is None or arr.fixed_size is not None or arr._backing is not None:
+        arr = self._writable_array(target_ast)
+        if arr is None:
             return False
         add = self._as_array(self.eval_expr(rhs_ast.right))
         if add is None:
@@ -5360,6 +5393,15 @@ class Evaluator:
         for i in range(add.sizeof):
             arr.push(add.get(i))
         return True
+
+    def _writable_array(self, target_ast):
+        """The array a place names, where it is one that may be worked in
+        place: not a string, not a fixed-size array, not a view into
+        another array's storage."""
+        arr = self._as_array(self.eval_expr(target_ast))
+        if arr is None or arr.fixed_size is not None or arr._backing is not None:
+            return None
+        return arr
 
     def _c_assign_pre(self, target_ast):
         """What an assignment settles before its right side is read:

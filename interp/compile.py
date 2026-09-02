@@ -279,11 +279,11 @@ class _Emit:
             # the generalized assignment, its right side evaluated here
             target = self.const(stmt[1])
             self.line(d, f"pre = ev._c_assign_pre({target})")
-            if (isinstance(stmt[2], BinOp)
-                    and stmt[2].op == "\N{DOUBLE PLUS}"):
-                # `v ← v ⧺ w` grows the array v already names; the right
-                # side is read only where it does not
-                self.line(d, f"if ev._c_extend_in_place({target}, {self.const(stmt[2])}):")
+            if isinstance(stmt[2], BinOp):
+                # `v ← v ⧺ w` grows the array v already names and
+                # `v ← v + w` writes into it; the right side is read
+                # here only where neither of those is what it says
+                self.line(d, f"if ev._c_assign_in_place({target}, {self.const(stmt[2])}):")
                 self.line(d + 1, "result = none()")
                 self.line(d, "else:")
                 v = self.expr(d + 1, stmt[2])
