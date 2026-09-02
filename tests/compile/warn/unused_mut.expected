@@ -1,0 +1,9 @@
+tests/compile/warn/unused_mut.ngpl:13:13: warning[2405]: 'kept' is declared mut but is never modified
+  13 |         let kept : mut i64 = self.n
+     |             ^
+tests/compile/warn/unused_mut.ngpl:16:10: warning[2419]: parameter 'n' is declared mut but is never modified
+  16 | fn twice(n : mut i64) → i64:
+     |          ^
+tests/compile/warn/unused_mut.ngpl:22:9: warning[2405]: 'once' is declared mut but is never modified
+  22 |     let once : mut i64 = 5
+     |         ^

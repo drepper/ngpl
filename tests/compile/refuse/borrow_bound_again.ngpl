@@ -8,7 +8,7 @@ struct T:
 @impure
 fn main():
     let t : mut T = T{xs: [1, 2]}
-    let r2 : & = t.xs
+    let r2 := &t.xs
     let r1 := r2
     t.xs.push(3)
     std.println("{}", @dropunit(#r1))

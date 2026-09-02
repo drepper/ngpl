@@ -64,7 +64,7 @@ fn abi_spent(tg : &elf.Target) → i64:
 @export
 @pre(olevel >= 0)
 fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt : &elf.Target,
-             stack_size : i64, guard_size : i64, olevel : i64, want_log : bool,
+             stack_size : i64, guard_size : i64, olevel : i64, contracts : i64, want_log : bool,
              incr : &incr_m.Incr) → codegen.Compiled:
     let ab : abi.Abi = abi.analyze_abi(&a, &toks, abi_argregs(&tgt), abi_spent(&tgt), want_log)
     // What the driver routes through the private convention, per
@@ -92,7 +92,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
                                cur_ret: 0, post_label: ⁻1,
                                res_vreg: ⁻1, old_base: 0, inv_subject: ⁻1, tail_label: ⁻1, tail_fn: ⁻1, tail_np: 0, cur_fname: "", dlog: [],
                                argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1,
-                               olevel: olevel}
+                               olevel: olevel, contracts: contracts}
     let em : mut emit.Emit = emit.Emit{code: [], cf_pos: [], cf_target: [],
                              sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                              df_pos: [], df_off: [], labels: [],
@@ -272,7 +272,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 ¤ptrdiff = 75
+    let nrt : i64 ¤ptrdiff = 76
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -624,7 +624,7 @@ fn rt_nargs(id : i64) → i64:
     if id = emit.RT_SHA256INIT or id = emit.RT_SHA256BLK: return 1
     if id = emit.RT_SHA256FIN: return 2
     if id = emit.RT_SEGV: return 3
-    if id = emit.RT_SIGINIT: return 0
+    if id = emit.RT_SIGINIT or id = emit.RT_QSTOP: return 0
     if id = emit.RT_FREE: return 2
     if id = emit.RT_BIGFROM: return 1
     if id = emit.RT_BIGCMP: return 2

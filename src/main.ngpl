@@ -8,6 +8,7 @@ let elf := @import("elf")
 let imports := @import("imports")
 let incr_m := @import("incr")
 let lex := @import("lex")
+let lower := @import("lower")
 let parse := @import("parse")
 let sbom := @import("sbom")
 let sha256 := @import("sha256")
@@ -332,6 +333,13 @@ fn help():
                   "                             level is left off; without -O the level is 0\n
                   "\n
                   " The program that comes out:\n
+                  "      --contract-evaluation-semantic=SEMANTIC\n
+                  "                             What a @pre or @post that does not hold\n
+                  "                             does: ignore (the condition is not read at\n
+                  "                             all), observe (report it and carry on),\n
+                  "                             enforce (report it and stop, the default),\n
+                  "                             or quick_enforce (stop at once, reporting\n
+                  "                             nothing).  --contracts is the short spelling\n
                   "      --stack-size=SIZE      Reserve SIZE for its stack\n
                   "      --guard-size=SIZE      Leave SIZE unmapped below the stack, so\n
                   "                             running off the bottom is caught\n
@@ -371,6 +379,10 @@ struct Options:
     // there.  It reaches the phases that generate code, which ask
     // whether they are at a level rather than reading the number.
     optimize : i64
+    // what a violated @pre or @post does, which is a property of the
+    // run rather than of the source: one of lower's CT_* values, and
+    // CT_ENFORCE unless --contract-evaluation-semantic said otherwise
+    contracts : i64
     // where a name that says nothing about where it lives is looked
     // for, in the order --path named the directories
     path : str[]
@@ -471,7 +483,7 @@ fn compile_one(inputs : str[], outname : str, o : &Options) → u8:
     if o.incremental:
         incr ← incr_m.incr_prev(&ast, &toks, src, &prev, bom, fill,
                          tgt.machine.ord(), tgt.is64, tgt.eflags)
-    let first := codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, &incr)
+    let first := codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.contracts, o.want_log, &incr)
     // A rebuild that could not be laid over the old file says why and
     // is done again whole, which is always right.  The whole build
     // still leaves padding, so the build after it is incremental.
@@ -483,7 +495,7 @@ fn compile_one(inputs : str[], outname : str, o : &Options) → u8:
     else:
         // a borrow is written on a name, so the fresh schedule gets one
         let afresh : incr_m.Incr = incr_m.incr_first(fill)
-        codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, &afresh)
+        codegen.codegen(&ast, &toks, src, &chk, &tgt, o.stack_size, o.guard_size, o.optimize, o.contracts, o.want_log, &afresh)
     if o.incremental and o.want_log:
         if incr.mode ≠ 2:
             std.println("{}", "{\"decision\": \"incremental-first\", \"functions\": " ⧺ tokens.i64_str(@dropunit(#ast.fns)) ⧺ "}")
@@ -596,6 +608,7 @@ fn main() → u8:
     // what --path said, as it said it: a recipe is handed the whole
     // path rather than what the compiler made of it
     let path_raw : mut str = ""
+    let contracts : mut i64 = lower.CT_ENFORCE
     let i : mut i64 ¤ptrdiff = 0
     while i < #argv:
         let a := argv[i]
@@ -628,6 +641,17 @@ fn main() → u8:
                 stack_size ← elf.align_up(v, elf.PAGE)
             else:
                 guard_size ← elf.align_up(v, elf.PAGE)
+            i ← i + 1
+            continue
+        if opt_matches(a, "--contract-evaluation-semantic") or opt_matches(a, "--contracts"):
+            let which : str = if opt_matches(a, "--contracts"): "--contracts" else: "--contract-evaluation-semantic"
+            let cname : str = opt_value(a, which)
+            let cv : i64 = lower.contract_semantic(cname)
+            if cv = ⁻1:
+                std.println("""ngplc: '{}' is not one of the evaluation semantics; they are ignore,
+                             " observe, enforce and quick_enforce""", cname)
+                return 1
+            contracts ← cv
             i ← i + 1
             continue
         if opt_matches(a, "--path"):
@@ -710,6 +734,7 @@ fn main() → u8:
     let opts : Options = Options{tgt_index: tgt_index, stack_size: stack_size,
                                  guard_size: guard_size,
                                  optimize: opt_level ⌈ 0,
+                                 contracts: contracts,
                                  path: split_path(path_raw),
                                  want_tokens: want_tokens,
                                  want_ast: want_ast, want_log: want_log,
@@ -742,6 +767,7 @@ fn main() → u8:
         let one : Options = Options{tgt_index: ti, stack_size: opts.stack_size,
                                     guard_size: opts.guard_size,
                                     optimize: olv,
+                                    contracts: opts.contracts,
                                     path: opts.path,
                                     want_tokens: opts.want_tokens,
                                     want_ast: opts.want_ast, want_log: opts.want_log,

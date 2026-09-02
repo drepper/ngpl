@@ -1,5 +1,5 @@
 // `let v1 := v2` gives v1 an array of its own holding what v2 held, so
-// that what v2 does afterwards is v2's business.  `let v1 : & = v2`
+// that what v2 does afterwards is v2's business.  `let v1 := &v2`
 // asks for the other thing: one array under two names, which is why
 // v2 may not be changed while v1 still names it.
 //
@@ -42,7 +42,7 @@ fn main():
     show(held)
 
     // and the borrow, which names the array rather than copying it
-    let r : & = t.extra
+    let r := &t.extra
     show(r)
 
     // a borrow bound again is another name for that borrow, not a copy

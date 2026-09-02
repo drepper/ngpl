@@ -358,12 +358,12 @@ fn incr_lines_up(prev : &incr_m.Prev, incr : &incr_m.Incr, c : Compiled) → str
 @pre((stack_size % elf.PAGE ?? 1) = 0 and (guard_size % elf.PAGE ?? 1) = 0)
 @pre(olevel >= 0)
 fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt : &elf.Target,
-           stack_size : i64, guard_size : i64, olevel : i64, want_log : bool,
+           stack_size : i64, guard_size : i64, olevel : i64, contracts : i64, want_log : bool,
            incr : &incr_m.Incr) → Compiled:
     if tgt.id ≠ elf.Tgt.x64:
         // the shared driver and the target's instruction layer carry
         // every other architecture
-        return codegen_t.codegen_t(&a, &toks, src, &chk, &tgt, stack_size, guard_size, olevel, want_log, &incr)
+        return codegen_t.codegen_t(&a, &toks, src, &chk, &tgt, stack_size, guard_size, olevel, contracts, want_log, &incr)
     // Which functions nobody outside can call, and what that buys.  The
     // pioneer takes six arguments in registers and spends none of the
     // headroom past them yet -- rax is the memo and r10 and r11 are the
@@ -397,7 +397,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
                                cur_ret: 0, post_label: ⁻1,
                                res_vreg: ⁻1, old_base: 0, inv_subject: ⁻1, tail_label: ⁻1, tail_fn: ⁻1, tail_np: 0, cur_fname: "", dlog: [],
                                argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1,
-                               olevel: olevel}
+                               olevel: olevel, contracts: contracts}
     let em : mut emit.Emit = emit.Emit{code: [], cf_pos: [], cf_target: [],
                              sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                              df_pos: [], df_off: [], labels: [],
@@ -748,7 +748,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 ¤ptrdiff = 75
+    let nrt : i64 ¤ptrdiff = 76
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)

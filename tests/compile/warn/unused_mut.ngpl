@@ -1,0 +1,27 @@
+// A binding marked mut promises that it changes.  One that does not is
+// either a leftover from code that used to change it or a claim the
+// reader will trust and be wrong about, so it is said -- as a warning,
+// since the program is one and may be mid-edit.
+//
+// A method's bindings carry the same claim, and a parameter's too.
+
+struct Counter:
+    n : i64
+
+impl Counter:
+    fn peek(&self) → i64:
+        let kept : mut i64 = self.n
+        kept
+
+fn twice(n : mut i64) → i64:
+    n + n
+
+@start
+@impure
+fn main():
+    let once : mut i64 = 5
+    let c : Counter = Counter{n: 2}
+    // and one that is modified, which says nothing
+    let sum : mut i64 = 0
+    sum ← once + twice(3) + c.peek()
+    std.println("{}", sum)

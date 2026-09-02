@@ -1,0 +1,11 @@
+// A binding whose lifetime begins and ends at the statement that
+// declares it was written for a reason that is no longer there.  A
+// name beginning with _ says the binding is meant to go unread, which
+// is the one answer to this that is not a change to the code.
+
+@start
+@impure
+fn main():
+    let unread : i64 = 5
+    let _kept : i64 = 6
+    std.println("nothing read either of them")

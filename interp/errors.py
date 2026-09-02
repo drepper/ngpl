@@ -88,6 +88,17 @@ class Contract(enum.Enum):
     enforce = "enforce"
     quick_enforce = "quick-enforce"
 
+    @classmethod
+    def _missing_(cls, value):
+        """`quick_enforce` and `quick-enforce` name the one semantic.
+
+        The compiler's option spells it with an underscore, the way the
+        enumerator is written; both are accepted so a command line means
+        the same thing to either implementation."""
+        if value == "quick_enforce":
+            return cls.quick_enforce
+        return None
+
     def __str__(self) -> str:
         return self.value
 
@@ -108,7 +119,7 @@ def set_contract_semantic(name: str | Contract) -> None:
         _contract_semantic = name
         return
     for c in Contract:
-        if c.value == name:
+        if c.value == name or c.name == name:
             _contract_semantic = c
             return
     raise ValueError(f"unknown contract semantic: {name}")

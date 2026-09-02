@@ -1695,17 +1695,31 @@ class Parser:
                     self._cur()))
             self._eat(TokenType.PUNCT, ":")
         self._eat(TokenType.PUNCT, "=")
-        init_expr = self._parse_expr()
+        if borrow_ann and type_annotation is None:
+            raise coded(2020, ParseError(
+                "a borrow says what it borrows, not what it holds; write "
+                "'let x := &w'", self._cur()))
+        # `let v := &w` binds a borrow of the place w names rather than a
+        # value of its own.  It is the & of a call argument, written
+        # where the value would be.
+        if (type_annotation is None and is_const and not borrow_ann
+                and self._check(TokenType.OP) and self._cur().value == "&"):
+            amp = self._cur()
+            self.pos += 1
+            if self._check(TokenType.MUT):
+                raise coded(2020, ParseError(
+                    "a borrow is written &name; &mut is the parameter's side, "
+                    "and a binding does not change what it borrows",
+                    self._cur()))
+            init_expr = self._set_pos(BorrowExpr(self._parse_expr(), False), amp)
+        else:
+            init_expr = self._parse_expr()
         self._try_eat(TokenType.PUNCT, ";")
 
-        node = VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation, init_expr, is_const,
-                      unit_spec=unit_spec)
-        if borrow_ann and type_annotation is None:
-            # `let v : & = w` -- a borrow with the type left to w, the
-            # way ':=' leaves it.  There is no annotation to carry the
-            # & in, so the node says it itself.
-            node._borrow_ann = True
-        return self._set_pos(node, kw_tok)
+        return self._set_pos(
+            VarDef(name_tok.value,
+                   ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation,
+                   init_expr, is_const, unit_spec=unit_spec), kw_tok)
 
     # ------------------------------------------------------------------
     # Unit definition and spec parsing

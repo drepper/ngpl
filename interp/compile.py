@@ -35,7 +35,7 @@ from typing import Any
 from interp.value import DISCARD_NAME
 from interp.ast import (
     BinOp, ExprStmt, FuncCall, GetAttr, IfStmt, IntLit, MatchStmt, MethodCall,
-    ForEachStmt, ReturnStmt, Subscript, UnitExpr, VarDef, VarRef, WhileStmt,
+    BorrowExpr, ForEachStmt, ReturnStmt, Subscript, UnitExpr, VarDef, VarRef, WhileStmt,
 )
 
 # NGPLI_INTERPRET=1 turns compilation off, for an A/B against the walk.
@@ -242,6 +242,12 @@ class _Emit:
             if stmt.name == DISCARD_NAME:
                 self.expr(d, stmt.init_expr)
                 self.line(d, "result = none()")
+            elif isinstance(stmt.init_expr, BorrowExpr) and not stmt.init_expr.is_mut:
+                # `let v := &w` -- the place is read, the & says not to
+                # copy what it holds
+                self.line(d, f"ev._c_vardef_frozen({n})")
+                v = self.expr(d, stmt.init_expr.expr)
+                self.line(d, f"result = ev._c_vardef_bind({n}, {v}, True)")
             else:
                 self.line(d, f"ev._c_vardef_frozen({n})")
                 v = self.expr(d, stmt.init_expr)

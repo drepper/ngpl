@@ -1,0 +1,3 @@
+tests/compile/warn/bound_never_read.ngpl:9:9: warning[2421]: 'unread' is bound and never read; its lifetime begins and ends at the statement that declares it. Name it '_unread' if that is meant
+  9 |     let unread : i64 = 5
+    |         ^

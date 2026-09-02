@@ -5639,6 +5639,11 @@ class Evaluator:
             self.eval_expr(stmt.init_expr)
             return none()
         self._c_vardef_frozen(stmt)
+        # `let v := &w` binds a borrow of the place w names: the value
+        # is what the place holds, and the & says not to copy it.
+        if isinstance(stmt.init_expr, BorrowExpr) and not stmt.init_expr.is_mut:
+            return self._c_vardef_bind(
+                stmt, self.eval_expr(stmt.init_expr.expr), True)
         return self._c_vardef_bind(stmt, self.eval_expr(stmt.init_expr), borrow_ann)
 
     def _c_vardef_pre(self, stmt) -> bool:
@@ -5678,6 +5683,8 @@ class Evaluator:
         """The name at the root of a place -- `v`, `t.xs`, `t.xs[i]` --
         or None where the expression is not one.  A place is what may be
         borrowed, and what a binding of it takes a copy of."""
+        if isinstance(expr, BorrowExpr):
+            expr = expr.expr
         while isinstance(expr, (GetAttr, Subscript, SliceAccess)):
             if isinstance(expr, (Subscript, SliceAccess)):
                 # a slice already answers an array of its own, and a
@@ -5783,6 +5790,11 @@ class Evaluator:
                     f"'{stmt.name}' is written as a borrow, but what it is bound "
                     f"to is no borrowed answer; a borrow names a place or what "
                     f"a call lends"))
+            if origin in {rec[0] for recs in self._lend_ends.values()
+                          for rec in recs}:
+                raise coded(2436, TypeError(
+                    f"'{origin}' is already a borrow; bind it without the &, "
+                    f"which names what it names"))
             self._pending_lend = (origin, [origin], held.obj, "read")
             self._start_lend(stmt.name, stmt, origin, [origin], held.obj)
             self._pending_lend = None

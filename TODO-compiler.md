@@ -790,3 +790,32 @@ Tooling
     tests/output/listable_length_mismatch.status with it, and wants an @expect form for a
     stop, which there is not one of.  Until then the shared suite cannot hold the case,
     since it requires both to stop with the same status.
+
+[x] --contract-evaluation-semantic in the compiler.  ngplc always wrote the checks and always
+    stopped on a violation; what a violation does is a property of the run, so it is now
+    chosen at the build: ignore writes no check at all, observe says it and carries on,
+    enforce says it and stops with 64, quick_enforce stops at once saying nothing.  The four
+    statuses are the interpreter's own under the same four, which is what makes them one
+    language rather than two.  quick_enforce took a runtime routine, RT_QSTOP, which is
+    kill(getpid(), SIGABRT) and nothing else.  --contracts is the short spelling in both, and
+    quick_enforce and quick-enforce name the one semantic.
+
+    tests/compile/contracts/ holds one program compiled four times, each run held to its
+    status, whether it said anything and whether it carried on.
+
+    The wording still differs: ngplc says "precondition of 'f' does not hold" where the
+    interpreter says "f: a precondition does not hold, so the caller did not keep to what f
+    says it needs".  t98_backtrace.err.expected pins ngplc's, and the two are not compared
+    anywhere, so this is a divergence that no test would catch.
+
+[x] a pin for what ngplc warns.  tests/compile/warn/ is refuse/ for warnings: each pair is a
+    program that compiles and what was said while it did.  Two to begin with -- the unused
+    mut, in a method and in a parameter, and the binding nothing reads, which is ngplc's own
+    and has no counterpart in the interpreter.
+
+[x] `let v := &w` replaces `let v : & = w`.  A borrow says what it borrows, so it is written
+    where the value would be: the parser takes a & before a place in a `:=` binding and
+    wraps it in the node a call argument already uses, and the checker's Nk.ref branch --
+    which used to refuse a borrow standing where a value would -- answers what the place
+    holds.  `&r`, where r is itself a borrow, is refused: both name the one place, and
+    `let v := r` is how a second name for it is written.

@@ -1,0 +1,21 @@
+// One program, four runs.  What a violated condition does is a property
+// of the run rather than of the source, so the same program is compiled
+// under each of the four evaluation semantics and each is held to what
+// it promises: ignore reads nothing, observe says it and carries on,
+// enforce says it and stops, quick_enforce stops saying nothing.
+//
+// The condition cannot be settled before the program runs -- k is read
+// from a binding the compiler follows but does not fold -- so the check
+// is the one the compiled code makes rather than one the checker made.
+
+@pre(n > 0)
+fn step(n : i64) → i64:
+    n + 1
+
+@start
+@impure
+fn main():
+    let k : mut i64 = 3
+    std.println("{}", step(k))
+    k ← 0 - k
+    std.println("{}", step(k))

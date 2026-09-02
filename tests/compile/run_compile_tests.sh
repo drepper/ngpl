@@ -506,6 +506,90 @@ for r in "$testdir"/refuse/*.ngpl; do
     fi
 done
 
+# ---------------------------------------------------------------------------
+# What --contract-evaluation-semantic asks for.
+#
+# One program, four runs: what a violated condition does is a property
+# of the run rather than of the source, so the same source is compiled
+# under each semantic and each is held to what it promises.  The
+# statuses are the ones the interpreter leaves with under the same four,
+# which is what makes them one language rather than two.
+# ---------------------------------------------------------------------------
+echo
+for c in "$testdir"/contracts/*.ngpl; do
+    [ -e "$c" ] || break
+    name=$(basename "$c" .ngpl)
+    for spec in "ignore 0 quiet carries-on" "observe 0 said carries-on" \
+                "enforce 64 said stops" "quick_enforce 134 quiet stops"; do
+        set -- $spec
+        sem=$1; want_rc=$2; want_said=$3; want_run=$4
+        ( cd "$topdir" && ngplc "--contract-evaluation-semantic=$sem" \
+              "tests/compile/contracts/$name.ngpl" -o "$workdir/$name.$sem.bin" ) \
+            > "$workdir/$name.$sem.build" 2>&1
+        if [ $? -ne 0 ]; then
+            echo "FAIL contracts/$name ($sem): the compiler refused it"
+            sed 's/^/    /' "$workdir/$name.$sem.build" | head -5
+            fail=$((fail + 1))
+            continue
+        fi
+        "$workdir/$name.$sem.bin" > "$workdir/$name.$sem.out" \
+            2> "$workdir/$name.$sem.err"
+        rc=$?
+        said=quiet
+        grep -q "does not hold" "$workdir/$name.$sem.err" && said=said
+        ran=stops
+        [ "$(wc -l < "$workdir/$name.$sem.out")" -gt 1 ] && ran=carries-on
+        if [ "$rc" != "$want_rc" ] || [ "$said" != "$want_said" ] \
+                || [ "$ran" != "$want_run" ]; then
+            echo "FAIL contracts/$name ($sem): status $rc, $said, $ran;" \
+                 "wanted $want_rc, $want_said, $want_run"
+            fail=$((fail + 1))
+        else
+            echo "ok   contracts/$name ($sem)"
+            pass=$((pass + 1))
+        fi
+    done
+done
+
+# ---------------------------------------------------------------------------
+# What ngplc warns about, and in what words.
+#
+# A warning is a promise the way a refusal is: it says this program is
+# one, and that something in it is worth saying.  Nothing else here
+# holds the compiler to one -- a tNN test compares what a program
+# writes, and refuse/ takes only what is refused -- so a warning that
+# stopped being drawn, or started saying something else, would pass
+# every other check in this file.
+#
+# Each pair is a program that compiles and what was said while it did.
+# ---------------------------------------------------------------------------
+echo
+for w in "$testdir"/warn/*.ngpl; do
+    [ -e "$w" ] || break
+    name=$(basename "$w" .ngpl)
+    rel="tests/compile/warn/$name.ngpl"
+    ( cd "$topdir" && ngplc "$rel" -o "$workdir/$name.bin" ) \
+        > "$workdir/$name.raw" 2>&1
+    rc=$?
+    # As in refuse/ above: under --compiler=interp what the interpreter
+    # says about src/ comes first, and what is pinned here begins at the
+    # first line that names the file under test.
+    sed -n "\|$rel|,\$p" "$workdir/$name.raw" > "$workdir/$name.warn"
+    if [ $rc -ne 0 ]; then
+        echo "FAIL warn/$name: the compiler refused it"
+        sed 's/^/    /' "$workdir/$name.raw" | head -5
+        fail=$((fail + 1))
+    elif ! diff -u "$testdir/warn/$name.expected" "$workdir/$name.warn" \
+            > "$workdir/$name.wdiff"; then
+        echo "FAIL warn/$name: warned, but not in those words"
+        sed 's/^/    /' "$workdir/$name.wdiff" | head -8
+        fail=$((fail + 1))
+    else
+        echo "ok   warn/$name"
+        pass=$((pass + 1))
+    fi
+done
+
 # DIAG_CODES is what @expect is held to, and it is a hand-written
 # list beside hand-written derrc/dwarn calls.  A number drawn but not
 # listed is an expectation that would quietly pass; a number listed but

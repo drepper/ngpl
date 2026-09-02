@@ -225,6 +225,12 @@ let RT_AEXT : i64 = ⁻74
 @export
 let RT_EPRINTI : i64 = ⁻75
 
+// () → the program, stopped by SIGABRT and saying nothing.  What
+// --contract-evaluation-semantic=quick_enforce means by a violation:
+// no message to assemble, no backtrace to walk, the process aborted.
+@export
+let RT_QSTOP : i64 = ⁻76
+
 // ---------------------------------------------------------------------------
 // What the allocator keeps
 // ---------------------------------------------------------------------------
@@ -1055,7 +1061,8 @@ let RT_NAMES : str[] = [
     "RT_FIDP",
     "RT_GRADE",
     "RT_AEXT",
-    "RT_EPRINTI"]
+    "RT_EPRINTI",
+    "RT_QSTOP"]
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
 // table read, one shift and one mask instead of a ladder of compares.

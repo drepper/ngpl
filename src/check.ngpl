@@ -1285,8 +1285,21 @@ impl Checker:
             ast.Nk.mcall:
                 self.check_mcall(id, tok, na, nb × 1¤"aextra", false)
             ast.Nk.ref:
-                self.derr(tok, "a borrow is an argument, not a value of its own")
-                self.set_type(id, types.TY_I64)
+                // `let v := &w` is the one place a borrow stands where
+                // a value would: what it answers is what the place
+                // holds, and bind_lend makes the lending of it follow.
+                self.check_expr(na, types.TY_UNIT)
+                let rt9 : i64 = types.ty_strip_ref(self.ty_of(na))
+                let rs9 : i64 = self.base_slot(na)
+                if rs9 = ⁻1:
+                    self.derr(tok, "a borrow names a place: a binding, a field of one, or an element of one")
+                elif self.sborrow[rs9 × 1¤ptrdiff] ≠ 0:
+                    // A borrow of a borrow says nothing the first one
+                    // does not: both name the one place, and the second
+                    // would only be harder to see the end of.  `let r2
+                    // := r1` is how a second name for it is written.
+                    self.derr(tok, "'" ⧺ self.snames[rs9 × 1¤ptrdiff] ⧺ "' is already a borrow; bind it without the &, which names what it names")
+                self.set_type(id, rt9)
             ast.Nk.neg:
                 self.check_expr(na, want)
                 let t : i64 = self.ty_of(na)
@@ -4885,7 +4898,7 @@ impl Checker:
     // and `m`, and a walk over something freshly made borrows nothing
     // that has a name to lose.
     fn base_slot(&self, e : i64) → i64:
-        if self.kind_of(e) = ast.Nk.field or self.kind_of(e) = ast.Nk.index:
+        if self.kind_of(e) = ast.Nk.field or self.kind_of(e) = ast.Nk.index or self.kind_of(e) = ast.Nk.ref:
             return self.base_slot(self.a.na[e × 1¤ptrdiff])
         if self.kind_of(e) ≠ ast.Nk.var:
             return ⁻1
@@ -6581,7 +6594,11 @@ impl Checker:
         foreach i := 0…np:
             let ptok : i64 = self.a.extra[d.params_off + 1 + i × 2]
             let pty : i64 = self.a.extra[d.params_off + 2 + i × 2]
+            // said while these are declared, so a scope entry knows a
+            // parameter from a binding and says so in its own words
+            self.in_params ← true
             _ ← self.declare(ptok, pty, if types.ty_ref_kind(pty) = 2 or types.ty_ref_kind(pty) = 3: 1 else: 0)
+            self.in_params ← false
         assert(self.nslots >= @dropunit(np), "every parameter took a slot")
         if np > 12:
             self.derr(d.tok, "more than twelve parameters is not core-2 yet")

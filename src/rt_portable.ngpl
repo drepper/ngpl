@@ -272,6 +272,13 @@ impl RtB:
         d
 
     // the kernel; up to six arguments from slots
+    fn sys0(&mut self, id : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(0)
+        self.o(ir.Ir.sysc, id, off, 0, d, 0)
+        d
+
     fn sys1(&mut self, id : i64, a0 : i64) → i64:
         let d : i64 = self.t()
         let off : i64 = @dropunit(#self.extra)
@@ -433,6 +440,17 @@ fn rt_build(id : i64, tg : &elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         b.jmp(ltop)
         b.lab(lend)
         b.retn()
+        return rtb_fn(b)
+    if id = emit.RT_QSTOP:
+        // (): the process, aborted.  Nothing is said -- not which
+        // condition, nor that a condition was involved -- which is the
+        // whole of what makes quick_enforce quick.
+        let b : mut RtB = rtb(0)
+        let pid : i64 = b.sys0(machine.Sc.getpid.ord())
+        _ ← b.sys2(machine.Sc.kill.ord(), pid, b.cst(6))
+        let spin0 : i64 = b.l()
+        b.lab(spin0)
+        b.jmp(spin0)
         return rtb_fn(b)
     if id = emit.RT_ABORT:
         // (buf, len): say it, say how the program got here, then leave

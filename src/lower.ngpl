@@ -79,6 +79,8 @@ struct Lower:
     // opt_at_least below, so an optimization says which level it
     // belongs to and the levels stay a matter of one comparison.
     olevel : i64
+    // what a violated condition does: one of CT_*
+    contracts : i64
 
 @post(r: (r & 255) >= 8 and (r & 255) <= 64)
 fn width_of(t : i64) → i64:
@@ -654,6 +656,13 @@ impl Lower:
     fn iconst(&mut self, v : i64) → i64:
         let d : i64 = self.tmp()
         self.ir(ir.Ir.const, v, 0, 0, d, 0)
+        d
+
+    fn rt0(&mut self, target : i64) → i64:
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(0)
+        let d : i64 = self.tmp()
+        self.ir(ir.Ir.call, target, off, 0, d, 0)
         d
 
     fn rt1(&mut self, target : i64, a0 : i64) → i64:
@@ -4104,6 +4113,44 @@ fn lower_stub_fn(lw : &mut Lower, np : i64) → ir.IrFn:
     ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: [], nvregs: lw.tmax, nlabels: 0, fbytes: lw.fbytes}
 
+// What a violated condition does, which is a property of the run and
+// not of the source: --contract-evaluation-semantic says which.  The
+// four are C++26's evaluation semantics, and the interpreter's.
+@export
+let CT_IGNORE : i64 = 0
+@export
+let CT_OBSERVE : i64 = 1
+@export
+let CT_ENFORCE : i64 = 2
+@export
+let CT_QUICK : i64 = 3
+
+// The name of one, as the command line writes it, or ⁻1.
+@export
+fn contract_semantic(name : str) → i64:
+    if name = "ignore": return CT_IGNORE
+    if name = "observe": return CT_OBSERVE
+    if name = "enforce": return CT_ENFORCE
+    if name = "quick_enforce" or name = "quick-enforce": return CT_QUICK
+    ⁻1
+
+// What a violated condition does, emitted where the condition failed.
+// enforce says which one and stops; observe says it and goes on as
+// though it held; quick_enforce stops at once and says nothing, which
+// is the whole of what makes it quick.  ignore never reaches here --
+// the condition is not read at all.
+// @pre lw.contracts ≠ CT_IGNORE
+fn lower_violation(lw : &mut Lower, which : str, name : str):
+    if lw.contracts = CT_QUICK:
+        _ ← lw.rt0(emit.RT_QSTOP)
+        return
+    let m : i64 = lw.intern(which ⧺ " of '" ⧺ name ⧺ "' does not hold\n")
+    if lw.contracts = CT_OBSERVE:
+        lw.ir(ir.Ir.eprints, lw.intern("warning: "), 0, 0, 0, 0)
+        lw.ir(ir.Ir.eprints, m, 0, 0, 0, 0)
+        return
+    lw.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+
 @export
 fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrFn:
     let d := a.fns[f × 1¤ptrdiff]
@@ -4164,7 +4211,7 @@ fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrF
     if not sized_ret and d.post_off = ⁻1:
         lw.tail_label ← lw.label()
         lw.ir(ir.Ir.label, lw.tail_label, 0, 0, 0, 0)
-    if d.pre_off ≠ ⁻1:
+    if d.pre_off ≠ ⁻1 and lw.contracts ≠ CT_IGNORE:
         let n : i64 ¤ptrdiff = a.extra[d.pre_off] × 1¤ptrdiff
         foreach j := 0…n:
             lw.tnext ← lw.tbase
@@ -4172,8 +4219,7 @@ fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrF
             let cv : i64 = lw.lower_expr(c)
             let lok : i64 = lw.label()
             lw.ir(ir.Ir.jnz, cv, lok, 0, 0, 0)
-            let m : i64 = lw.intern("precondition of '" ⧺ d.name ⧺ "' does not hold\n")
-            lw.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+            lower_violation(&lw, "precondition", d.name)
             lw.ir(ir.Ir.label, lok, 0, 0, 0, 0)
     // What @old says is what the call began with, so it is read here:
     // after the preconditions, before a statement of the body.
@@ -4185,7 +4231,7 @@ fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrF
             let ov : i64 = lw.lower_expr(a.na[on × 1¤ptrdiff])
             lw.ir(ir.Ir.mov, ov, 0, 0, obase + a.nb[on × 1¤ptrdiff], 0)
         lw.tnext ← lw.tbase
-    if d.post_off ≠ ⁻1 and d.ret ≠ types.TY_UNIT:
+    if d.post_off ≠ ⁻1 and d.ret ≠ types.TY_UNIT and lw.contracts ≠ CT_IGNORE:
         lw.post_label ← lw.label()
         // the checker gave the result's name the slot after the
         // parameters, so the value is put where the conditions read it
@@ -4202,8 +4248,7 @@ fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrF
             let cv : i64 = lw.lower_expr(c)
             let lok : i64 = lw.label()
             lw.ir(ir.Ir.jnz, cv, lok, 0, 0, 0)
-            let m : i64 = lw.intern("postcondition of '" ⧺ d.name ⧺ "' does not hold\n")
-            lw.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+            lower_violation(&lw, "postcondition", d.name)
             lw.ir(ir.Ir.label, lok, 0, 0, 0, 0)
         lw.ir(ir.Ir.ret, lw.res_vreg, 0, 0, 0, 0)
     // the columns, cut whole: a slice is one operation where a loop

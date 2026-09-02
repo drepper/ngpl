@@ -315,15 +315,17 @@ def _parse_args() -> argparse.Namespace:
                             "and whose message did not: one JSON line per "
                             "drift, enough to put the new wording in place "
                             "with tools/update_expectations.py")
-    parser.add_argument("--contracts", metavar="SEMANTIC",
-                       choices=CONTRACT_SEMANTICS, default="enforce",
+    parser.add_argument("--contract-evaluation-semantic", "--contracts",
+                       dest="contracts", metavar="SEMANTIC",
+                       choices=CONTRACT_SEMANTICS + ("quick_enforce",),
+                       default="enforce",
                        help="what a @pre or @post that does not hold does: "
                             "ignore (the condition is not read at all), "
                             "observe (report it and carry on), enforce "
                             "(report it and stop, the default), or "
-                            "quick-enforce (stop at once, reporting "
+                            "quick_enforce (stop at once, reporting "
                             "nothing).  The four are C++26's evaluation "
-                            "semantics")
+                            "semantics; --contracts is the short spelling")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
     parser.add_argument("--timeout", metavar="SECONDS", type=float,

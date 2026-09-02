@@ -1722,6 +1722,22 @@ impl Parser:
         else:
             self.err("the statement has ended but the line has more on it")
 
+    // `&w` where a value would stand: the place w names, wrapped in the
+    // borrow node a call argument uses.  A place is a name, a field of
+    // one or an element of one -- what may be lent, and what a borrow
+    // may root itself in.
+    fn parse_borrow_place(&mut self) → i64:
+        let at : i64 = self.pos
+        self.pos ← self.pos + 1
+        if self.peek() = tokens.Tk.kw_mut:
+            self.err("""a borrow is written &name; &mut is the parameter's side, and a
+                      " binding does not change what it borrows""")
+            return 0
+        let v : i64 = self.parse_primary()
+        if self.failed():
+            return 0
+        self.mknode(ast.Nk.ref, at, v, 1, 0)
+
     fn parse_let(&mut self) → i64:
         self.pos ← self.pos + 1
         if self.peek() = tokens.Tk.lpar:
@@ -1741,9 +1757,17 @@ impl Parser:
                 self.err("a unit measures a stated type; write 'let x : i64 ¤ptrdiff = …'")
                 return 0
             self.pos ← self.pos + 1
-            let init0 : i64 = self.parse_expr()
+            // `let v := &w` binds a borrow of the place w names rather
+            // than a value of its own.  It is the & of a call argument,
+            // written where the value would be: what follows is a
+            // place, and a place is what may be lent.
+            let bl : bool = self.peek() = tokens.Tk.band
+            let init0 : i64 = if bl: self.parse_borrow_place() else: self.parse_expr()
             self.end_stmt()
-            return self.mknode(ast.Nk.st_let, name_tok, init0, 0, ⁻1)
+            let lid0 : i64 = self.mknode(ast.Nk.st_let, name_tok, init0, 0, ⁻1)
+            if bl:
+                self.blets.push(lid0)
+            return lid0
         _ ← self.eat(tokens.Tk.colon, "':' and the type of the binding")
         let is_mut : mut i64 = 0
         if self.peek() = tokens.Tk.kw_mut:
@@ -1776,19 +1800,10 @@ impl Parser:
         let is_blet : bool = self.peek() = tokens.Tk.band
         if is_blet:
             self.pos ← self.pos + 1
-        // `let v : & = w` -- a borrow of what w names, with the type
-        // left to w, the way ':=' leaves it.  What is borrowed is a
-        // place, and a place already has a type worth reading.
         if is_blet and self.peek() = tokens.Tk.eq:
-            if u ≠ types.UNIT_NONE:
-                self.err("a unit measures a stated type; write 'let x : &i64 ¤ptrdiff = …'")
-                return 0
-            self.pos ← self.pos + 1
-            let init3 : i64 = self.parse_expr()
-            self.end_stmt()
-            let bid : i64 = self.mknode(ast.Nk.st_let, name_tok, init3, is_mut, ⁻1)
-            self.blets.push(bid)
-            return bid
+            self.err("""a borrow says what it borrows, not what it holds; write
+                      " 'let x := &w'""")
+            return 0
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ types.UNIT_NONE:

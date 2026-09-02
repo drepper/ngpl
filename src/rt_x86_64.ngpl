@@ -2024,6 +2024,9 @@ fn emit_runtime(em : &mut emit.Emit, tg : &elf.Target, lw : &mut lower.Lower, al
     em.rt_begin(emit.RT_EPRINTI)
     arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_EPRINTI, &tg, &lw), 1, lw.strs, 0, [])
 
+    em.rt_begin(emit.RT_QSTOP)
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_QSTOP, &tg, &lw), 0, lw.strs, 0, [])
+
     em.rt_begin(emit.RT_GRADE)
     arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_GRADE, &tg, &lw), 2, lw.strs, 0, [])
 
