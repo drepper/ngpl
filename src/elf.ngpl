@@ -170,12 +170,12 @@ fn target_index(name : str) → i64:
     ⁻1
 
 @export
+fn target_name(t : Target) → str:
+    t.name
+
+@export
 fn target_names() → str:
-    let ts := targets()
-    let out : mut str = ""
-    foreach i := 0…#ts:
-        out ← out ⧺ (if i = 0: "" else: ", ") ⧺ ts[i].name
-    out
+    ", " ⋈ (target_name ¨ targets())
 
 @export
 let IMAGE_BASE : i64 = 4194304

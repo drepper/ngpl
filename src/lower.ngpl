@@ -1140,6 +1140,15 @@ impl Lower:
             let kv2 : i64 = self.lower_expr(na)
             let hv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
+            if types.ty_is_arr(types.ty_strip_ref(self.tof(nb))):
+                // where it sits, if anywhere: the boxed position or the
+                // null, and being there is the null not answered
+                let sf : i64 = if self.elem_of(types.ty_strip_ref(self.tof(nb))) = types.TY_STR: 1 else: 0
+                let at : i64 = self.tmp()
+                self.ir(ir.Ir.afind, hv, kv2, sf, at, 0)
+                let z : i64 = self.iconst(0)
+                self.ir(ir.Ir.cne, at, z, 0, d, 64)
+                return d
             self.ir(ir.Ir.helem, hv, kv2, 0, d, 0)
             return d
         if k = ast.Nk.ccat:

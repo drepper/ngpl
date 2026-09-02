@@ -578,6 +578,21 @@ impl Checker:
 
     // whether the expression builds a struct of its own rather than
     // naming one that already lives somewhere
+    // Whether an expression answers an array of its own rather than
+    // naming one something else holds.  A literal, a call, and the
+    // operations that build a fresh array as they go: reshape, join,
+    // slice, stepped slice, each, where, and a gather.
+    fn makes_fresh_array(&self, e : i64) → bool:
+        match self.kind_of(e):
+            ast.Nk.arrlit, ast.Nk.call, ast.Nk.mcall, ast.Nk.reshape, ast.Nk.ccat, ast.Nk.slice, ast.Nk.sslice, ast.Nk.each, ast.Nk.where:
+                true
+            ast.Nk.index:
+                // a subscript by an array of indices is a gather, and
+                // what it answers is fresh; one by a number is not
+                types.ty_is_arr(types.ty_strip_ref(self.ty_of(self.a.nb[e × 1¤ptrdiff])))
+            _:
+                false
+
     fn is_fresh_struct(&self, id : i64) → bool:
         let k : ast.Nk = self.kind_of(id)
         k = ast.Nk.slit or k = ast.Nk.call or k = ast.Nk.mcall
@@ -1631,9 +1646,19 @@ impl Checker:
                 self.set_type(id, types.TY_BOOL)
             ast.Nk.elemof:
                 self.check_expr(nb, types.TY_UNIT)
-                let ht : i64 = self.ty_of(nb)
+                let ht : i64 = types.ty_strip_ref(self.ty_of(nb))
+                if types.ty_is_arr(ht):
+                    // one of the array's elements, by value
+                    let het : i64 = self.elem_of(ht)
+                    self.check_expr(na, het)
+                    if self.is_open(self.ty_of(na)):
+                        self.adopt(na, het)
+                    elif not self.try_fit(na, het):
+                        self.derr(tok, "the array holds " ⧺ self.tn(het) ⧺ ", and what is looked for is " ⧺ self.tn(self.ty_of(na)))
+                    self.set_type(id, types.TY_BOOL)
+                    return
                 if not types.ty_is_hash(ht):
-                    self.derr(tok, "∊ asks a dictionary in core-2; this is " ⧺ self.tn(ht))
+                    self.derr(tok, "∊ asks a dictionary or an array in core-2; this is " ⧺ self.tn(ht))
                     self.check_expr(na, types.TY_UNIT)
                     self.set_type(id, types.TY_BOOL)
                     return
@@ -2344,8 +2369,13 @@ impl Checker:
         if self.kind_of(e) ≠ ast.Nk.var:
             self.derr(tok, "in core-2 what stands before " ⧺ glyph ⧺ " is a function's name")
             return ⁻1
-        let name := self.text(self.a.ntok[e × 1¤ptrdiff])
-        let f : i64 = self.fn_index_here(name)
+        let bare := self.text(self.a.ntok[e × 1¤ptrdiff])
+        // a name asked of a module: `m.f ¨ v`, the whole name being the
+        // module's and its own.  The parser has already held it to what
+        // the module exports.
+        let qv : i64 = self.a.nc[e × 1¤ptrdiff]
+        let name : str = if qv > 0: self.a.qmods[(qv - 1) × 1¤ptrdiff] ⧺ "." ⧺ bare else: bare
+        let f : i64 = if qv > 0: self.fn_in(name) else: self.fn_index_here(name)
         if f = ⁻1:
             self.derr(tok, "'" ⧺ name ⧺ "' is not a function this program defines, and " ⧺ glyph ⧺ " asks one")
         f
@@ -4952,10 +4982,7 @@ impl Checker:
         k ≠ ast.Nk.var and k ≠ ast.Nk.field and k ≠ ast.Nk.index and k ≠ ast.Nk.ref
 
     fn is_blet(&self, id : i64) → bool:
-        foreach b := self.a.blets:
-            if b = id:
-                return true
-        false
+        id ∊ self.a.blets
 
     // The let just checked: where it binds a borrowed answer, its
     // origins are lent to it until its last use.
@@ -5563,12 +5590,15 @@ impl Checker:
                     self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
                 if types.ty_is_hash(types.ty_strip_ref(st)):
                     self.derr(tok, "a core-2 dictionary is built once and changed in place")
-                if (types.ty_is_arr(types.ty_strip_ref(st)) or types.ty_is_mat(types.ty_strip_ref(st))) and not (self.kind_of(na) = ast.Nk.arrlit or self.kind_of(na) = ast.Nk.call or self.kind_of(na) = ast.Nk.mcall or self.kind_of(na) = ast.Nk.reshape or self.kind_of(na) = ast.Nk.ccat or self.kind_of(na) = ast.Nk.slice):
-                    self.derr(tok, """a mut array binding takes a fresh array; borrow with &mut to
-                                    " change a shared one""")
                 if self.smut[s × 1¤ptrdiff] = 0:
                     self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
                 self.check_expr(na, types.ty_strip_ref(st))
+                // asked after the value is checked: a subscript is a
+                // gather where its index is an array, which is what the
+                // index's own type says and nothing says before it
+                if (types.ty_is_arr(types.ty_strip_ref(st)) or types.ty_is_mat(types.ty_strip_ref(st))) and not self.makes_fresh_array(na):
+                    self.derr(tok, """a mut array binding takes a fresh array; borrow with &mut to
+                                    " change a shared one""")
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, types.ty_strip_ref(st))
                 elif not self.try_fit(na, types.ty_strip_ref(st)):
@@ -6537,20 +6567,13 @@ impl Checker:
         foreach w := 0…want:
             let wc : i64 = a.extra[(off + 2 + 2 × w) × 1¤ptrdiff]
             if wc ≠ diag.DIAG_NONE and draws_code(wc):
-                let got : mut bool = false
-                foreach g := drew:
-                    got ← got or g = wc
-                if not got:
+                if not (wc ∊ drew):
                     self.derr(f.tok, "'" ⧺ f.name ⧺ "' says it draws " ⧺ tokens.i64_str(wc) ⧺ " and this compiler drew no such thing; the interpreter draws it, so leaving it out is a warning this implementation is missing")
 
 @export
 fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
-    let fnames : mut str[] = []
-    foreach f := a.fns:
-        fnames.push(f.name)
-    let gnames : mut str[] = []
-    foreach g := a.globals:
-        gnames.push(g.name)
+    let fnames : str[] = ast.fn_name ¨ a.fns
+    let gnames : str[] = ast.global_name ¨ a.globals
     let nnodes : i64 ¤ptrdiff = #a.nkind
     let ntype : mut i64[] = []
     let nslot : mut i64[] = []
@@ -6571,9 +6594,7 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
         nlend.push(0)
         nmove.push(0)
         nfree.push(0)
-    let snm : mut str[] = []
-    foreach sd := a.structs:
-        snm.push(sd.name)
+    let snm : str[] = ast.struct_name ¨ a.structs
     // the tables a name is found in, each holding the first entry of
     // that name; a bare name and a whole one are two tables because a
     // module's f and another's are one bare name and two whole ones

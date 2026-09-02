@@ -174,6 +174,10 @@ Attempt 3 grows core-1 to **core-2** with structs:
   direct call or the operator's own instruction per turn, so nothing
   new reaches the backends.  An empty array without a starting value
   stops the program, as the interpreter's does.
+- **∊ over an array**: whether a value is one of its elements, which
+  is `⍳` with the position thrown away -- the walk that returned true
+  on a match, said in one operation.  The dictionary form it already
+  had is unchanged.
 - **where, gather, amend**: `⍸ b` is the indices at which an array
   of truth values is true; `v[ix]` with an array of indices is the
   elements at each of them, a fresh array; `v[ix] ← w` stores at each,

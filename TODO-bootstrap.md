@@ -351,3 +351,16 @@ Outstanding
     on all six machines; the compiler orders numbers, the interpreter strings too.  Spec
     "Stepped Slices" and "Grade and Join"; tests/compile/t87_stepped_slice, t88_grade_join
     and refuse/{join_parts,grade_strings,sslice_string}.
+
+[x] `∊` asks an array whether a value is one of its elements, as the spec has it and as it
+    already asked a dictionary; the compiler had only the dictionary form.  It lowers to
+    the find the language already has, with the position thrown away.
+    tests/compile/t89_elem_array.
+
+[x] the compiler's own loops, written with the operators it now reads: the definitions'
+    names are `ast.fn_name ¨ a.fns` and its kin, `is_blet` and the expectation check are
+    `∊`, the backtrace filters are `of[⍸ (bt_present ¨ of)]`, the fresh-function count is
+    `#(⍸ incr.fresh)`, the target list is `", " ⋈ (target_name ¨ targets())`, and the
+    incremental build's insertion sort is `rt_order[⍋ key]`.  A qualified name may stand
+    before ¨ and ⌿, and an array a fresh operation answers may be bound to a mut binding --
+    both wanted by those rewrites and both refused before.

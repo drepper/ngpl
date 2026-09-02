@@ -417,22 +417,18 @@ fn incr_regenerate(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
 // reached has no address, so it is left out of the table rather than
 // given one -- these two keep the names and the offsets in step while
 // dropping the same entries from each.
+// whether an offset is one: ⁻1 is the mark of a routine left out
+fn bt_present(v : i64) → bool:
+    v ≠ ⁻1
+
 @export
 fn bt_keep_offs(of : i64[]) → i64[]:
-    let out : mut i64[] = []
-    foreach v := of:
-        if v ≠ ⁻1:
-            out.push(v)
-    out
+    of[⍸ (bt_present ¨ of)]
 
 @export
 @pre(#nm = #of)
 fn bt_keep_names(nm : str[], of : i64[]) → str[]:
-    let out : mut str[] = []
-    foreach i := 0¤ptrdiff…#of:
-        if of[i] ≠ ⁻1:
-            out.push(nm[i])
-    out
+    nm[⍸ (bt_present ¨ of)]
 
 // whether a name is a method's, which is written with the struct's
 fn name_holds_dot(nm : str) → bool:
@@ -602,10 +598,7 @@ fn incr_prev(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
 // driver prints about what it decided.
 @export
 fn incr_fresh_count(incr : &Incr) → i64:
-    let n : mut i64 = 0
-    foreach v := incr.fresh:
-        n ← n + (if v: 1 else: 0)
-    n
+    @dropunit(#(⍸ incr.fresh))
 
 impl Incr:
     // Where a symbol's code must begin, or ⁻1 where the previous build

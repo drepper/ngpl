@@ -147,6 +147,20 @@ enum Sb : u8:
     hdigest = 25    // std.hash.<alg>.digest(x) → the digest of x, a u8[]
     hstart = 26    // std.hash.<alg>.start() → a handle to feed
 
+// Each definition's name, as a function of the definition: what ¨
+// asks of an array of them to answer the array of names
+@export
+fn fn_name(f : FnDef) → str:
+    f.name
+
+@export
+fn global_name(g : GlobalDef) → str:
+    g.name
+
+@export
+fn struct_name(s : SDef) → str:
+    s.name
+
 // What the reader worked out about the modules, as the parser reads
 // it.  A module is a file and everything it reads in plainly; a bound
 // import starts another, and `bname` reaches it from `bowner`.

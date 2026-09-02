@@ -9,10 +9,7 @@ let types := @import("types")
 // printer wants where a type is one of them.  Built on the spot: this
 // is the tree dump, which runs when someone asks to see it.
 fn snames_of(a : &ast.Ast) → str[]:
-    let out : mut str[] = []
-    foreach sd := a.structs:
-        out.push(sd.name)
-    out
+    ast.struct_name ¨ a.structs
 
 
 // ===========================================================================

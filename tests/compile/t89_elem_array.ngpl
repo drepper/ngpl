@@ -1,0 +1,17 @@
+// ∊ asks an array whether a value is one of its elements, as it asks a
+// dictionary whether a key is one of its keys.  It is ⍳ with the
+// position thrown away, and it is what a walk that returned true on a
+// match used to say.
+
+@start
+@impure
+fn main():
+    let v : i64[] = [3, 5, 7]
+    std.println("{} {}", 5 ∊ v, 6 ∊ v)
+    let names : str[] = ["ast", "check", "lower"]
+    std.println("{} {}", "check" ∊ names, "parse" ∊ names)
+    let none : i64[] = []
+    std.println("{}", 1 ∊ none)
+    // and the dictionary it already asked
+    let d : std.dict(str, i64) = ⸨"a": 1⸩
+    std.println("{} {}", "a" ∊ d, "b" ∊ d)

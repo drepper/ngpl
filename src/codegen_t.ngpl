@@ -304,17 +304,9 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
             key.push(if rt_at < 0: 1073741824 + @dropunit(i) else: rt_at)
             if rt_at >= 0:
                 em.rt_need[i] ← 1
-        // a few dozen entries, so the plainest sort is the right one
-        foreach i := 0…nrt:
-            let rt_k : mut i64 = @dropunit(i)
-            while rt_k > 0 and key[(rt_k - 1) × 1¤ptrdiff] > key[rt_k × 1¤ptrdiff]:
-                let tk : i64 = key[(rt_k - 1) × 1¤ptrdiff]
-                key[(rt_k - 1) × 1¤ptrdiff] ← key[rt_k × 1¤ptrdiff]
-                key[rt_k × 1¤ptrdiff] ← tk
-                let ti : i64 = rt_order[(rt_k - 1) × 1¤ptrdiff]
-                rt_order[(rt_k - 1) × 1¤ptrdiff] ← rt_order[rt_k × 1¤ptrdiff]
-                rt_order[rt_k × 1¤ptrdiff] ← ti
-                rt_k ← rt_k - 1
+        // the routines in the order the old file had them: the order
+        // that sorts the keys, applied to what stood in it
+        rt_order ← rt_order[⍋ key]
     // what the functions written after the runtime reach, found out
     // before the set is closed rather than after it is written
     foreach t := dfr_rt:
