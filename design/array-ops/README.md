@@ -250,3 +250,106 @@ The rule of thumb from the census: **a loop whose body is one `push`
 is an operator waiting to be written; a loop whose body is one `if`
 is a mask.**  Between them that is 200 of the 559, before any loop
 that does two things is looked at.
+
+---
+
+# Second round: what is left, read on 2026-09-02
+
+The five commits above landed everything §5 proposed.  This is the same
+census taken again, on the source they left.
+
+## What moved
+
+| | before | after |
+|---|---|---|
+| `foreach` loops | 559 | 530 |
+| `while` loops | 180 | 154 |
+| `if #v > 0:` guards | 103 | 32 |
+| linear finds over a name table | 20 | 6 |
+| literal tables rebuilt per call | 17 | 8 (by design) |
+| operators the compiler can write | `⍴ ⍳ ⧺` slices | those, and `¨ ⌿ ⍀ ⍸ ⍋ ⋈`, gather, amend, stepped slices, `∊` over arrays |
+
+The loop count fell by 29 and the branch count barely moved.  That is
+the honest shape of it: the operators went in, and the compiler's own
+source used them at nine sites.  The remaining 530 loops are not
+waiting on more operators, and the reason is worth writing down.
+
+## Why the rest did not follow
+
+Sorting the 530 by what stands in the way:
+
+| what blocks it | loops | example |
+|---|---|---|
+| nothing -- a rewrite with what exists | ~25 | `foreach v := sv_names: self.snames.push(v)` is `self.snames ← sv_names` |
+| **`¨` takes only a function's name** | ~30 | `out.push(sym_type(&a, &toks, src, e, seen))` -- the map carries context |
+| the body is emission, not a value | ~47 | `foreach ci := caps: self.ir(ir.Ir.fsto, …)` |
+| the body is several statements | ~326 | the checker's real work: read, test, record |
+| a find that wants a hash, not an operator | 35 | `foreach i := 0…np: if self.text(…) = nm: return i` |
+| a filter or an amend, convertible but cold | 17 | `if a.fns[fi].is_test: tests.push(fi)` |
+
+**The one language gap left is the map that carries context.**  Half
+the map-shaped loops (53 of 99) build an element from something
+besides the element -- a table the loop indexes, a receiver, three
+arguments the mapped function also needs.  In the full language that
+is a `λ`; in the compiler's subset `¨` takes a function's name and
+nothing else.
+
+The interpreter already answers the smaller version of this:
+
+```
+let f := add(10)        // a partial application
+f ¨ v                   // interpreter: [11, 12]
+                        // compiler: 'f' is not a function this program defines
+```
+
+A partial application before `¨` and `⌿` is the one addition that
+would pay: `sym_type(&a, &toks, src) ¨ types` is the shape of five
+string-building loops in `symbols.ngpl` that `⋈` was written for and
+cannot reach, and of the `self.lam_pt(lt) ¨ (argc…np)` family in the
+checker.  It is a lowering change -- the each and fold loops call
+through the box, as `lower_lcall` already does -- not a new operator.
+
+## What can be done today, without touching the language
+
+1. **The nine scope restores** (`check.ngpl:3492–3510`): the arrays are
+   cleared and refilled from a saved slice, which is
+   `self.snames ← sv_names` -- a field takes a plain array.  Nine
+   loops, and nine `← []` lines with them.
+2. **Append-many**: `x ← x ⧺ y` works for a local and for a field
+   (checked).  `self.a.lte.push(pt)` per element, the two `rodata`
+   byte loops, comptime's two pool copies, `strs0` -- about a dozen.
+3. **Sub-range copies**: `rem.push(pts9[j])` over `argc…np` is
+   `rem ← rem ⧺ pts9[argc…np]`; four sites in the checker.
+4. **The eight filters** are `⍸` and a gather once the predicate is a
+   named function: `tests ← ⍸ (ast.is_test ¨ a.fns)`.
+5. **The identity array** `foreach i := 0…nrt: rt_order.push(i)` is
+   `⍸ (nrt ⍴ true)` today; a monadic `⍳ n` would say it better, and is
+   the only other operator worth adding.
+6. **Six name-table walks** are left (`lower.ngpl:158` over `a.fns`,
+   the parser's `mel`, `mtab.names`, `toks.strs`, the checker's
+   `mnames` and `mel`); `names.Names` answers all of them.
+
+## What is not an array operation and should stay a loop
+
+The 326 multi-statement bodies and the 47 emission loops are the
+compiler doing its work: reading a node, testing it, recording what it
+found; or writing one instruction per element into the emitter.  An
+`¨` over a function that mutates the emitter would say less, not more,
+and the language has no reason to grow an each-for-effect when
+`foreach` is exactly that.
+
+Nor are the 35 finds: a walk down a table is the wrong algorithm, not
+the wrong spelling, and the answer to the hot ones was a hash table,
+not an operator.
+
+## The measurements
+
+Native self-compile 0.99 s (0.94 s before the operators went in, so
+about 5% -- the operator forms allocate an array where the loop
+allocated none, and the new runtime routine is in every image).
+Interpreted, as the bootstrap's stage 1 runs it, 1466 s against 1373 s
+before -- the same effect, magnified by the interpreter's per-node
+cost, and a reminder that these operators are for what the source
+says, not for what it costs.  Every commit held the fixed point and
+compiled all 100 conformance programs to the same bytes.
+

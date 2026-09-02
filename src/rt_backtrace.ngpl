@@ -246,12 +246,8 @@ fn bt_fn_names(a : &ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
         out.push("<globals>")
     out.push("<args>")
     out.push("<tests>")
-    if nlams > 0:
-        foreach j := 0…nlams:
-            out.push("λ#" ⧺ tokens.i64_str(j))
-    if npsfn > 0:
-        foreach j := 0…npsfn:
-            out.push("partial#" ⧺ tokens.i64_str(j))
+    out ← out ⧺ (tokens.numbered("λ#") ¨ (0…nlams))
+    out ← out ⧺ (tokens.numbered("partial#") ¨ (0…npsfn))
     out
 
 // Where the program's own code ends, which is where the runtime's

@@ -1,0 +1,9 @@
+tests/compile/refuse/each_borrow_capture.ngpl:12:24: error: a capture is one value read now; 'b' is &Big
+  12 |     ", " ⋈ ((λt : i64 |b| → str: describe(&b, t)) ¨ ts)
+     |                        ^
+tests/compile/refuse/each_borrow_capture.ngpl:12:51: error: ¨ asks a function of each element; this is i64
+  12 |     ", " ⋈ ((λt : i64 |b| → str: describe(&b, t)) ¨ ts)
+     |                                                   ^
+tests/compile/refuse/each_borrow_capture.ngpl:12:10: error: ⋈ joins an array of strings; this is i64[]
+  12 |     ", " ⋈ ((λt : i64 |b| → str: describe(&b, t)) ¨ ts)
+     |          ^

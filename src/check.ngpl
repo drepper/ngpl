@@ -2362,9 +2362,20 @@ impl Checker:
             self.derr(tok, "the filler is " ⧺ self.tn(ft) ⧺ ", but the binding wants " ⧺ self.tn(ew))
         self.set_type(id, w)
 
-    // The function that stands before ¨ or ⌿: in core-2 a function's
-    // name, and nothing else -- a λ or a name holding a function is the
-    // full language's.  Answers its index, or ⁻1 having said why.
+    // Whether what stands before ¨ or ⌿ is a function's name rather
+    // than something that holds a function.  A name a local or a
+    // global binding has taken is the binding's, whatever else in the
+    // program is called that.
+    fn names_a_fn(&mut self, e : i64) → bool:
+        if self.kind_of(e) ≠ ast.Nk.var:
+            return false
+        let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
+        if self.a.nc[e × 1¤ptrdiff] = 0 and (self.lookup(nm) ≠ ⁻1 or self.global_here(nm) ≠ ⁻1):
+            return false
+        true
+
+    // The function that stands before ¨ or ⌿, where it is named
+    // outright.  Answers its index, or ⁻1 having said why.
     fn fn_before(&mut self, tok : i64, e : i64, glyph : str) → i64:
         if self.kind_of(e) ≠ ast.Nk.var:
             self.derr(tok, "in core-2 what stands before " ⧺ glyph ⧺ " is a function's name")
@@ -2390,11 +2401,35 @@ impl Checker:
     fn check_each(&mut self, id : i64, tok : i64, na : i64, nb : i64):
         self.check_expr(nb, types.TY_UNIT)
         let ct : i64 = types.ty_strip_ref(self.ty_of(nb))
-        if not types.ty_is_arr(ct):
-            self.derr(tok, "¨ asks something of each element of an array; this is " ⧺ self.tn(ct))
+        // an array, or a range counting in what the function takes;
+        // the lowering asks the container's type the same question
+        let is_rg : bool = types.ty_is_rg(ct)
+        if not (types.ty_is_arr(ct) or is_rg):
+            self.derr(tok, "¨ asks something of each element of an array or a range; this is " ⧺ self.tn(ct))
             self.set_type(id, types.mk_aty(types.TY_I64))
             return
-        let et : i64 = self.elem_of(ct)
+        let et : i64 = if is_rg: types.ty_rgelem(ct) else: self.elem_of(ct)
+        // Something that holds a function rather than naming one: a λ,
+        // a binding that took one, a call that left arguments over.
+        // What it holds says what it takes, and it is called through
+        // its box -- which is what lets a map carry context, the
+        // arguments already bound standing where the loop's own names
+        // would have.
+        if not self.names_a_fn(na):
+            self.check_expr(na, types.TY_UNIT)
+            let lt : i64 = types.ty_strip_ref(self.ty_of(na))
+            if not types.ty_is_lam(lt):
+                self.derr(tok, "¨ asks a function of each element; this is " ⧺ self.tn(lt))
+                self.set_type(id, types.mk_aty(types.TY_I64))
+                return
+            if self.lam_np(lt) ≠ 1:
+                self.derr(tok, "this function takes " ⧺ tokens.i64_str(self.lam_np(lt)) ⧺ " arguments; what ¨ asks of each element takes that element alone")
+            elif self.lam_pt(lt, 0¤ptrdiff) ≠ et:
+                self.derr(tok, "the array holds " ⧺ self.tn(et) ⧺ ", and this function takes " ⧺ self.tn(self.lam_pt(lt, 0¤ptrdiff)))
+            self.a.nc[id × 1¤ptrdiff] ← ⁻1
+            self.nlam[id × 1¤ptrdiff] ← lt
+            self.set_type(id, types.mk_aty(self.lam_ret(lt)))
+            return
         let f : i64 = self.fn_before(tok, na, "¨")
         if f = ⁻1:
             self.set_type(id, types.mk_aty(types.TY_I64))
@@ -2430,13 +2465,14 @@ impl Checker:
         let init : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
         self.check_expr(na, types.TY_UNIT)
         let ct : i64 = types.ty_strip_ref(self.ty_of(na))
-        if not types.ty_is_arr(ct):
-            self.derr(tok, "a fold reads an array; this is " ⧺ self.tn(ct))
+        let is_rg : bool = types.ty_is_rg(ct)
+        if not (types.ty_is_arr(ct) or is_rg):
+            self.derr(tok, "a fold reads an array or a range; this is " ⧺ self.tn(ct))
             if init ≠ ⁻1:
                 self.check_expr(init, types.TY_UNIT)
             self.set_type(id, types.TY_I64)
             return
-        let et : i64 = self.elem_of(ct)
+        let et : i64 = if is_rg: types.ty_rgelem(ct) else: self.elem_of(ct)
         if what = 1:
             if not self.fold_op_admits(fo, et):
                 self.derr(tok, "this operator does not fold " ⧺ self.tn(et))
@@ -2447,6 +2483,39 @@ impl Checker:
                 elif not self.try_fit(init, et):
                     self.derr(tok, "the fold starts from " ⧺ self.tn(self.ty_of(init)) ⧺ " and its elements are " ⧺ self.tn(et))
             self.set_type(id, et)
+            return
+        if not self.names_a_fn(fo):
+            // something that holds a function, called through its box
+            self.check_expr(fo, types.TY_UNIT)
+            let lt : i64 = types.ty_strip_ref(self.ty_of(fo))
+            if not types.ty_is_lam(lt):
+                self.derr(tok, "a fold reads a function of two; this is " ⧺ self.tn(lt))
+                if init ≠ ⁻1:
+                    self.check_expr(init, types.TY_UNIT)
+                self.set_type(id, et)
+                return
+            let lacc : i64 = if self.lam_np(lt) = 2: self.lam_pt(lt, 0¤ptrdiff) else: et
+            if self.lam_np(lt) ≠ 2:
+                self.derr(tok, "this function takes " ⧺ tokens.i64_str(self.lam_np(lt)) ⧺ " arguments; a fold's function takes what has been folded so far and the next element")
+            else:
+                if self.lam_pt(lt, 1¤ptrdiff) ≠ et:
+                    self.derr(tok, "the array holds " ⧺ self.tn(et) ⧺ ", and this function takes " ⧺ self.tn(self.lam_pt(lt, 1¤ptrdiff)) ⧺ " as its second")
+                if self.lam_ret(lt) ≠ lacc:
+                    self.derr(tok, "this function answers " ⧺ self.tn(self.lam_ret(lt)) ⧺ " and takes " ⧺ self.tn(lacc) ⧺ " first; a fold's function answers what it took")
+            if init ≠ ⁻1:
+                self.check_expr(init, lacc)
+                if self.is_open(self.ty_of(init)):
+                    self.adopt(init, lacc)
+                elif not self.try_fit(init, lacc):
+                    self.derr(tok, "the fold starts from " ⧺ self.tn(self.ty_of(init)) ⧺ " and this function takes " ⧺ self.tn(lacc))
+            elif lacc ≠ et:
+                self.derr(tok, "without a value to start from the fold starts from an element, which is " ⧺ self.tn(et) ⧺ ", and this function takes " ⧺ self.tn(lacc))
+            // what = 2: the function is a value, and is called through
+            // its box rather than by its index
+            self.a.extra[nb × 1¤ptrdiff] ← 2
+            self.a.nc[id × 1¤ptrdiff] ← ⁻1
+            self.nlam[id × 1¤ptrdiff] ← lt
+            self.set_type(id, lacc)
             return
         let f : i64 = self.fn_before(tok, fo, "⌿")
         if f = ⁻1:

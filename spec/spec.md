@@ -7178,7 +7178,17 @@ twice¨v                         // [2, 4, 6]
 twice¨(1…5)                     // [2, 4, 6, 8]
 ```
 
-Anything that can be called may stand on the left: a named function, a lambda, a name that holds one.
+Anything that can be called may stand on the left: a named function, a lambda, a name that holds one, or a call that left arguments over.  That last is what lets a map carry something besides the element -- a prefix, a table, a bound argument -- since the arguments already given stand where the loop's own names would have:
+
+```
+fn label(pre : str, n : i64) → str:
+    pre ⧺ tokens.i64_str(n)
+
+label("n:")¨v                   // ["n:1", "n:2", "n:3"] -- the prefix rides along
+(λx : i64 |k| → i64: x + k)¨v   // the same, with a capture list
+```
+
+A borrow is not one of the things a λ may capture, so a map whose function reaches into a borrowed structure is written as a loop; that is the capture rule rather than anything about `¨`.
 
 ```
 (λx : i64 → i64: x + 100)¨v     // [101, 102, 103]

@@ -1,0 +1,11 @@
+// What ¨ asks of each element takes that element alone, whether it is
+// named or held: a partial that still wants two says so.
+fn add3(a : i64, b : i64, c : i64) → i64:
+    a + b + c
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2]
+    let d : i64[] = add3(1) ¨ v
+    std.println("{}", d[0¤ptrdiff])

@@ -1,0 +1,51 @@
+// A map whose function carries something besides the element.  `¨` and
+// `⌿` took a function's name and nothing else, so a map that needed a
+// second thing -- a prefix, a table, a bound argument -- had to be a
+// loop.  Three ways to give it one, all of them values that hold a
+// function, all called through the box:
+//
+//   a partial application     add(10) ¨ v
+//   a λ, with a capture list  (λx : i64 |k| → i64: x + k) ¨ v
+//   a name holding either     let f := add(10);  f ¨ v
+//
+// A fold reads the same three, since what stands before ⌿ is read the
+// way what stands before ¨ is.
+
+fn add(a : i64, b : i64) → i64:
+    a + b
+
+fn label(pre : str, n : i64) → str:
+    pre ⧺ (if n = 1: "one" elif n = 2: "two" else: "more")
+
+fn joined(acc : str, s : str) → str:
+    acc ⧺ "|" ⧺ s
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+
+    // a partial application, named and written where it is used
+    let plus10 := add(10)
+    let a1 : i64[] = plus10 ¨ v
+    let a2 : i64[] = add(100) ¨ v
+    std.println("{} {} {} {}", a1[0¤ptrdiff], a1[2¤ptrdiff], a2[0¤ptrdiff], a2[2¤ptrdiff])
+
+    // a λ, with and without a capture
+    let k : i64 = 7
+    let b1 : i64[] = (λx : i64 → i64: x × 2) ¨ v
+    let b2 : i64[] = (λx : i64 |k| → i64: x + k) ¨ v
+    std.println("{} {} {} {}", b1[0¤ptrdiff], b1[2¤ptrdiff], b2[0¤ptrdiff], b2[2¤ptrdiff])
+
+    // the context is a string the map carries
+    let names : str[] = label("n:") ¨ v
+    std.println("{} {} {}", names[0¤ptrdiff], names[1¤ptrdiff], names[2¤ptrdiff])
+
+    // a fold through a value, and through a λ
+    let jf := joined
+    std.println("{}", jf ⌿ names)
+    std.println("{}", (λacc : i64, x : i64 → i64: acc + x × 2) ⌿ v)
+    std.println("{}", (λacc : i64, x : i64 → i64: acc + x) ⌿ (v, 100))
+
+    // and the whole point: map then join, with the map carrying context
+    std.println("{}", ", " ⋈ (label("#") ¨ v))

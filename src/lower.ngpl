@@ -252,10 +252,35 @@ impl Lower:
             return width_of(rt)
         0
 
+    // one turn of a map or a fold: what the function says of the
+    // arguments, called by its index where it was named and through
+    // its box where it is a value the program holds
+    fn call_fn(&mut self, f : i64, bx : i64, args : i64[], w : i64) → i64:
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(@dropunit(#args) + (if f = ⁻1: 1 else: 0))
+        foreach v := args:
+            self.extra.push(v)
+        let d : i64 = self.tmp()
+        if f = ⁻1:
+            // the box rides behind the arguments, and the code address
+            // is the first thing in it
+            self.extra.push(bx)
+            let ad : i64 = self.tmp()
+            self.ir(ir.Ir.fld, bx, 0, 0, ad, 0)
+            self.ir(ir.Ir.calli, ad, off, 0, d, 0)
+        else:
+            self.ir(ir.Ir.call, f, off, 0, d, w)
+        d
+
     // f ¨ v: what f says of each element, collected in a fresh array
-    fn lower_each(&mut self, nid : i64, nb : i64) → i64:
+    fn lower_each(&mut self, nid : i64, na : i64, nb : i64) → i64:
         let f : i64 = self.a.nc[nid × 1¤ptrdiff]
-        let cv : i64 = self.lower_expr(nb)
+        // the function value is made once, before the loop, where it
+        // is a value rather than a name
+        let bx : i64 = if f = ⁻1: self.lower_expr(na) else: 0
+        // a range is walked as the array of its steps, as the
+        // quantifiers walk one
+        let cv : i64 = if types.ty_is_rg(types.ty_strip_ref(self.tof(nb))): self.lower_rg_arr(nb) else: self.lower_expr(nb)
         let n : i64 = self.tmp()
         self.ir(ir.Ir.alen, cv, 0, 0, n, 0)
         let out : i64 = self.tmp()
@@ -270,11 +295,7 @@ impl Lower:
         self.ir(ir.Ir.jz, more, lend, 0, 0, 0)
         let e : i64 = self.tmp()
         self.ir(ir.Ir.aidx, cv, i, 0, e, 0)
-        let off : i64 = @dropunit(#self.extra)
-        self.extra.push(1)
-        self.extra.push(e)
-        let r : i64 = self.tmp()
-        self.ir(ir.Ir.call, f, off, 0, r, self.retw(f))
+        let r : i64 = self.call_fn(f, bx, [e], if f = ⁻1: 0 else: self.retw(f))
         self.ir(ir.Ir.apush, out, r, 0, 0, 0)
         let ni : i64 = self.tmp()
         self.ir(ir.Ir.addw, i, one, 0, ni, 64 + 256)
@@ -508,7 +529,8 @@ impl Lower:
         let down : bool = self.a.extra[(nb + 3) × 1¤ptrdiff] = 1
         let f : i64 = self.a.nc[nid × 1¤ptrdiff]
         let et : i64 = self.elem_of(types.ty_strip_ref(self.tof(na)))
-        let cv : i64 = self.lower_expr(na)
+        let bx : i64 = if what = 2: self.lower_expr(fo) else: 0
+        let cv : i64 = if types.ty_is_rg(types.ty_strip_ref(self.tof(na))): self.lower_rg_arr(na) else: self.lower_expr(na)
         let n : i64 = self.tmp()
         self.ir(ir.Ir.alen, cv, 0, 0, n, 0)
         let acc : i64 = self.tmp()
@@ -553,15 +575,8 @@ impl Lower:
             let r1 : i64 = if down: self.fold_op(fo, e, acc, et) else: self.fold_op(fo, acc, e, et)
             self.ir(ir.Ir.mov, r1, 0, 0, r, 0)
         else:
-            let off : i64 = @dropunit(#self.extra)
-            self.extra.push(2)
-            if down:
-                self.extra.push(e)
-                self.extra.push(acc)
-            else:
-                self.extra.push(acc)
-                self.extra.push(e)
-            self.ir(ir.Ir.call, f, off, 0, r, self.retw(f))
+            let r2 : i64 = self.call_fn(f, bx, if down: [e, acc] else: [acc, e], if f = ⁻1: 0 else: self.retw(f))
+            self.ir(ir.Ir.mov, r2, 0, 0, r, 0)
         self.ir(ir.Ir.mov, r, 0, 0, acc, 0)
         let ni : i64 = self.tmp()
         if down:
@@ -708,7 +723,7 @@ impl Lower:
             self.ir(ir.Ir.aslice, av, lo, hi, d, 0)
             return d
         if k = ast.Nk.each:
-            return self.lower_each(nid, nb)
+            return self.lower_each(nid, na, nb)
         if k = ast.Nk.where:
             return self.lower_where(na)
         if k = ast.Nk.grade:

@@ -1,0 +1,3 @@
+tests/compile/refuse/each_arity_value.ngpl:10:29: error: this function takes 2 arguments; what ¨ asks of each element takes that element alone
+  10 |     let d : i64[] = add3(1) ¨ v
+     |                             ^

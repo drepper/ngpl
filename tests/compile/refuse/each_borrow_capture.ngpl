@@ -1,0 +1,18 @@
+// A λ before ¨ may carry values; a borrow is not one of them.  A
+// capture is one value read where the λ is written, and a borrow says
+// where something lives rather than being a thing to read.
+struct Big:
+    xs : i64[]
+
+fn describe(b : &Big, t : i64) → str:
+    if t < @dropunit(#b.xs): "in" else: "out"
+
+fn show(b : &Big) → str:
+    let ts : i64[] = [0, 5]
+    ", " ⋈ ((λt : i64 |b| → str: describe(&b, t)) ¨ ts)
+
+@start
+@impure
+fn main():
+    let b : Big = Big{xs: [1, 2]}
+    std.println("{}", show(&b))

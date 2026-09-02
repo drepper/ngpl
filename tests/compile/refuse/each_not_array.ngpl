@@ -1,4 +1,5 @@
-// ¨ asks something of each element of an array; a number holds none.
+// ¨ asks something of each element of an array or a range; a number
+// is neither.
 fn twice(n : i64) → i64:
     n × 2
 

@@ -1,3 +1,3 @@
-tests/compile/refuse/each_not_array.ngpl:9:41: error: ¨ asks something of each element of an array; this is i64
-  9 |     std.println("{}", @dropunit(#(twice ¨ n)))
-    |                                         ^
+tests/compile/refuse/each_not_array.ngpl:10:41: error: ¨ asks something of each element of an array or a range; this is i64
+  10 |     std.println("{}", @dropunit(#(twice ¨ n)))
+     |                                         ^

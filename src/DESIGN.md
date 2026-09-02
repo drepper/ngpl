@@ -164,6 +164,13 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `_start` hands to `exit`.  Unit-suffixed literals (`1¤ptrdiff`,
   `0¤byte`) close their type at the lexer like width suffixes, and
   `byte` names `u8`.
+- **each and fold with context**: what stands before `¨` or `⌿` may be
+  a function's name, or anything that holds a function -- a partial
+  application, a λ with a capture list, a binding that took one.  A
+  value is called through its box, as `callv` calls one, so the
+  arguments already bound stand where the loop's own names would have.
+  A range stands where the array stands, walked as the array of its
+  steps.  What a λ may capture is unchanged: a value, not a borrow.
 - **each and fold**: `f ¨ v` collects what `f` says of each element,
   `f ⌿ v` and `f ⍀ v` fold the elements into one from the left or the
   right, `(v, init)` on the right says what a fold starts from, and an

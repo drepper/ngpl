@@ -730,8 +730,7 @@ fn plan_elf(tgt : &Target, code : u8[], rodata : u8[], data : u8[],
     // whatever a build after it added
     let nx : i64 ¤ptrdiff = #tx_ends - 1¤ptrdiff
     let names : mut str[] = [".text"]
-    foreach j := 0¤ptrdiff…nx:
-        names.push(".text" ⧺ tokens.i64_str(@dropunit(j) + 2))
+    names ← names ⧺ (tokens.numbered(".text") ¨ (2…@dropunit(nx) + 2))
     names.push(".rodata")
     names.push(".data")
     if #rows > 0:

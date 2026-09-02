@@ -1053,10 +1053,8 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
         synth.push("<globals>")
     synth.push("<args>")
     synth.push("<tests>")
-    foreach j := 0…#chk.lams:
-        synth.push("λ#" ⧺ tokens.i64_str(@dropunit(j)))
-    foreach j := 0…#chk.psfn:
-        synth.push("partial#" ⧺ tokens.i64_str(@dropunit(j)))
+    synth ← synth ⧺ (tokens.numbered("λ#") ¨ (0…@dropunit(#chk.lams)))
+    synth ← synth ⧺ (tokens.numbered("partial#") ¨ (0…@dropunit(#chk.psfn)))
     foreach j := 0…#synth:
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])

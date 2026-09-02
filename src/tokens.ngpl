@@ -222,6 +222,13 @@ let GLYPHS3 : std.dict(i32, Tk) = ⸨
 fn str_is(want : str, s : str) → bool:
     s = want
 
+// A name and a number, which is how a synthesized function is named:
+// λ#3, partial#0, .text2.  The prefix comes first so that a partial
+// application of it is the map from numbers to names.
+@export
+fn numbered(pre : str, n : i64) → str:
+    pre ⧺ i64_str(n)
+
 @export
 @post(r: #r > 0)
 fn i64_str(n : i64) → str:

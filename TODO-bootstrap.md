@@ -364,3 +364,11 @@ Outstanding
     incremental build's insertion sort is `rt_order[⍋ key]`.  A qualified name may stand
     before ¨ and ⌿, and an array a fresh operation answers may be bound to a mut binding --
     both wanted by those rewrites and both refused before.
+
+[x] a map or a fold may carry context: `¨` and `⌿` take a value that holds a function -- a
+    partial application, a λ (with a capture list), a binding that took one -- and call it
+    through its box, where before they took a function's name and nothing else.  Half the
+    map-shaped loops in the compiler build their element from something besides the
+    element, which is what this is for.  A range also stands where the array stands now, as
+    the spec has it.  tests/compile/t69_map_with_context and
+    refuse/{each_borrow_capture,each_arity_value}.
