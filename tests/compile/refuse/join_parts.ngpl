@@ -1,0 +1,6 @@
+// ⋈ joins an array of strings; numbers have no text to join.
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    std.println("{}", ", " ⋈ v)

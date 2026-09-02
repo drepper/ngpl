@@ -2016,6 +2016,11 @@ fn emit_runtime(em : &mut emit.Emit, tg : &elf.Target, lw : &mut lower.Lower, al
 
     // and what the name is, when what is wanted is not whether it is
     // there but which file it is
+    // the sort is a merge over an index array, the same on every
+    // machine, so it is written once as IR as well
+    em.rt_begin(emit.RT_GRADE)
+    arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_GRADE, &tg, &lw), 2, lw.strs, 0, [])
+
     em.rt_begin(emit.RT_FIDP)
     arch_x86_64.emit_fn(&em, rt_portable.rt_build(emit.RT_FIDP, &tg, &lw), 1, lw.strs, 0, [])
 

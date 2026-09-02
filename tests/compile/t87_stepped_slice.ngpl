@@ -1,0 +1,23 @@
+// v[lo…step…hi] is every step-th element from lo, stopping where the
+// range of that spelling stops: hi is not reached, and a negative step
+// counts down.  It is a view of one column of a packed table -- the
+// compiler keeps pairs and triples in one array and reads every
+// second or third entry -- written as one operation.
+
+@start
+@impure
+fn main():
+    let v : i64[] = [10, 11, 12, 13, 14, 15, 16, 17]
+    let evens : i64[] = v[0¤ptrdiff…2…#v]
+    std.println("{} {} {}", @dropunit(#evens), evens[0¤ptrdiff], evens[3¤ptrdiff])
+    let odds : i64[] = v[1¤ptrdiff…2…#v]
+    std.println("{} {}", @dropunit(#odds), odds[3¤ptrdiff])
+    let thirds : i64[] = v[0¤ptrdiff…3…#v]
+    std.println("{} {} {} {}", @dropunit(#thirds), thirds[0¤ptrdiff], thirds[1¤ptrdiff], thirds[2¤ptrdiff])
+    let down : i64[] = v[7¤ptrdiff…⁻3…0¤ptrdiff]
+    std.println("{} {} {} {}", @dropunit(#down), down[0¤ptrdiff], down[1¤ptrdiff], down[2¤ptrdiff])
+    let none : i64[] = v[3¤ptrdiff…2…3¤ptrdiff]
+    std.println("{}", @dropunit(#none))
+    // a packed table: (kind, value) pairs, and the values as one column
+    let pairs : i64[] = [1, 100, 2, 200, 3, 300]
+    std.println("{}", +⌿ pairs[1¤ptrdiff…2…#pairs])

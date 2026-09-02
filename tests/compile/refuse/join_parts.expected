@@ -1,0 +1,3 @@
+tests/compile/refuse/join_parts.ngpl:6:28: error: ⋈ joins an array of strings; this is i64[]
+  6 |     std.println("{}", ", " ⋈ v)
+    |                            ^

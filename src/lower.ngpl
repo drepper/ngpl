@@ -308,6 +308,91 @@ impl Lower:
         self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
         self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
 
+    // v[lo…step…hi]: every step-th element from lo, stopping at hi as
+    // the range of that spelling stops, in a fresh array
+    fn lower_sslice(&mut self, nid : i64, na : i64, nb : i64) → i64:
+        let pn : i64 = self.packed_n(na)
+        let aty : i64 = self.tof(na)
+        let w : i64 = width_of(self.elem_of(types.ty_strip_ref(aty)))
+        let av : i64 = self.lower_expr(na)
+        let lo : i64 = self.lower_expr(self.a.extra[nb × 1¤ptrdiff])
+        let st : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+        let hi : i64 = self.lower_expr(self.a.extra[(nb + 2) × 1¤ptrdiff])
+        let lz : i64 = self.label()
+        self.ir(ir.Ir.jnz, st, lz, 0, 0, 0)
+        let m : i64 = self.intern("a slice's step must not be zero (line " ⧺ tokens.i64_str(@dropunit(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]))) ⧺ ")\n")
+        self.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lz, 0, 0, 0, 0)
+        let out : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, out, 0)
+        let i : i64 = self.tmp()
+        self.ir(ir.Ir.mov, lo, 0, 0, i, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(ir.Ir.label, ltop, 0, 0, 0, 0)
+        let c : i64 = self.range_alive(i, hi, st)
+        self.ir(ir.Ir.jz, c, lend, 0, 0, 0)
+        let e : i64 = if pn >= 0: self.farr_load(av, aty, pn, i, ⁻1) else: self.tmp()
+        if pn < 0:
+            self.ir(ir.Ir.aidx, av, i, 0, e, w)
+        self.ir(ir.Ir.apush, out, e, 0, 0, 0)
+        let ni : i64 = self.tmp()
+        self.ir(ir.Ir.addw, i, st, 0, ni, 64 + 256)
+        self.ir(ir.Ir.mov, ni, 0, 0, i, 0)
+        self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
+        out
+
+    // ⍋ v: the indices that sort v, least first, ties in their order.
+    // The keys go to the runtime canonical -- an element is kept only
+    // as wide as its type, and the sort compares whole words -- and
+    // with whether they are unsigned, which is the one thing about
+    // them a word does not say.
+    fn lower_grade(&mut self, na : i64) → i64:
+        let aty : i64 = types.ty_strip_ref(self.tof(na))
+        let et : i64 = self.elem_of(aty)
+        let w : i64 = width_of(et)
+        let pn : i64 = self.packed_n(na)
+        let av : i64 = self.lower_expr(na)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, av, 0, 0, n, 0)
+        let keys : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, keys, 0)
+        let i : i64 = self.loop_over(n)
+        let e : i64 = if pn >= 0: self.farr_load(av, aty, pn, i, ⁻1) else: self.tmp()
+        if pn < 0:
+            self.ir(ir.Ir.aidx, av, i, 0, e, w)
+        self.ir(ir.Ir.apush, keys, e, 0, 0, 0)
+        self.loop_close(i)
+        let uns : i64 = self.iconst(if types.ty_sgn(et) = 0: 1 else: 0)
+        self.rt2(emit.RT_GRADE, keys, uns)
+
+    // sep ⋈ parts: the parts joined, sep between each two
+    fn lower_join(&mut self, na : i64, nb : i64) → i64:
+        let sep : i64 = self.lower_expr(na)
+        let pv : i64 = self.lower_expr(nb)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, pv, 0, 0, n, 0)
+        let acc : i64 = self.tmp()
+        let empty : i64 = self.tmp()
+        self.ir(ir.Ir.sc, self.intern(""), 0, 0, empty, 0)
+        self.ir(ir.Ir.mov, empty, 0, 0, acc, 0)
+        let i : i64 = self.loop_over(n)
+        let e : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, pv, i, 0, e, 0)
+        // the separator goes before every part but the first
+        let lfirst : i64 = self.label()
+        self.ir(ir.Ir.jz, i, lfirst, 0, 0, 0)
+        let withsep : i64 = self.tmp()
+        self.ir(ir.Ir.sccat, acc, sep, 0, withsep, 0)
+        self.ir(ir.Ir.mov, withsep, 0, 0, acc, 0)
+        self.ir(ir.Ir.label, lfirst, 0, 0, 0, 0)
+        let grown : i64 = self.tmp()
+        self.ir(ir.Ir.sccat, acc, e, 0, grown, 0)
+        self.ir(ir.Ir.mov, grown, 0, 0, acc, 0)
+        self.loop_close(i)
+        acc
+
     // ⍸ b: the indices at which the truth values are true
     fn lower_where(&mut self, na : i64) → i64:
         let bv : i64 = self.lower_expr(na)
@@ -626,6 +711,12 @@ impl Lower:
             return self.lower_each(nid, nb)
         if k = ast.Nk.where:
             return self.lower_where(na)
+        if k = ast.Nk.grade:
+            return self.lower_grade(na)
+        if k = ast.Nk.join:
+            return self.lower_join(na, nb)
+        if k = ast.Nk.sslice:
+            return self.lower_sslice(nid, na, nb)
         if k = ast.Nk.fold:
             return self.lower_fold(nid, na, nb)
         if k = ast.Nk.reshape:

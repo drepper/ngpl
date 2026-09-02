@@ -2832,13 +2832,13 @@ class Parser:
         left = self._parse_mul_expr()
         while True:
             self._skip_nl()
-            if not (self._check(TokenType.OP) and self._cur().value == "\N{DOUBLE PLUS}"):
+            if not (self._check(TokenType.OP) and self._cur().value in ("\N{DOUBLE PLUS}", "\N{BOWTIE}")):
                 break
             concat_tok = self._cur()
             self.pos += 1
             self._skip_nl()
             right = self._parse_mul_expr()
-            left = self._set_binop_pos(BinOp("\N{DOUBLE PLUS}", left, right), left, right, concat_tok)
+            left = self._set_binop_pos(BinOp(concat_tok.value, left, right), left, right, concat_tok)
         return left
 
     def _parse_mul_expr(self):
@@ -2956,7 +2956,8 @@ class Parser:
             return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
         if self._check(TokenType.OP) and self._cur().value in (
                 "#", "\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}",
-                "\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR}"):
+                "\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR}",
+                "\N{APL FUNCTIONAL SYMBOL DELTA STILE}"):
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
@@ -3428,7 +3429,7 @@ class Parser:
         if len(indices) == 1 and not has_range:
             return Subscript(node, indices)
         if len(indices) == 1 and has_range:
-            return SliceAccess(node, idx_expr.start, idx_expr.end)
+            return SliceAccess(node, idx_expr.start, idx_expr.end, idx_expr.step)
         if has_range:
             specs = []
             for e in indices:

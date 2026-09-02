@@ -2668,6 +2668,8 @@ class Evaluator:
             return self._op_length(operand)
         if op == "\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR}":
             return self._op_where(operand)
+        if op == "\N{APL FUNCTIONAL SYMBOL DELTA STILE}":
+            return self._op_grade(operand)
         if op in ("\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}"):
             return self._op_halves(op, operand)
         if op in self._LISTABLE_UNOPS:
@@ -2801,6 +2803,8 @@ class Evaluator:
             return self._ops[op](left, right)
         if op == "\N{DOUBLE PLUS}":
             return self._op_concat(left, right)
+        if op == "\N{BOWTIE}":
+            return self._op_join(left, right)
         if op == "\N{APL FUNCTIONAL SYMBOL IOTA}":
             # The container is the operand rather than a stand-in for
             # its elements, so this does not go element-wise.
@@ -3588,6 +3592,50 @@ class Evaluator:
                 out.append(self._sizeof_result(i, u.obj.element_type))
         return ObjectValue(ArrayValue(out))
 
+    def _op_grade(self, operand):
+        """⍋ v: the indices that sort v, least first, ties in their
+        order, each measured as the array's subscript is."""
+        u = unwrap_optional(operand)
+        if not (isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue)):
+            raise TypeError(
+                f"\N{APL FUNCTIONAL SYMBOL DELTA STILE} orders an array; "
+                f"this is {self._value_type_name(u)}")
+        keys = []
+        for e in u.obj.values():
+            eu = _unwrap_operand(e)
+            if isinstance(eu, IntValue):
+                keys.append(eu.value)
+            elif isinstance(eu, StrValue):
+                keys.append(eu.value)
+            else:
+                raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL DELTA STILE} orders numbers or "
+                    f"strings; this one holds {runtime_type_of(eu)}")
+        order = sorted(range(len(keys)), key=lambda i: keys[i])
+        return ObjectValue(ArrayValue(
+            [self._sizeof_result(i, u.obj.element_type) for i in order]))
+
+    def _op_join(self, left, right):
+        """sep ⋈ parts: the strings joined, sep between each two."""
+        su = _unwrap_operand(left)
+        pu = _unwrap_operand(right)
+        if not isinstance(su, StrValue):
+            raise TypeError(
+                f"\N{BOWTIE} joins with a string between the parts; this is "
+                f"{self._value_type_name(su)}")
+        if not (isinstance(pu, ObjectValue) and isinstance(pu.obj, ArrayValue)):
+            raise TypeError(
+                f"\N{BOWTIE} joins an array of strings; this is "
+                f"{self._value_type_name(pu)}")
+        parts = []
+        for e in pu.obj.values():
+            eu = _unwrap_operand(e)
+            if not isinstance(eu, StrValue):
+                raise TypeError(
+                    f"\N{BOWTIE} joins strings; this one is {runtime_type_of(eu)}")
+            parts.append(eu.value)
+        return mk_str(su.value.join(parts))
+
     def _sizeof_result(self, count: int, element_type: str | None = None):
         from interp.units import BUILTIN_UNITS
         if element_type in ("u8", "byte"):
@@ -3813,7 +3861,19 @@ class Evaluator:
                 s = self._check_index_unit(s, unwrapped.obj)
                 e = self._check_index_unit(e, unwrapped.obj)
                 arr = unwrapped.obj
-                elems = [arr.get(i) for i in range(s.value, e.value)]
+                if node.step is not None:
+                    # every step-th element from the start, stopping
+                    # where the range of that spelling stops
+                    st = unwrap_optional(self.eval_expr(node.step))
+                    if isinstance(st, UnitValue):
+                        st = st.inner
+                    if not isinstance(st, IntValue):
+                        raise TypeError("a slice's step is a number")
+                    if st.value == 0:
+                        raise coded(2755, TypeError("a slice's step must not be zero"))
+                    elems = [arr.get(i) for i in range(s.value, e.value, st.value)]
+                else:
+                    elems = [arr.get(i) for i in range(s.value, e.value)]
                 return ObjectValue(ArrayValue(list(elems),
                                               element_type=arr.element_type))
 

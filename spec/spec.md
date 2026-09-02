@@ -1841,6 +1841,18 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
 
 
+#### Stepped Slices
+
+A slice may step as a range does: `v[lo…step…hi]` is every `step`-th element from `lo`, stopping where the range `lo…step…hi` stops, so `hi` is not reached and a negative step counts down.  A zero step stops the program, as it does for a range.
+
+```
+let v : i64[] = [10, 11, 12, 13, 14, 15]
+v[0¤ptrdiff…2…#v]                          // [10, 12, 14]
+v[5¤ptrdiff…⁻2…0¤ptrdiff]                  // [15, 13, 11]
+```
+
+What it is for is a table packed into one array — pairs or triples, one entry after another, which is how a compiler keeps its syntax tree's operands.  `t[1¤ptrdiff…2…#t]` is the second column of a table of pairs, as one operation rather than a loop over the pairs.
+
 ### Where, Gather and Amend (`⍸`, `v[ix]`, `v[ix] ← w`)
 
 `⍸ b` answers the indices at which an array of truth values is true, in order, each measured as the array's own subscript is:
@@ -1867,6 +1879,29 @@ w[⍸ evens] ← [7, 8, 9]                    // [7, 0, 8, 0, 9]
 ```
 
 The three together are the filter and the masked store: `v[⍸ (v ≠ 0)]` keeps what is not zero, and `w[⍸ done] ← 0` clears what is.  Every index is checked against the array as a single subscript is, and an index measured in something else is refused where it is written.  The glyph is APL's *where* (U+2378, APL FUNCTIONAL SYMBOL IOTA UNDERBAR); the subscript forms are the ordinary subscript with an array where a number went, which is how NumPy and APL both spell them.
+
+### Grade and Join (`⍋`, `⋈`)
+
+`⍋ v` is the order that sorts `v`: the indices of its elements from the least up, ties left in the order they were, each measured as `v`'s subscript is.  `v[⍋ v]` is `v` sorted; the same order applied to another array sorts it alongside, which is what parallel columns want, and what a sort that moved the elements could not give.
+
+```
+let v : i64[] = [30, 10, 20]
+⍋ v                                        // [1, 2, 0]
+v[⍋ v]                                     // [10, 20, 30]
+names[⍋ ages]                              // the names, youngest first
+```
+
+The bootstrap compiler orders arrays of numbers; the full language orders strings too.  The glyph is APL's *grade up* (U+234B, APL FUNCTIONAL SYMBOL DELTA STILE).
+
+`sep ⋈ parts` joins an array of strings, with `sep` between each two and nowhere else — the one concatenation `⧺` does not say, since `⧺` between every pair puts a separator after the last as well:
+
+```
+", " ⋈ ["a", "b", "c"]                     // "a, b, c"
+"/" ⋈ ["usr", "lib"]                       // "usr/lib"
+", " ⋈ []                                  // ""
+```
+
+It binds as `⧺` does.  The glyph is U+22C8 BOWTIE, the join of relational algebra.
 
 ### Dictionaries and Sets
 

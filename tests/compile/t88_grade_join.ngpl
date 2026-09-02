@@ -1,0 +1,27 @@
+// ⍋ v is the order that sorts v: the indices of its elements from the
+// least up, ties left in the order they were.  v[⍋ v] is v sorted, and
+// the same order applied to another array sorts it alongside, which is
+// what a table of parallel columns wants.  sep ⋈ parts joins strings
+// with the separator between each two and nowhere else.
+
+@start
+@impure
+fn main():
+    let v : i64[] = [30, 10, 20, 10, 40]
+    let o : i64 ¤ptrdiff[] = ⍋ v
+    std.println("{} {} {} {} {}", @dropunit(o[0¤ptrdiff]), @dropunit(o[1¤ptrdiff]), @dropunit(o[2¤ptrdiff]), @dropunit(o[3¤ptrdiff]), @dropunit(o[4¤ptrdiff]))
+    let sorted : i64[] = v[o]
+    std.println("{} {} {}", sorted[0¤ptrdiff], sorted[1¤ptrdiff], sorted[4¤ptrdiff])
+    let names : str[] = ["thirty", "ten", "twenty", "ten again", "forty"]
+    std.println("{}", " < " ⋈ names[o])
+    let empty : str[] = []
+    std.println("[{}]", ", " ⋈ empty)
+    std.println("{}", "-" ⋈ ["one"])
+    let negs : i64[] = [5, ⁻7, 0, ⁻7, 3]
+    let on : i64 ¤ptrdiff[] = ⍋ negs
+    std.println("{} {} {}", negs[on[0¤ptrdiff]], negs[on[1¤ptrdiff]], negs[on[4¤ptrdiff]])
+    let big : u64[] = [18446744073709551615, 1, 0]
+    let ob : i64 ¤ptrdiff[] = ⍋ big
+    std.println("{} {} {}", @dropunit(ob[0¤ptrdiff]), @dropunit(ob[1¤ptrdiff]), @dropunit(ob[2¤ptrdiff]))
+    let e : i64[] = []
+    std.println("{}", @dropunit(#(⍋ e)))

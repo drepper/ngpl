@@ -1,0 +1,3 @@
+tests/compile/refuse/grade_strings.ngpl:7:35: error: ⍋ orders an array of numbers in core-2; this is str[]
+  7 |     std.println("{}", @dropunit(#(⍋ names)))
+    |                                   ^

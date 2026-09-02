@@ -344,3 +344,10 @@ Outstanding
     indices is told from a subscript by its type; the indices are measured as the array's
     own subscript is, and every one is bounds-checked.  Spec "Where, Gather and Amend";
     tests/compile/t86_where_gather_amend and refuse/{gather_unit,where_not_bool,amend_type}.
+
+[x] `v[lo…step…hi]`, `⍋ v` and `sep ⋈ parts` -- stepped slices, grade and join -- in both
+    implementations: the column of a packed table, the order that sorts, the one
+    concatenation ⧺ does not say.  ⍋ is a stable merge sort in the portable runtime, run
+    on all six machines; the compiler orders numbers, the interpreter strings too.  Spec
+    "Stepped Slices" and "Grade and Join"; tests/compile/t87_stepped_slice, t88_grade_join
+    and refuse/{join_parts,grade_strings,sslice_string}.

@@ -1312,6 +1312,50 @@ impl Checker:
                 self.check_reshape(id, tok, na, nb, want)
             ast.Nk.each:
                 self.check_each(id, tok, na, nb)
+            ast.Nk.sslice:
+                // every step-th element from lo up to hi: a fresh array
+                // of the same kind, the ends measured as subscripts are
+                // and the step a plain count
+                self.check_expr(na, types.TY_UNIT)
+                let st9 : i64 = self.ty_of(na)
+                let slo : i64 = self.a.extra[nb × 1¤ptrdiff]
+                let sstep : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+                let shi : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
+                if not types.ty_is_arr(st9):
+                    self.derr(tok, "a stepped slice takes an array apart; this is " ⧺ self.tn(st9))
+                    self.check_expr(slo, types.TY_UNIT)
+                    self.check_expr(sstep, types.TY_UNIT)
+                    self.check_expr(shi, types.TY_UNIT)
+                    self.set_type(id, types.mk_aty(types.TY_I64))
+                    return
+                self.pack_safe(na)
+                self.check_index_expr(tok, st9, slo)
+                self.check_index_expr(tok, st9, shi)
+                self.check_expr(sstep, types.TY_I64)
+                if self.ty_of(sstep) = types.TY_UNT:
+                    self.adopt(sstep, types.TY_I64)
+                elif not types.ty_is_int(self.ty_of(sstep)):
+                    self.derr(tok, "a slice's step is a number, not " ⧺ self.tn(self.ty_of(sstep)))
+                self.set_type(id, st9)
+            ast.Nk.grade:
+                // the order that sorts an array of numbers: the indices
+                // of its elements from the least up, ties in their order
+                self.check_expr(na, types.TY_UNIT)
+                let gt9 : i64 = types.ty_strip_ref(self.ty_of(na))
+                if not (types.ty_is_arr(gt9) and types.ty_is_int(self.elem_of(gt9)) and not types.ty_is_bigint(self.elem_of(gt9))):
+                    self.derr(tok, "⍋ orders an array of numbers in core-2; this is " ⧺ self.tn(gt9))
+                self.set_type(id, types.mk_aty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
+            ast.Nk.join:
+                // the strings joined, with the separator between each
+                // two and nowhere else
+                self.check_expr(na, types.TY_STR)
+                self.check_expr(nb, types.TY_UNIT)
+                if self.ty_of(na) ≠ types.TY_STR:
+                    self.derr(tok, "⋈ joins with a string between the parts; this is " ⧺ self.tn(self.ty_of(na)))
+                let jt9 : i64 = types.ty_strip_ref(self.ty_of(nb))
+                if not (types.ty_is_arr(jt9) and self.elem_of(jt9) = types.TY_STR):
+                    self.derr(tok, "⋈ joins an array of strings; this is " ⧺ self.tn(jt9))
+                self.set_type(id, types.TY_STR)
             ast.Nk.where:
                 // the indices at which an array of truth values is true
                 self.check_expr(na, types.TY_UNIT)

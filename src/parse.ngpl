@@ -901,10 +901,8 @@ impl Parser:
                 self.pos ← self.pos + 1
                 let idx : i64 = self.parse_expr()
                 if self.nkind[idx × 1¤ptrdiff] = ast.Nk.rangev:
-                    // v[a…b]: both ends included, a fresh array answers
-                    if self.nc[idx × 1¤ptrdiff] ≠ ⁻1:
-                        self.err("a stepped slice is not core-2 yet")
-                        return e
+                    // v[a…b], and v[a…step…b] for every step-th element:
+                    // a fresh array answers
                     if self.peek() = tokens.Tk.comma:
                         // m[rows, cols] and m[rows, i]: a range of rows
                         // cut down the other way.  Neither can hand back
@@ -934,7 +932,16 @@ impl Parser:
                             e ← self.mknode(ast.Nk.mslice, at, e, moff, 1)
                         continue
                     _ ← self.eat(tokens.Tk.rbrack, "']' closing the slice")
-                    e ← self.mknode(ast.Nk.slice, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
+                    if self.nc[idx × 1¤ptrdiff] ≠ ⁻1:
+                        // v[lo…step…hi]: every step-th element, as the
+                        // range of the same spelling counts
+                        let soff : i64 = @dropunit(#self.extra)
+                        self.extra.push(self.na[idx × 1¤ptrdiff])
+                        self.extra.push(self.nc[idx × 1¤ptrdiff])
+                        self.extra.push(self.nb[idx × 1¤ptrdiff])
+                        e ← self.mknode(ast.Nk.sslice, at, e, soff, 0)
+                    else:
+                        e ← self.mknode(ast.Nk.slice, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
                 elif self.peek() = tokens.Tk.comma:
                     // m[i, j] and m[i, a…b] reach the row and ask it,
                     // so the pair is the chain m[i][j] written short
@@ -1098,6 +1105,10 @@ impl Parser:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
             return self.mknode(ast.Nk.where, at, e, 0, 0)
+        if k = tokens.Tk.grade:
+            self.pos ← self.pos + 1
+            let e : i64 = self.parse_unary_operand()
+            return self.mknode(ast.Nk.grade, at, e, 0, 0)
         if k = tokens.Tk.lpar:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_expr()
@@ -1449,7 +1460,7 @@ impl Parser:
             tokens.Tk.bxor: 12
             tokens.Tk.band: 13
             tokens.Tk.plus, tokens.Tk.minus, tokens.Tk.satadd, tokens.Tk.satsub: 14
-            tokens.Tk.concat: 15
+            tokens.Tk.concat, tokens.Tk.join: 15
             tokens.Tk.mult, tokens.Tk.divide, tokens.Tk.mod, tokens.Tk.satmul: 16
             tokens.Tk.reshape: 17
             _: ⁻1
@@ -1489,6 +1500,7 @@ impl Parser:
             tokens.Tk.plus: ast.Nk.add
             tokens.Tk.minus: ast.Nk.sub
             tokens.Tk.concat: ast.Nk.ccat
+            tokens.Tk.join: ast.Nk.join
             tokens.Tk.mult: ast.Nk.mul
             tokens.Tk.divide: ast.Nk.div
             tokens.Tk.mod: ast.Nk.mod

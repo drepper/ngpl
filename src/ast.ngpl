@@ -15,6 +15,9 @@ enum Nk : u8:
     fold = 9    // f ⌿ v: na = the container, nb = extra [what, f or op, init or ⁻1, direction]
     opval = 44    // an operator standing where a fold's function goes: na = the node kind it makes
     where = 63    // ⍸ b: na = an array of truth values; the indices at which it is true
+    sslice = 64    // v[lo…step…hi]: na = base, nb = extra [lo, step, hi]; every step-th element from lo
+    grade = 65    // ⍋ v: na = an array of numbers; the indices that would sort it
+    join = 66    // sep ⋈ parts: na = the separator, nb = the strings
     lit_bool = 2    // na = 0 or 1
     lit_str = 3    // na = string table index
     var = 4    // name is the token

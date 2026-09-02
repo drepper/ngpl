@@ -182,6 +182,12 @@ Attempt 3 grows core-1 to **core-2** with structs:
   a subscript by the index's type and the lowering by the same, so
   the parser is untouched; a sized array in the frame takes the
   farr_load/farr_store forms inside the same loops.
+- **stepped slices, grade, join**: `v[lo…step…hi]` is every step-th
+  element, the column of a packed table as one operation; `⍋ v` is
+  the order that sorts an array of numbers (a merge sort over an
+  index array in the portable runtime, RT_GRADE, keys handed over
+  canonical with whether they are unsigned); `sep ⋈ parts` joins
+  strings with the separator between each two, a loop of sccat.
 - **finding, holding, slicing**: `container ⍳ wanted` answers the
   position as an optional ¤ptrdiff (string elements compared by
   content), `⊞ ⊟ ⊠` hold arithmetic at the type's edge — narrow

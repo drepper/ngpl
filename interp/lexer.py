@@ -250,7 +250,7 @@ ESCAPES = {
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
-SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⊨⊭⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳⍸∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
+SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⊨⊭⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳⍸⍋⋈∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
                  # a ⊑ b and a ⊒ b -- a runs along the front of b, or
                  # along its back.
                  "⊑⊒"
@@ -289,6 +289,8 @@ _CONTINUATION_OPS = frozenset({
     "⍴",
     "⍳",
     "⍸",
+    "⍋",
+    "⋈",
     "\N{SMALL ELEMENT OF}",
     "\N{UNION}", "\N{INTERSECTION}", "\N{SET MINUS}",
     "\N{SUBSET OF}", "\N{SUBSET OF OR EQUAL TO}",
@@ -764,7 +766,7 @@ def tokenize(src: str):
                 tokens.append(Token(TokenType.PUNCT, ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token(TokenType.OP, "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳⍸∊≠#∪∩∖⊂⊆⊃⊇⊑⊒※∀∃∄\N{DIAERESIS}"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳⍸⍋⋈∊≠#∪∩∖⊂⊆⊃⊇⊑⊒※∀∃∄\N{DIAERESIS}"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"

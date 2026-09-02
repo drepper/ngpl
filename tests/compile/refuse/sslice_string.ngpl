@@ -1,0 +1,7 @@
+// A stepped slice takes an array apart; a string is cut with a plain
+// one, in characters, and has no every-second-character form.
+@start
+@impure
+fn main():
+    let s : str = "abcdef"
+    std.println("{}", s[0¤ptrdiff…2…6¤ptrdiff])

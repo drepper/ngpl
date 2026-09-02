@@ -1,0 +1,6 @@
+tests/compile/refuse/sslice_string.ngpl:7:24: error: a stepped slice takes an array apart; this is str
+  7 |     std.println("{}", s[0¤ptrdiff…2…6¤ptrdiff])
+    |                        ^
+tests/compile/refuse/sslice_string.ngpl:7:5: error: println writes numbers, truth values, characters and strings; this is i64[]
+  7 |     std.println("{}", s[0¤ptrdiff…2…6¤ptrdiff])
+    |     ^

@@ -519,12 +519,14 @@ class Subscript:
 
 
 class SliceAccess:
-    """Slice access: obj[start…end] (inclusive on both ends)."""
+    """Slice access: obj[start…end], and obj[start…step…end] for every
+    step-th element, the end left out as a range leaves it out."""
 
-    def __init__(self, obj, start, end):
+    def __init__(self, obj, start, end, step=None):
         self.obj = obj
         self.start = start
         self.end = end
+        self.step = step
 
 
 class MultiSlice:

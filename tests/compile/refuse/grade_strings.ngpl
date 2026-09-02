@@ -1,0 +1,7 @@
+// The bootstrap compiler orders arrays of numbers; strings are the
+// full language's, and the interpreter orders them.
+@start
+@impure
+fn main():
+    let names : str[] = ["b", "a"]
+    std.println("{}", @dropunit(#(⍋ names)))
