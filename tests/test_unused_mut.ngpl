@@ -114,6 +114,35 @@ fn test_modified_parameter_is_quiet():
     assert_eq(writes_its_copy([1]), 2)
 
 // ---------------------------------------------------------------------
+// A method's bindings carry the same claim
+// ---------------------------------------------------------------------
+//
+// A method is a function like any other, and a mut inside one says the
+// same untrue thing.  It was the analysis, not the rule, that used to
+// stop at the top level.
+
+struct Counter:
+    n : i64
+
+impl Counter:
+    fn peek(&self) → i64:
+        @expect warning 2405 "'kept' is declared mut but is never modified"
+        let kept : mut i64 = self.n
+        kept
+
+    fn bump(&mut self) → i64:
+        let step : mut i64 = 1
+        step ← step + 1
+        self.n ← self.n + step
+        self.n
+
+@test
+fn test_method_bindings_are_judged():
+    let c : mut Counter = Counter{n: 5}
+    assert_eq(c.peek(), 5)
+    assert_eq(c.bump(), 7)
+
+// ---------------------------------------------------------------------
 // A plain let is never warned about
 // ---------------------------------------------------------------------
 

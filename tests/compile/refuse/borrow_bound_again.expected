@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_bound_again.ngpl:13:10: error[2430]: 't' is lent out for reading to 'r1' until line 14 and cannot be changed before then
+  13 |     t.xs.push(3)
+     |          ^

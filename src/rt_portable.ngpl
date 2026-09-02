@@ -688,13 +688,15 @@ fn rt_build(id : i64, tg : &elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         _ ← b.call2(emit.RT_WRITE1, p, n)
         b.retn()
         return rtb_fn(b)
-    if id = emit.RT_PRINTI or id = emit.RT_PRINTU:
-        // (v): decimal onto fd 1, built least digit first
+    if id = emit.RT_PRINTI or id = emit.RT_PRINTU or id = emit.RT_EPRINTI:
+        // (v): decimal onto fd 1, or fd 2 where the number belongs in a
+        // report rather than in what the program writes, built least
+        // digit first
         let b : mut RtB = rtb(1)
         let buf : i64 = b.call1(emit.RT_ALLOC, b.cst(24))
         let z : i64 = b.cst(0)
         let neg : mut i64 = z
-        if id = emit.RT_PRINTI:
+        if id ≠ emit.RT_PRINTU:
             neg ← b.clts(0, z)
             let nv : i64 = b.sub(z, 0)
             b.mov(0, b.sel(neg, nv, 0))
@@ -709,14 +711,14 @@ fn rt_build(id : i64, tg : &elf.Target, lw : &mut lower.Lower) → ir.IrFn:
         b.mov(ix, b.sub(ix, one))
         b.stn(b.add(buf, ix), 0, b.add(dgt, b.cst(48)), 1)
         b.jnz(0, ltop)
-        if id = emit.RT_PRINTI:
+        if id ≠ emit.RT_PRINTU:
             let lpos : i64 = b.l()
             b.jz(neg, lpos)
             b.mov(ix, b.sub(ix, one))
             b.stn(b.add(buf, ix), 0, b.cst(45), 1)
             b.lab(lpos)
         let n24 : i64 = b.cst(24)
-        _ ← b.call2(emit.RT_WRITE1, b.add(buf, ix), b.sub(n24, ix))
+        _ ← b.call2(if id = emit.RT_EPRINTI: emit.RT_WRITE2 else: emit.RT_WRITE1, b.add(buf, ix), b.sub(n24, ix))
         b.retn()
         return rtb_fn(b)
     rt_build2(id, &tg, &lw)

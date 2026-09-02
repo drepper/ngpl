@@ -3898,6 +3898,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         st = env.lookup(defn.struct_name)
         for method_def in defn.methods:
             struct_vars = _struct_vars_of(method_def, env, self_type=st)
+            # A method's bindings carry the same claim a function's do,
+            # and a mut that nothing changes says the same untrue thing
+            # in both places.
+            program.warnings.extend(_unused_mut_warnings(method_def))
             for finding in (_static_literal_check(method_def),
                             _static_chr_check(method_def),
                             _static_return_check(method_def, struct_vars),

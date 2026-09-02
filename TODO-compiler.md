@@ -700,7 +700,7 @@ Tooling
     mismatch to a ProgramStop is what closes it, and takes @expect with it: there is no
     form for a stop today, only for an error.
 
-[ ] the "declared mut but is never modified" warning.  The interpreter reports it for a
+[x] the "declared mut but is never modified" warning.  The interpreter reports it for a
     binding and for a parameter, the spec's Bindings chapter describes it and a
     statement-level @expect pins it; ngplc does not have it at all -- not for an array, not
     for a scalar.  Found while making a let of a container take a copy, which is what first
@@ -708,6 +708,25 @@ Tooling
     older than that and neither implementation's own tests catch it: the shared suite
     compares what a program writes, and a diagnostic only one implementation emits is not
     part of that.
+
+    Done, and the two implementations were compared over tests/, tests/compile/ and
+    examples/ rather than reasoned about: every file draws the same warnings from both.
+    The checker keeps smod beside smut and sets it wherever a name is changed or handed
+    somewhere that may change it -- a store through require_mut_base, a plain assignment, a
+    borrow at a call of either kind, a method not known to only read, a reshape of a name --
+    and pop_scope says what is left over as the binding leaves, where life_ends already says
+    what nothing read.  Only a let and a parameter carry the claim: what a while or a walk
+    binds is rebound every turn, which is the rule lwarn already draws.
+
+    Three things came out of writing it.  The interpreter never ran the analysis on impl
+    methods, so a mut inside one said nothing in either implementation; it does now, and
+    tests/test_unused_mut.ngpl has the case.  A statement's own @expect absorbs the warning
+    in the compiler as it does in the interpreter, which t49_stmt_expect needed.  And the
+    compiler's own sources had two: check.ngpl's 'tt' and lower.ngpl's 'av', both now plain.
+
+    What is still missing is a pin: the shared suite compares what a program writes, and
+    refuse/ takes only refusals, so nothing in it holds ngplc to a warning.  The comparison
+    above is a script and not a test.
 
 [x] a let of a container takes a copy, and `let v : & = w` names one instead.  Both
     implementations bound an array by reference and the spec said nothing about it, so
@@ -742,10 +761,32 @@ Tooling
     literal's field through a call.  Found by writing exactly that line in main.ngpl and
     watching stage 1 stop where stage 2 had not.
 
-[ ] the lifetime of a borrow bound again.  `let r1 := r2` takes r2's origins, so the origin
+[x] the lifetime of a borrow bound again.  `let r1 := r2` takes r2's origins, so the origin
     is held until r1 is last read -- except where r2's own lend ends at the very statement
     that binds r1, when end_lend puts back the hold it saved before r1's claim was made and
     the origin comes free while r1 still names its array.  Both implementations are
     permissive in the same way, so the shared suite sees nothing; what it wants is the
     borrower's origins kept somewhere a lend's ending does not erase, and bind_lend reading
     them from there rather than from the live records.
+
+    Done the other way round, which is smaller and covers more: end_lend puts back what it
+    saved and then reclaim() lets whatever lends are still live claim the origin again, so
+    two lends on one origin unwind in either order.  The interpreter's _end_lend does the
+    same, keeping an origin frozen while any live record still names it and the object lent
+    while any name for it is alive.  tests/compile/refuse/borrow_bound_again pins it.
+
+[x] the report for two containers of different lengths.  It said only that the lengths
+    differed; it now says which operator, and both lengths, in the interpreter's own words:
+    "+: the operands it threads over are taken apart together, so they must be the same
+    length, but the left operand has 3 elements and the right operand has 2".  That took a
+    runtime routine, RT_EPRINTI, which is RT_PRINTI writing to the error stream instead --
+    the two are one builder in rt_portable.ngpl, differing in which of RT_WRITE1 and
+    RT_WRITE2 they call.
+
+    The status still differs and cannot be reconciled from this side: a compiled program
+    stops with 64, as every runtime stop does, and the interpreter reports it as error 2236
+    and leaves with 1.  Closing it means moving the mismatch to errors.ProgramStop, which
+    takes tests/test_listable.ngpl's `@expect error 2236` and
+    tests/output/listable_length_mismatch.status with it, and wants an @expect form for a
+    stop, which there is not one of.  Until then the shared suite cannot hold the case,
+    since it requires both to stop with the same status.

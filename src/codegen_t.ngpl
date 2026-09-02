@@ -272,7 +272,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 ¤ptrdiff = 74
+    let nrt : i64 ¤ptrdiff = 75
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -597,7 +597,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
 // how many arguments each runtime routine takes, for the prologue
 fn rt_nargs(id : i64) → i64:
     if id = emit.RT_WRITE1 or id = emit.RT_WRITE2 or id = emit.RT_ABORT: return 2
-    if id = emit.RT_ALLOC or id = emit.RT_ARRNEW or id = emit.RT_PRINTI or id = emit.RT_PRINTU: return 1
+    if id = emit.RT_ALLOC or id = emit.RT_ARRNEW or id = emit.RT_PRINTI or id = emit.RT_PRINTU or id = emit.RT_EPRINTI: return 1
     if id = emit.RT_ARRPUSH or id = emit.RT_CONCAT or id = emit.RT_STREQ: return 2
     if id = emit.RT_STRCHARS or id = emit.RT_PRINTSTR: return 1
     if id = emit.RT_HNEW: return 2

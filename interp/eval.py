@@ -5145,11 +5145,20 @@ class Evaluator:
 
     def _end_lend(self, rec):
         name, origins, obj = rec
+        # Another lend may still hold the same origin -- `let r1 := r2`
+        # takes r2's origins and outlives r2 -- so what is still held
+        # stays held, and the object stays lent while any name for it
+        # is alive.
+        live = [r for recs in self._lend_ends.values() for r in recs]
+        still = {o for r in live for o in r[1]}
         for origin in origins:
+            if origin in still:
+                continue
             if self._frozen_vars.get(origin) in (Held.lent, Held.lent_mut):
                 del self._frozen_vars[origin]
             self._lent_info.pop(origin, None)
-        self._lent_objs.pop(id(obj), None)
+        if not any(r[2] is obj for r in live):
+            self._lent_objs.pop(id(obj), None)
 
     def _refuse_if_lent(self, name):
         """A binding lent to a borrowed answer cannot be changed until

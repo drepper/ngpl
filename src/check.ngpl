@@ -376,6 +376,12 @@ struct Checker:
     snames : str[]
     stype : i64[]
     smut : i64[]
+    // Whether anything in the binding's scope changed it, and whether
+    // it is a parameter rather than a binding.  A mut that nothing
+    // changes says something untrue, and the two answer where to say
+    // so and in which words.
+    smod : i64[]
+    sparam : i64[]
     sslot : i64[]
     // What a binding has lent out, and so what is left of it:
     // Hold.free while nothing borrows it, Hold.read while something
@@ -394,6 +400,9 @@ struct Checker:
     nslots : i64
     loop_depth : i64
     cur_fn : i64
+    // set while a function's own parameters are being declared, so a
+    // scope entry knows which of the two it is
+    in_params : bool
     in_contract : bool
     in_post : bool       // @old may be written here and nowhere else
     scope_floor : i64    // a lambda's body sees nothing below this
@@ -653,12 +662,20 @@ impl Checker:
         self.snames.push(name)
         self.stype.push(ty)
         self.smut.push(is_mut)
+        self.smod.push(0)
+        self.sparam.push(if self.in_params: 1 else: 0)
         self.sslot.push(slot)
         self.sheld.push(Hold.free)
         self.slend.push(⁻1)
         self.sborrow.push(0)
         self.life_born(slot, tok)
         slot
+
+// The methods that only read what they are called on.  Everything
+// else may write through it, so a name it is called on counts as
+// changed; the list is the interpreter's, and the two have to agree.
+fn reads_only(m : str) → bool:
+    m ∊ ["get", "iterate", "next", "str", "ord", "chr", "chars", "shape"]
 
 fn begins_underscore(nm : str) → bool:
     "_" ⊑ nm
@@ -692,6 +709,42 @@ impl Checker:
             self.dwarn(tok, 2421, "'" ⧺ nm ⧺ """' is bound and never read; its lifetime begins and
                                               " ends at the statement that declares it. Name it '_""" ⧺ nm ⧺ "' if that is meant")
 
+    // A binding leaves its scope: a mut that nothing in the scope
+    // changed says something untrue, and this is where that is said.
+    // A mut is a claim that the value moves, and a reader who sees one
+    // plans around it -- looking for where it moves, or declining to
+    // reason about it as a constant.
+    fn mut_ends(&mut self, i : i64 ¤ptrdiff):
+        if self.smut[i] = 0 or self.smod[i] ≠ 0:
+            return
+        let nm : str = self.snames[i]
+        if nm = "_" or nm = "self":
+            return
+        let slot : i64 = self.sslot[i]
+        // Only a let and a parameter say this in the program's own
+        // words.  What a while or a walk binds is rebound every turn
+        // and says nothing, which is the same rule lwarn already draws
+        // for the binding nothing reads.
+        if self.sparam[i] = 0 and (slot < 0 or slot × 1¤ptrdiff >= #self.lwarn or self.lwarn[slot × 1¤ptrdiff] ≠ 1):
+            return
+        let tok : i64 = self.ltok[slot × 1¤ptrdiff]
+        if tok = ⁻1:
+            return
+        if self.sparam[i] = 1:
+            self.dwarn(tok, 2419, "parameter '" ⧺ nm ⧺ "' is declared mut but is never modified")
+        else:
+            self.dwarn(tok, 2405, "'" ⧺ nm ⧺ "' is declared mut but is never modified")
+
+    // Whatever this expression reaches through, the binding at its root
+    // has been changed -- or handed somewhere that may change it, which
+    // counts the same: a warning that fires where nothing is wrong is
+    // worse than one that stays quiet.
+    fn mark_changed(&mut self, e : i64):
+        let s : i64 = self.base_slot(e)
+        if s = ⁻1 or s × 1¤ptrdiff >= #self.smod:
+            return
+        self.smod[s × 1¤ptrdiff] ← 1
+
     fn push_scope(&mut self):
         self.marks.push(@dropunit(#self.snames))
         self.hmark.push(@dropunit(#self.hslot))
@@ -709,9 +762,12 @@ impl Checker:
         self.end_lends_from(low)
         while @dropunit(#self.snames) > low:
             self.life_ends(self.sslot[(#self.snames - 1¤ptrdiff)])
+            self.mut_ends(#self.snames - 1¤ptrdiff)
             _ ← self.snames.pop() ?? ""
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
+            _ ← self.smod.pop() ?? 0
+            _ ← self.sparam.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
             _ ← self.sheld.pop() ?? Hold.free
             _ ← self.slend.pop() ?? 0
@@ -1107,7 +1163,7 @@ impl Checker:
                 self.check_sizeof(id, tok, na)
             ast.Nk.typeof:
                 self.check_expr(na, types.TY_UNIT)
-                let tt : mut i64 = types.ty_strip_ref(self.ty_of(na))
+                let tt : i64 = types.ty_strip_ref(self.ty_of(na))
                 let tpre : mut str = ""
                 if self.kind_of(na) = ast.Nk.var:
                     let ts : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
@@ -2613,6 +2669,9 @@ impl Checker:
         self.set_type(id, acc)
 
     fn check_reshape(&mut self, id : i64, tok : i64, na : i64, nb : i64, want : i64):
+        // the result shares the storage it was built from and takes its
+        // access with it, so writing through the one writes the other
+        self.mark_changed(nb)
         if self.kind_of(na) = ast.Nk.tuple:
             self.check_mreshape(id, tok, na, nb, want)
             return
@@ -3595,6 +3654,8 @@ impl Checker:
         let sv_names : str[] = self.snames[0¤ptrdiff…#self.snames]
         let sv_type : i64[] = self.stype[0¤ptrdiff…#self.stype]
         let sv_mut : i64[] = self.smut[0¤ptrdiff…#self.smut]
+        let sv_mod : i64[] = self.smod[0¤ptrdiff…#self.smod]
+        let sv_param : i64[] = self.sparam[0¤ptrdiff…#self.sparam]
         let sv_slot : i64[] = self.sslot[0¤ptrdiff…#self.sslot]
         let sv_held : Hold[] = self.sheld[0¤ptrdiff…#self.sheld]
         let sv_marks : i64[] = self.marks[0¤ptrdiff…#self.marks]
@@ -3613,6 +3674,8 @@ impl Checker:
         self.snames ← sv_names
         self.stype ← sv_type
         self.smut ← sv_mut
+        self.smod ← sv_mod
+        self.sparam ← sv_param
         self.sslot ← sv_slot
         self.sheld ← sv_held
         self.marks ← sv_marks
@@ -4181,6 +4244,10 @@ impl Checker:
                     self.derr(tok, "argument " ⧺ tokens.i64_str(num) ⧺ " of '" ⧺ name ⧺ "' is " ⧺ self.tn(at) ⧺ ", but the parameter says " ⧺ self.tn(base))
 
     fn check_ref_arg(&mut self, arg : i64, base : i64, rk : i64):
+        // handed over as a borrow: whether the callee writes through it
+        // is the callee's business, and a mut that may have moved is
+        // not one worth reporting
+        self.mark_changed(self.a.na[arg × 1¤ptrdiff])
         let inner : i64 = self.a.na[arg × 1¤ptrdiff]
         let atok : i64 = self.a.ntok[arg × 1¤ptrdiff]
         self.check_expr(inner, types.TY_UNIT)
@@ -4466,6 +4533,11 @@ impl Checker:
                 self.check_smethod(id, tok, na, args_off, bname, m, false)
                 return
         self.check_expr(na, types.TY_UNIT)
+        // A method may write through what it was called on, and which
+        // ones do is not read from here: what is not known to only read
+        // counts as a change, which is the generous side to be on.
+        if not reads_only(m):
+            self.mark_changed(na)
         let t : i64 = self.ty_of(na)
         if types.ty_is_struct(types.ty_strip_ref(t)):
             let sname := self.a.structs[types.ty_sidx(types.ty_strip_ref(t)) × 1¤ptrdiff].name
@@ -4837,6 +4909,7 @@ impl Checker:
             self.sheld[s × 1¤ptrdiff] ← how
 
     fn require_mut_base(&mut self, base : i64, tok : i64):
+        self.mark_changed(base)
         if self.kind_of(base) = ast.Nk.field or self.kind_of(base) = ast.Nk.index:
             self.require_mut_base(self.a.na[base × 1¤ptrdiff], tok)
             return
@@ -5203,6 +5276,24 @@ impl Checker:
         _ ← self.lend_back.pop() ?? 0
         _ ← self.lend_until.pop() ?? 0¤"line"
         _ ← self.lend_how.pop() ?? 0
+        // Another lend may still hold the same origin -- `let r1 := r2`
+        // takes r2's origins and outlives r2 -- and what was put back
+        // above is what was there before either of them.  Whatever is
+        // left claims it again.
+        self.reclaim(o)
+
+    // The strongest claim the lends still live make on an origin, put
+    // back on it.  Nothing left claiming it leaves it as the lend that
+    // just ended found it.
+    fn reclaim(&mut self, o : i64):
+        if o < 0 or o × 1¤ptrdiff >= #self.sheld:
+            return
+        foreach i := 0¤ptrdiff…#self.lend_b:
+            if self.lend_o[i] = o:
+                let claim : Hold = if self.lend_how[i] = 2: Hold.none else: Hold.read
+                if claim.ord() > self.sheld[o × 1¤ptrdiff].ord():
+                    self.sheld[o × 1¤ptrdiff] ← claim
+                self.slend[o × 1¤ptrdiff] ← self.lend_b[i]
 
     fn end_lends_from(&mut self, low : i64):
         let i : mut i64 ¤ptrdiff = 0
@@ -5557,7 +5648,13 @@ impl Checker:
                 // checked and reported on as any other, rather than having
                 // its refusals quietly swallowed.
                 if nb = 0:
+                    // A statement that says which warning it draws
+                    // accounts for it itself, so what it binds is not
+                    // reported on again here.
+                    let before : i64 ¤ptrdiff = #self.snames
                     self.check_stmt(na, false)
+                    foreach si9 := before…#self.snames:
+                        self.smod[si9] ← 1
                 return
             ast.Nk.st_let:
                 if nc <= ⁻2:
@@ -5715,6 +5812,8 @@ impl Checker:
             ast.Nk.assign:
                 let name := self.text(tok)
                 let s : i64 = self.lookup(name)
+                if s ≠ ⁻1:
+                    self.smod[s × 1¤ptrdiff] ← 1
                 let asl : i64 = if s ≠ ⁻1: self.sslot[s × 1¤ptrdiff] else: ⁻1
                 self.life_used(asl)
                 self.pack_kill(asl)
@@ -6647,7 +6746,7 @@ impl Checker:
 // derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
 let DIAG_CODES : i64[] = [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256,
      2290, 2291, 2293,
-     2400, 2401, 2402, 2403, 2404, 2421, 2430, 2431, 2432, 2433, 2436,
+     2400, 2401, 2402, 2403, 2404, 2405, 2419, 2421, 2430, 2431, 2432, 2433, 2436,
      2619, 2728, 2729, 2741, 2910, 2911]
 fn draws_code(code : i64) → bool:
     foreach c := DIAG_CODES:
@@ -6794,6 +6893,7 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
                                   lown: [], wslot: [], wreb: [],
                                   fslots: [],
                                   diags: [], snames: [], stype: [], smut: [],
+                                  smod: [], sparam: [], in_params: false,
                                   sslot: [], sheld: [], hslot: [], hback: [],
                                   hmark: [], marks: [], nslots: 0,
                                   loop_depth: 0, cur_fn: 0,

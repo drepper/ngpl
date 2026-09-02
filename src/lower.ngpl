@@ -1437,9 +1437,17 @@ impl Lower:
             self.ir(ir.Ir.ceq, n, n2, 0, same, 64 + 256)
             let lok : i64 = self.label()
             self.ir(ir.Ir.jnz, same, lok, 0, 0, 0)
-            let m : i64 = self.intern("""a listable operator meets element against element, and
-                                       " its operands are of different lengths\n""")
-            self.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+            // What is wrong is which two lengths did not meet, so the
+            // report says them rather than only that they differed.
+            // The words are the interpreter's, which says the same
+            // thing where it checks as it evaluates.
+            self.ir(ir.Ir.eprints, self.intern(self.text(self.a.ntok[nid × 1¤ptrdiff]) ⧺ """: the operands it threads over are taken apart
+                                                                  " together, so they must be the same length, but the
+                                                                  " left operand has """), 0, 0, 0, 0)
+            _ ← self.rt1(emit.RT_EPRINTI, n)
+            self.ir(ir.Ir.eprints, self.intern(" elements and the right operand has "), 0, 0, 0, 0)
+            _ ← self.rt1(emit.RT_EPRINTI, n2)
+            self.ir(ir.Ir.abort, self.intern("\n"), 0, 0, 0, 0)
             self.ir(ir.Ir.label, lok, 0, 0, 0, 0)
         // where the answer goes: the array one side already names, or
         // a fresh one where neither side is the place being written
@@ -3848,8 +3856,7 @@ impl Lower:
             self.ir(ir.Ir.label, send, 0, 0, 0, 0)
             self.tbase ← sbase
             return
-        let av0 : i64 = self.lower_expr(arr)
-        let av : mut i64 = av0
+        let av : i64 = self.lower_expr(arr)
         let desc : i64 = self.tmp()
         self.ir(ir.Ir.mov, av, 0, 0, desc, 0)
         let iv : i64 = self.tmp()

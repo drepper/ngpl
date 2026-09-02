@@ -1,0 +1,14 @@
+// `let r1 := r2`, where r2 is itself a borrow, is another name for that
+// borrow, so it takes r2's origins and holds them until r1 is last
+// read.  What was lent may not change while either name lives, even
+// where r2's own last use is the statement that binds r1.
+struct T:
+    xs : i64[]
+@start
+@impure
+fn main():
+    let t : mut T = T{xs: [1, 2]}
+    let r2 : & = t.xs
+    let r1 := r2
+    t.xs.push(3)
+    std.println("{}", @dropunit(#r1))
