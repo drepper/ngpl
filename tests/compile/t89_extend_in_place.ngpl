@@ -1,0 +1,49 @@
+// `v ← v ⧺ w` where v names the same array on both sides grows that
+// array rather than building a fresh one out of two.  What the join
+// means is unchanged, so the only way to tell is by what else still
+// sees the old contents: a copy taken beforehand must not grow with it.
+
+struct Table:
+    names : str[]
+    extra : i64[]
+
+impl Table:
+    // Take items onto the end of the table's own array, answering where
+    // they start.
+    fn push_list(&mut self, items : i64[]) → i64 ¤ptrdiff:
+        let off : i64 ¤ptrdiff = #self.extra
+        self.extra ← self.extra ⧺ items
+        off
+
+// The elements of an array, in order, on one line.
+@impure
+fn show(v : i64[]):
+    foreach x := v:
+        std.print("{} ", x)
+    std.println("|")
+
+@start
+@impure
+fn main():
+    let v : mut i64[] = [1, 2]
+    let keep : i64[] = v
+    v ← v ⧺ [3, 4]
+    v ← v ⧺ [5]
+    show(v)
+    show(keep)
+
+    let t : mut Table = Table{names: ["a"], extra: []}
+    std.println("{} {}", @dropunit(t.push_list([7, 8])), @dropunit(t.push_list([9])))
+    show(t.extra)
+    std.println("{} {}", t.names[0¤ptrdiff], @dropunit(#t.names))
+
+    // the two sides name different places, so this one is still a join
+    let w : mut i64[] = [10]
+    let u : i64[] = [11, 12]
+    w ← u ⧺ w
+    show(w)
+    show(u)
+
+    let s : mut str = "ab"
+    s ← s ⧺ "cd"
+    std.println("{}", s)

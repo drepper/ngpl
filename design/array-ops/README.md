@@ -353,3 +353,130 @@ cost, and a reminder that these operators are for what the source
 says, not for what it costs.  Every commit held the fixed point and
 compiled all 100 conformance programs to the same bytes.
 
+---
+
+# Third round: after map-with-context, 2026-09-02
+
+## The count
+
+| | round 1 | round 2 | now |
+|---|---|---|---|
+| `foreach` | 559 | 530 | 526 |
+| `while` | 180 | 154 | 154 |
+| branches | 3,928 | 3,949 | 3,973 |
+
+The branch count grows because each operator added to the compiler is
+itself written in the compiler: `check_each`, `lower_fold`,
+`makes_fresh_array` and their kin are some four hundred lines of
+ordinary branching code.  That is the honest arithmetic of a
+self-hosted compiler -- an operator that removes five loops from the
+source costs twenty branches to implement, and pays only where it is
+used more than it cost.  It is used nine times so far.
+
+## What the 526 are
+
+| shape | count | what it wants |
+|---|---|---|
+| **append**: `x.push(v)` per element | **59** | `x ← x ⧺ y` -- **works today**, 50 of the 59 |
+| multi-statement bodies | 309 | nothing; this is the compiler's work |
+| **map carrying context** | 36 | 17 want `&self`; **13 are slices**; 6 misc |
+| find, find/any | 49 | a hash table, or `⍳`; not an operator |
+| emission, one or more instructions | 53 | nothing; `foreach` is the each-for-effect |
+| amend, filter | 17 | `⍸` and a gather -- works today |
+| reduce | 3 | `⌿` -- works today |
+
+## The 59 appends are the prize
+
+They fall into three shapes, and fifty of them are a one-line rewrite
+with what the language already has:
+
+| shape | count | becomes |
+|---|---|---|
+| a whole array copied in | 38 | `self.a.lte ← self.a.lte ⧺ pts` |
+| a constant repeated | 12 | `taken ← taken ⧺ (ecount ⍴ 0)` |
+| a sub-range or a call's answer | 9 | `strtab ← strtab ⧺ std.bytes(sy.name)` |
+
+Nine of the 38 are the scope save-and-restore in `check.ngpl`, which
+clears each array and refills it -- so those are not even a join:
+`self.snames ← sv_names`.  Checked: a field, and a field of a field,
+take `x ← x ⧺ y`.
+
+## The one language item left
+
+Seventeen of the context-maps reach through `&self` -- a method of the
+receiver, or one of its fields:
+
+```
+rem.push(self.lam_pt(lt, j))          check.ngpl:3621, and two more
+self.pool.push(self.pool[l.n + i])    comptime.ngpl:770
+```
+
+A λ would say them, but the compiler refuses a borrow in a capture
+list -- *"a capture is one value read now; 'b' is &Big"* (check.ngpl:1450).
+
+**The interpreter allows it.**  It runs
+
+```
+let g := λt : i64 |b| → i64: t + @dropunit(#b.xs)    // b : &B
+```
+
+and answers.  So this is a bootstrap-subset limit, not a rule of the
+language, and it is the last thing standing between the operators and
+the loops that remain.
+
+The narrow version is sound and cheap: **allow a borrow in a capture
+list where the λ cannot outlive it** -- written directly before `¨` or
+`⌿`, where the loop consumes it and nothing stores it.  That is a
+syntactic condition the checker can see at the site, and it needs no
+lifetime analysis.  The general case -- a λ that borrows and is then
+bound, passed or returned -- wants the analysis and can wait.
+
+## What to do next, in order
+
+1. **The 59 appends** (50 today, the rest after 3): the single largest
+   batch left, no language change.
+2. **The 13 table-reads** in the context-maps: `rem ← rem ⧺ pts9[argc…np]`,
+   `em.pj_labels ← em.pj_labels ⧺ ir.extra[b + 3…b + 3 + span]`.
+3. **A borrow in a capture list, before a map or a fold**: unlocks the
+   17 that reach through `&self`.
+4. **The 17 amends and filters**: `⍸` and a gather, with the predicate
+   as a named function.
+5. **A monadic `⍳ n`**: the identity array, written `⍸ (n ⍴ true)`
+   today at one site and as a push loop at another.
+
+After those, what is left is 309 multi-statement bodies, 53 emission
+loops and 49 finds -- and none of them is an array operation in
+disguise.  That is the floor of this exercise, and it is most of the
+compiler.
+
+
+## Round four: the appends, taken
+
+Item 1 above is done.  Forty-nine push loops across eleven files are now
+joins -- `x ← x ⧺ y` where a loop pushed each element, and
+`x ← x ⧺ (n ⍴ k)` where it pushed one value n times -- and the nine
+scope save/restores in `check.ngpl` are nine assignments rather than
+nine loops that emptied an array and refilled it.
+
+Writing them that way would have made the compiler slower, not faster:
+a join builds a third array, so a table appended to in a loop over the
+program would be copied once per append.  Measured, it was: 0.99 s to
+compile itself before, 4.9 s after.
+
+So the join earned an optimization, and the language a rule to go with
+it.  `v ← v ⧺ w`, where the array on the left is the one the join
+reads, grows that array rather than building a fresh one out of two --
+`RT_AEXT` in the runtime, one call where the loop was.  `lower.ngpl`
+recognizes it on a binding and on a field of a place
+(`extends_itself`, `same_place`); `interp/eval.py` recognizes the same
+shape, since the interpreter is what the rule has to mean.  It is
+observable -- another name for the array sees the elements arrive, as
+it does when they are pushed one at a time -- so it is written in the
+spec beside `⧺` rather than left as a thing the compiler happens to do.
+
+With it, the compiler compiles itself in 0.92 s, which is faster than
+the loops were.  56 of the sites lower to `RT_AEXT`; one join is left
+building a fresh array, and it is one that reads a different place than
+it writes.
+
+What is left is items 2 through 5, unchanged.

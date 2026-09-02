@@ -2141,8 +2141,7 @@ impl Checker:
         self.a.lts.push(@dropunit(#self.a.lte))
         self.a.ltl.push(n)
         self.a.ltf.push(lstb)
-        foreach pt := pts:
-            self.a.lte.push(pt)
+        self.a.lte ← self.a.lte ⧺ pts
         self.a.lte.push(ret)
         at
 
@@ -2891,8 +2890,7 @@ impl Checker:
         let nf : i64 ¤ptrdiff = self.a.extra[d.fields_off] × 1¤ptrdiff
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let filled : mut i64[] = []
-        foreach j := 0…nf:
-            filled.push(0)
+        filled ← filled ⧺ (nf ⍴ 0)
         foreach i := 0…n:
             let ftok : i64 = self.a.extra[(off + 1 + i × 2) × 1¤ptrdiff]
             let e : i64 = self.a.extra[(off + 2 + i × 2) × 1¤ptrdiff]
@@ -3111,8 +3109,7 @@ impl Checker:
             settled ← types.ty_strip_ref(vwant)
         let vals : mut i64[] = []
         let taken : mut i64[] = []
-        foreach ci := 0…ecount:
-            taken.push(0)
+        taken ← taken ⧺ (ecount ⍴ 0)
         // Several keys before one body are one arm, written down as
         // one entry per key sharing the body.  The body is checked the
         // first time it is met and not again: a second pass would meet
@@ -3504,8 +3501,7 @@ impl Checker:
             self.set_type(id, types.TY_I64)
             return
         let vmap : mut i64[] = []
-        foreach vi := 0…32:
-            vmap.push(⁻1)
+        vmap ← vmap ⧺ (32 ⍴ ⁻1)
         foreach j := 0…np:
             let arg : i64 = self.a.extra[args_off + 1 + j]
             let pty : i64 = self.a.extra[callee.params_off + 2 + j × 2]
@@ -3549,33 +3545,16 @@ impl Checker:
         self.scope_floor ← 0
         self.fdone[f × 1¤ptrdiff] ← 2
         self.check_fn(f)
-        self.snames ← []
-        self.stype ← []
-        self.smut ← []
-        self.sslot ← []
-        self.sheld ← []
-        self.marks ← []
-        self.hslot ← []
-        self.hback ← []
-        self.hmark ← []
-        foreach v := sv_names:
-            self.snames.push(v)
-        foreach v := sv_type:
-            self.stype.push(v)
-        foreach v := sv_mut:
-            self.smut.push(v)
-        foreach v := sv_slot:
-            self.sslot.push(v)
-        foreach v := sv_held:
-            self.sheld.push(v)
-        foreach v := sv_marks:
-            self.marks.push(v)
-        foreach v := sv_hslot:
-            self.hslot.push(v)
-        foreach v := sv_hback:
-            self.hback.push(v)
-        foreach v := sv_hmark:
-            self.hmark.push(v)
+        // the caller's scopes, as they were parked
+        self.snames ← sv_names
+        self.stype ← sv_type
+        self.smut ← sv_mut
+        self.sslot ← sv_slot
+        self.sheld ← sv_held
+        self.marks ← sv_marks
+        self.hslot ← sv_hslot
+        self.hback ← sv_hback
+        self.hmark ← sv_hmark
         self.nslots ← sv_nslots
         self.cur_fn ← sv_cur
         self.loop_depth ← sv_loop

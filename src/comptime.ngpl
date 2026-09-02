@@ -991,8 +991,7 @@ impl Cev:
     // was declared when it was asked and not what came after
     fn pooled(&mut self, xs : str[]) → CVal:
         let base : i64 = @dropunit(#self.pool)
-        foreach x := xs:
-            self.pool.push(x)
+        self.pool ← self.pool ⧺ xs
         CVal{tag: CV_ARR, n: base, m: @dropunit(#xs), s: ""}
 
 // Read the @build recipe, if the program carries one.  A file without

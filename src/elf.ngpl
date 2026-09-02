@@ -496,8 +496,7 @@ fn push64(out : &mut u8[], v : i64):
 @post(r: #r = n)
 fn zeros(n : i64 ¤byte) → u8[]:
     let out : mut u8[] = []
-    foreach i := 0…n:
-        out.push(0)
+    out ← out ⧺ (n ⍴ 0)
     out
 
 // The file, as the pieces it is made of and in the order they are
@@ -665,8 +664,7 @@ fn plan_elf(tgt : &Target, code : u8[], rodata : u8[], data : u8[],
     // it was before there were any.
     let rows : mut sbom_m.SbomRow[] = []
     if #bom > 0:
-        foreach r := bom:
-            rows.push(r)
+        rows ← rows ⧺ bom
         rows.push(sbom_m.SbomRow{kind: sbom_m.Sbomkind.output, name: "",
                           hash: image_digest(&tgt, code, rodata, data, text_vaddr)})
     let sbomstr : mut u8[] = []
@@ -677,12 +675,10 @@ fn plan_elf(tgt : &Target, code : u8[], rodata : u8[], data : u8[],
     let sbom : mut Sbom_Entry[] = []
     foreach r := rows:
         let nat : i64 ¤byte = #sbomstr
-        foreach b := std.bytes(r.name):
-            sbomstr.push(b)
+        sbomstr ← sbomstr ⧺ std.bytes(r.name)
         sbomstr.push(0)
         let hat : i64 ¤byte = #sbomstr
-        foreach b := std.bytes(r.hash):
-            sbomstr.push(b)
+        sbomstr ← sbomstr ⧺ std.bytes(r.hash)
         sbomstr.push(0)
         sbom.push(Sbom_Entry{kind: r.kind, name: nat, hash: hat})
     let sbent : i64 ¤byte = @sizeof(Sbom_Entry)
@@ -715,8 +711,7 @@ fn plan_elf(tgt : &Target, code : u8[], rodata : u8[], data : u8[],
                                       st_shndx: SHN_TEXT,
                                       st_value: text_vaddr + sy.value,
                                       st_size: sy.size})
-                foreach b := std.bytes(sy.name):
-                    strtab.push(b)
+                strtab ← strtab ⧺ std.bytes(sy.name)
                 strtab.push(0)
                 if want = 0:
                     nlocal ← nlocal + 1
@@ -741,8 +736,7 @@ fn plan_elf(tgt : &Target, code : u8[], rodata : u8[], data : u8[],
     names.push(".shstrtab")
     foreach nm := names:
         shname.push(#shstr)
-        foreach b := std.bytes(nm):
-            shstr.push(b)
+        shstr ← shstr ⧺ std.bytes(nm)
         shstr.push(0)
     // where the ones that are always there sit in that list
     let n_sym : i64 ¤ptrdiff = (if #rows > 0: 5¤ptrdiff else: 3¤ptrdiff) + nx

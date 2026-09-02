@@ -290,8 +290,7 @@ impl Parser:
     fn push_list(&mut self, items : i64[]) → i64 ¤"aextra":
         let off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#items))
-        foreach a := items:
-            self.extra.push(a)
+        self.extra ← self.extra ⧺ items
         off
 
     // ------------------------------------------------------------------
@@ -554,8 +553,7 @@ impl Parser:
                     return @dropunit(sh)
         self.tts.push(@dropunit(#self.tte))
         self.ttl.push(n)
-        foreach e := es:
-            self.tte.push(e)
+        self.tte ← self.tte ⧺ es
         at
 
     fn farr_intern(&mut self, elem : i64, size : i64) → i64:
@@ -597,8 +595,7 @@ impl Parser:
         self.lts.push(@dropunit(#self.lte))
         self.ltl.push(n)
         self.ltf.push(lstb)
-        foreach pt := pts:
-            self.lte.push(pt)
+        self.lte ← self.lte ⧺ pts
         self.lte.push(ret)
         at
 
@@ -774,8 +771,7 @@ impl Parser:
         _ ← self.eat(tokens.Tk.rpar, "')' after the arguments")
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#args))
-        foreach a := args:
-            self.extra.push(a)
+        self.extra ← self.extra ⧺ args
         off
 
     // postfix: indexing and method calls chain off a primary
@@ -1094,8 +1090,7 @@ impl Parser:
             _ ← self.eat(tokens.Tk.rhash, "'⸩' closing the dictionary literal")
             let off : i64 = @dropunit(#self.extra)
             self.extra.push((@dropunit(#items) ÷ 2) ?? 0)
-            foreach it := items:
-                self.extra.push(it)
+            self.extra ← self.extra ⧺ items
             return self.mknode(ast.Nk.hlit, at, off, 0, 0)
         if k = tokens.Tk.hash:
             self.pos ← self.pos + 1
@@ -1259,8 +1254,7 @@ impl Parser:
                     _ ← self.eat(tokens.Tk.rbrace, "'}' closing std.Build.Executable")
                     let boff : i64 = @dropunit(#self.extra)
                     self.extra.push(@dropunit(#bitems) ÷ 2 ?? 0)
-                    foreach it := bitems:
-                        self.extra.push(it)
+                    self.extra ← self.extra ⧺ bitems
                     return self.mknode(ast.Nk.slit, at, boff, ast.Slit.exe.ord(), 0)
                 if m = "arena":
                     _ ← self.eat(tokens.Tk.dot, "'.' after std.arena")
@@ -1832,8 +1826,7 @@ impl Parser:
         let toff : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#ntoks))
         self.extra.push(ty)
-        foreach t2 := ntoks:
-            self.extra.push(t2)
+        self.extra ← self.extra ⧺ ntoks
         self.mknode(ast.Nk.st_lett, name_tok, init, is_mut, toff)
 
     // match over an enumeration.  The arms name values of it, one
@@ -1970,8 +1963,7 @@ impl Parser:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#arms) ÷ 3 ?? 0)
         self.extra.push(default_blk)
-        foreach v := arms:
-            self.extra.push(v)
+        self.extra ← self.extra ⧺ arms
         self.mknode(ast.Nk.matche, at, subject, off, ⁻1)
 
     fn parse_stmt(&mut self) → i64:
@@ -2662,8 +2654,7 @@ impl Parser:
         _ ← self.eat(tokens.Tk.rbrace, "'}' closing the struct literal")
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#items) ÷ 2 ?? 0)
-        foreach it := items:
-            self.extra.push(it)
+        self.extra ← self.extra ⧺ items
         off
 
     fn parse_bound(&mut self, at : i64, path : str) → i64:

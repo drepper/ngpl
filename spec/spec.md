@@ -632,6 +632,24 @@ let n : u32 = 65
 
 Two arrays still join as arrays; that is the other thing `⧺` does, and an array is not text.
 
+A join of two arrays is a third array, and whoever still holds either of
+the two goes on seeing what it held.  The one exception is a join
+assigned back to the array it reads, `v ⧺= w` written the long way:
+
+```
+v ← v ⧺ w                       /* v grows; it is the same array */
+t.extra ← t.extra ⧺ items       /* and so does a field's */
+```
+
+There the array on the left is the one the join reads, so it is that
+array that grows rather than a fresh one built out of two, and another
+name for it sees the elements arrive -- as it does when they are pushed
+one at a time, which is what this says in one statement.  The place
+written may be a binding or a field of one, and it must be the same
+place, spelled the same way, on both sides; anything else is an ordinary
+join.  A string does not grow this way, nor does an array whose type
+names its length, since neither is resizable.
+
 A character says its string with `.str()`:
 
 ```

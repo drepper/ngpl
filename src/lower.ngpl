@@ -258,8 +258,7 @@ impl Lower:
     fn call_fn(&mut self, f : i64, bx : i64, args : i64[], w : i64) → i64:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#args) + (if f = ⁻1: 1 else: 0))
-        foreach v := args:
-            self.extra.push(v)
+        self.extra ← self.extra ⧺ args
         let d : i64 = self.tmp()
         if f = ⁻1:
             // the box rides behind the arguments, and the code address
@@ -413,6 +412,40 @@ impl Lower:
         self.ir(ir.Ir.mov, grown, 0, 0, acc, 0)
         self.loop_close(i)
         acc
+
+    // Whether a store is `x ← x ⧺ w` with the same x on both sides: the
+    // value is a join of arrays whose left operand names the very place
+    // the store writes.  Answering yes is what lets the join grow the
+    // array rather than build another.
+    fn extends_itself(&self, sid : i64, val : i64) → bool:
+        if self.kof(val) ≠ ast.Nk.ccat or not types.ty_is_arr(types.ty_strip_ref(self.tof(val))):
+            return false
+        let l : i64 = self.a.na[val × 1¤ptrdiff]
+        // a sized array lives in the frame as its elements and does not
+        // grow, so it is not this
+        if self.packed_n(l) >= 0:
+            return false
+        match self.kof(sid):
+            ast.Nk.assign:
+                self.kof(l) = ast.Nk.var and self.a.nb[sid × 1¤ptrdiff] ≠ 1 and self.nslot[l × 1¤ptrdiff] = self.nslot[sid × 1¤ptrdiff]
+            ast.Nk.storefld:
+                self.kof(l) = ast.Nk.field and self.a.nb[l × 1¤ptrdiff] = self.a.nc[sid × 1¤ptrdiff] and self.same_place(self.a.na[l × 1¤ptrdiff], self.a.na[sid × 1¤ptrdiff])
+            _:
+                false
+
+    // Whether two expressions name one place: a binding, a global, or a
+    // field of a place.  Anything else answers no, which only costs the
+    // join above being written the long way.
+    fn same_place(&self, a9 : i64, b9 : i64) → bool:
+        if self.kof(a9) ≠ self.kof(b9):
+            return false
+        match self.kof(a9):
+            ast.Nk.var:
+                self.nslot[a9 × 1¤ptrdiff] = self.nslot[b9 × 1¤ptrdiff]
+            ast.Nk.field:
+                self.a.nb[a9 × 1¤ptrdiff] = self.a.nb[b9 × 1¤ptrdiff] and self.same_place(self.a.na[a9 × 1¤ptrdiff], self.a.na[b9 × 1¤ptrdiff])
+            _:
+                false
 
     // ⍸ b: the indices at which the truth values are true
     fn lower_where(&mut self, na : i64) → i64:
@@ -960,8 +993,7 @@ impl Lower:
             if self.a.nc[nid × 1¤ptrdiff] = 1:
                 let coff : i64 = @dropunit(#self.extra)
                 self.extra.push(cargc + 1)
-                foreach v := cav:
-                    self.extra.push(v)
+                self.extra ← self.extra ⧺ cav
                 self.extra.push(bx9)
                 let cad : i64 = self.tmp()
                 self.ir(ir.Ir.fld, bx9, 0, 0, cad, 0)
@@ -1530,8 +1562,7 @@ impl Lower:
                 vregs.push(self.lower_expr(self.a.extra[args_off + 1 + i]))
             let off : i64 = @dropunit(#self.extra)
             self.extra.push(@dropunit(#vregs))
-            foreach v := vregs:
-                self.extra.push(v)
+            self.extra ← self.extra ⧺ vregs
             let d : i64 = self.tmp()
             self.ir(ir.Ir.call, f, off, 0, d, self.callw(nid))
             return d
@@ -2221,8 +2252,7 @@ impl Lower:
                     gv9.push(self.lower_expr(self.a.extra[args_off + 1 + gi9]))
                 let go9 : i64 = @dropunit(#self.extra)
                 self.extra.push(@dropunit(argc) + 1)
-                foreach v := gv9:
-                    self.extra.push(v)
+                self.extra ← self.extra ⧺ gv9
                 self.extra.push(gb9)
                 let ga9 : i64 = self.tmp()
                 self.ir(ir.Ir.fld, gb9, 0, 0, ga9, 0)
@@ -2278,8 +2308,7 @@ impl Lower:
                     return self.lower_thread(thr9, vr9, ⁻1, box9)
             let off9 : i64 = @dropunit(#self.extra)
             self.extra.push(@dropunit(argc) + 1)
-            foreach v := vr9:
-                self.extra.push(v)
+            self.extra ← self.extra ⧺ vr9
             self.extra.push(box9)
             let ad9 : i64 = self.tmp()
             self.ir(ir.Ir.fld, box9, 0, 0, ad9, 0)
@@ -2308,8 +2337,7 @@ impl Lower:
             vregs.push(self.farr_new(rt, rn))
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#vregs))
-        foreach v := vregs:
-            self.extra.push(v)
+        self.extra ← self.extra ⧺ vregs
         let d : i64 = self.tmp()
         self.ir(ir.Ir.call, f, off, 0, d, self.callw(nid))
         d
@@ -2424,8 +2452,7 @@ impl Lower:
             self.extra.push(argc)
         else:
             self.extra.push(argc + 1)
-        foreach v := cargs:
-            self.extra.push(v)
+        self.extra ← self.extra ⧺ cargs
         let r : i64 = self.tmp()
         if boxv = ⁻1:
             self.ir(ir.Ir.call, f, off, 0, r, 0)
@@ -2843,6 +2870,17 @@ impl Lower:
             foreach i := 0…n:
                 self.ir(ir.Ir.fld, v, i, 0, slot0 + i, 0)
         elif k = ast.Nk.assign:
+            // `v ← v ⧺ w`: the join is the array itself, grown, rather
+            // than a fresh one built out of two.  What makes it the
+            // same array is that the left of the ⧺ is the very place
+            // being written, which nothing else may hold while it is
+            // written -- an array binding is owned, and a second name
+            // for one is a borrow the checker would not admit here.
+            if self.extends_itself(sid, na):
+                let dst0 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let src0 : i64 = self.lower_arr_operand(self.a.nb[na × 1¤ptrdiff])
+                _ ← self.rt2(emit.RT_AEXT, dst0, src0)
+                return
             let v : i64 = self.lower_expr(na)
             let slot : i64 = self.nslot[sid × 1¤ptrdiff]
             if slot <= ⁻2:
@@ -2853,6 +2891,12 @@ impl Lower:
             else:
                 self.ir(ir.Ir.mov, v, 0, 0, slot, 0)
         elif k = ast.Nk.storefld:
+            // the same, for a field: `b.xs ← b.xs ⧺ w`
+            if self.extends_itself(sid, nb):
+                let dst1 : i64 = self.lower_expr(self.a.na[nb × 1¤ptrdiff])
+                let src1 : i64 = self.lower_arr_operand(self.a.nb[nb × 1¤ptrdiff])
+                _ ← self.rt2(emit.RT_AEXT, dst1, src1)
+                return
             let bv : i64 = self.lower_expr(na)
             let vv : i64 = self.field_val(self.lower_expr(nb), self.tof(nb))
             self.ir(ir.Ir.fsto, bv, nc, vv, 0, 0)
@@ -3830,8 +3874,9 @@ fn lower_shim_fn(lw : &mut Lower, chk : &check.Chk, j : i64) → ir.IrFn:
         lw.extra.push(np)
     else:
         lw.extra.push(np + 1)
-    foreach v := bound:
-        lw.extra.push(v)
+    lw.extra ← lw.extra ⧺ bound
+    // the remaining parameters, numbered from zero: the shim reads its
+    // own arguments in order
     foreach ri := 0…rem:
         lw.extra.push(ri)
     let d : i64 = lw.tmp()

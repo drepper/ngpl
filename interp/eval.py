@@ -5306,6 +5306,8 @@ class Evaluator:
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
             pre = self._c_assign_pre(target_ast)
+            if self._c_extend_in_place(target_ast, rhs_ast):
+                return none()
             rhs = self.eval_expr(rhs_ast)
             return self._c_assign_post(target_ast, rhs, pre)
         if isinstance(stmt, (BreakStmt, ContinueStmt)):
@@ -5327,6 +5329,37 @@ class Evaluator:
         return none()
 
 
+
+    @staticmethod
+    def _same_place(a, b) -> bool:
+        """Whether two expressions name one place: a binding, or a field
+        of a place.  Anything else answers no, which only costs the join
+        below being taken the long way."""
+        if isinstance(a, VarRef) and isinstance(b, VarRef):
+            return a.name == b.name
+        if isinstance(a, GetAttr) and isinstance(b, GetAttr):
+            return a.attr == b.attr and Evaluator._same_place(a.obj, b.obj)
+        return False
+
+    def _c_extend_in_place(self, target_ast, rhs_ast) -> bool:
+        """`v \N{DOUBLE PLUS} w` assigned back to the v it reads is that array,
+        grown, rather than a fresh one built out of two.  Answers whether
+        the assignment was carried out this way; a string, a fixed-size
+        array and any other shape answer no and are joined as before."""
+        if not (isinstance(rhs_ast, BinOp)
+                and rhs_ast.op == "\N{DOUBLE PLUS}"
+                and isinstance(target_ast, (VarRef, GetAttr))
+                and self._same_place(target_ast, rhs_ast.left)):
+            return False
+        arr = self._as_array(self.eval_expr(target_ast))
+        if arr is None or arr.fixed_size is not None or arr._backing is not None:
+            return False
+        add = self._as_array(self.eval_expr(rhs_ast.right))
+        if add is None:
+            return False
+        for i in range(add.sizeof):
+            arr.push(add.get(i))
+        return True
 
     def _c_assign_pre(self, target_ast):
         """What an assignment settles before its right side is read:

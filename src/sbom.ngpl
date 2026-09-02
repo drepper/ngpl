@@ -131,8 +131,7 @@ fn token_bytes(t : &lex.Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[])
         // value the lexer read, and whether it needed all sixty-four
         // bits to hold it
         let what : str = if k0 = tokens.Tk.string: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = tokens.Tk.number: tokens.i64_str(t.val[i]) else: tokens.run_str(src, t.off[i], t.len[i]))
-        foreach b := std.bytes(what):
-            into.push(b)
+        into ← into ⧺ std.bytes(what)
         if k0 = tokens.Tk.number:
             into.push(t.big[i] & 255)
     into.push(0)
@@ -151,8 +150,7 @@ fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
         into.push(TC_SEP)
         into.push(0)
         into.push(0)
-    foreach b := ready:
-        into.push(b)
+    into ← into ⧺ ready
     (0, c)
 
 // The rows a program's sources make: one for each file, in the order
@@ -254,6 +252,5 @@ fn sbom_sources(a : &ast.Ast, t : &lex.Toks, src : byte[], files : &diag.Files,
                       hash: sha256.hex_digest(one.digest())})
     rows.push(SbomRow{kind: Sbomkind.sources, name: "",
                       hash: sha256.hex_digest(whole.digest())})
-    foreach r := fnrows:
-        rows.push(r)
+    rows ← rows ⧺ fnrows
     rows

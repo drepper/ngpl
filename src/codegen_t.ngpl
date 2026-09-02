@@ -78,8 +78,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
         // the architecture's own path, which no build moves
         nregs.push(if abi_spent(&tgt) = 0 or incr.mode ≠ 0: 0 else: ab.nreg[i])
     let strs0 : mut str[] = []
-    foreach s := a.strs:
-        strs0.push(s)
+    strs0 ← strs0 ⧺ a.strs
     let sat0 : mut names.Names = names.names_new(@dropunit(#strs0))
     foreach i0 := 0¤ptrdiff…#strs0:
         sat0.add_at(strs0[i0], @dropunit(i0))
@@ -273,7 +272,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 ¤ptrdiff = 73
+    let nrt : i64 ¤ptrdiff = 74
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -500,21 +499,18 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
                 elf.push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
-    foreach _ := 0…emit.KB_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.KB_SIZE ⍴ 0)
     while @dropunit(#data) < relro_size:
         data.push(0)
     // the structures the kernel is handed when the handler is installed
-    foreach _ := 0…emit.SIG_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.SIG_SIZE ⍴ 0)
     if nglobals > 0:
         foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
                 elf.push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
-    foreach _ := 0…emit.AL_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.AL_SIZE ⍴ 0)
     assert(@dropunit(#data) = alloc_off + emit.AL_SIZE, "the data segment is as long as it was planned")
     let cdiags : mut diag.Diag[] = []
     if em.max_frame > guard_size:
@@ -546,10 +542,8 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
         synth.push("<globals>")
     synth.push("<args>")
     synth.push("<tests>")
-    foreach j := 0…#chk.lams:
-        synth.push("λ#" ⧺ tokens.i64_str(@dropunit(j)))
-    foreach j := 0…#chk.psfn:
-        synth.push("partial#" ⧺ tokens.i64_str(@dropunit(j)))
+    synth ← synth ⧺ (tokens.numbered("λ#") ¨ (0…@dropunit(#chk.lams)))
+    synth ← synth ⧺ (tokens.numbered("partial#") ¨ (0…@dropunit(#chk.psfn)))
     foreach j := 0…#synth:
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
@@ -591,10 +585,8 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
                       is_global: sglob[i]})
     // what the convention analysis decided, then what the lowering did
     let dlog : mut str[] = []
-    foreach l := ab.log:
-        dlog.push(l)
-    foreach l := lw.dlog:
-        dlog.push(l)
+    dlog ← dlog ⧺ ab.log
+    dlog ← dlog ⧺ lw.dlog
     codegen.Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
              text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
@@ -616,7 +608,7 @@ fn rt_nargs(id : i64) → i64:
     if id = emit.RT_CHARS or id = emit.RT_CHARSTR: return 1
     if id = emit.RT_FOPEN or id = emit.RT_FREAD or id = emit.RT_TORAW or id = emit.RT_SBYTES: return 1
     if id = emit.RT_FTHERE or id = emit.RT_FIDP: return 1
-    if id = emit.RT_GRADE: return 2
+    if id = emit.RT_GRADE or id = emit.RT_AEXT: return 2
     if id = emit.RT_FCREATE or id = emit.RT_FWRITE or id = emit.RT_WRITEV or id = emit.RT_FIDENT: return 2
     if id = emit.RT_AFIND: return 3
     if id = emit.RT_ASLICE: return 3

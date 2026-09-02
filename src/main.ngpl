@@ -442,8 +442,7 @@ fn compile_one(inputs : str[], outname : str, o : &Options) → u8:
     // what this build is writing, which the bill names and the code
     // generator emits -- worked out once and handed to both
     let live : bool[] = incr_m.reached_fns(&ast, &toks, src)
-    foreach r := sbom.sbom_sources(&ast, &toks, src, &files, live):
-        bom.push(r)
+    bom ← bom ⧺ sbom.sbom_sources(&ast, &toks, src, &files, live)
 
     // The recipe is read whenever the program carries one, not only
     // under --build.  The interpreter runs it at load with no flag

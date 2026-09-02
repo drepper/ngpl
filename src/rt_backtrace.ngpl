@@ -114,8 +114,7 @@ fn bt_bytes(tg : &elf.Target, text_vaddr : i64, names : str[], offs : i64[],
             bt_word(&out, pw, bt_nbytes(names[i]))
             noff ← noff + bt_nbytes(names[i])
     foreach nm := names:
-        foreach b := std.bytes(nm):
-            out.push(b)
+        out ← out ⧺ std.bytes(nm)
     assert(@dropunit(#out) = noff, "the names end where the entries said they would")
     out
 

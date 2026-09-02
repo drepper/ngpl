@@ -45,10 +45,9 @@ fn sdef_norm(a : &ast.Ast, toks : &lex.Toks, src : byte[], si : i64, seen : i64[
     let d := a.structs[si × 1¤ptrdiff]
     let n : i64 ¤ptrdiff = a.extra[d.fields_off] × 1¤ptrdiff
     let out : mut str = d.name ⧺ "{"
-    let deeper : mut i64[] = []
-    foreach v := seen:
-        deeper.push(v)
-    deeper.push(si)
+    // what has been seen, and this one: a fresh array, since the
+    // caller's must not grow under it
+    let deeper : i64[] = seen ⧺ [si]
     foreach i := 0…n:
         let ftok : i64 = a.extra[d.fields_off + 1 + i × 2]
         let fty : i64 = a.extra[d.fields_off + 2 + i × 2]

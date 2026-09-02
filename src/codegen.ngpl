@@ -383,8 +383,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     foreach i := 0…#a.fns:
         privs.push(if incr.mode ≠ 0: 0 else: ab.private[i])
     let strs0 : mut str[] = []
-    foreach s := a.strs:
-        strs0.push(s)
+    strs0 ← strs0 ⧺ a.strs
     let sat0 : mut names.Names = names.names_new(@dropunit(#strs0))
     foreach i0 := 0¤ptrdiff…#strs0:
         sat0.add_at(strs0[i0], @dropunit(i0))
@@ -749,7 +748,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 ¤ptrdiff = 73
+    let nrt : i64 ¤ptrdiff = 74
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -925,8 +924,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // the constant tables the runtime reads: the UTF-8 decoder's byte
     // classes, then its transition words, one to a class
     let rx_base : i64 = @dropunit(#rodata)
-    foreach b := emit.utf8_class_bytes():
-        rodata.push(b)
+    rodata ← rodata ⧺ emit.utf8_class_bytes()
     foreach w := emit.UTF8_DFA_WORDS:
         elf.push64(&rodata, w)
     foreach i := 0…#em.rx_pos:
@@ -995,21 +993,18 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
                 elf.push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
-    foreach _ := 0…emit.KB_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.KB_SIZE ⍴ 0)
     while @dropunit(#data) < relro_size:
         data.push(0)
     // the structures the kernel is handed when the handler is installed
-    foreach _ := 0…emit.SIG_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.SIG_SIZE ⍴ 0)
     if nglobals > 0:
         foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
                 elf.push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
-    foreach _ := 0…emit.AL_SIZE:
-        data.push(0)
+    data ← data ⧺ (emit.AL_SIZE ⍴ 0)
     assert(@dropunit(#data) = alloc_off + emit.AL_SIZE, "the data segment is as long as it was planned")
     // A frame deeper than the guard could be claimed in one 'sub rsp'
     // that steps clean over it, and the overflow would land on
@@ -1106,10 +1101,8 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
                       is_global: sglob[i]})
     // what the convention analysis decided, then what the lowering did
     let dlog : mut str[] = []
-    foreach l := ab.log:
-        dlog.push(l)
-    foreach l := lw.dlog:
-        dlog.push(l)
+    dlog ← dlog ⧺ ab.log
+    dlog ← dlog ⧺ lw.dlog
     Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
              text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
