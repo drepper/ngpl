@@ -5664,6 +5664,38 @@ class Evaluator:
                 raise coded(2244, TypeError(
                     f"cannot redefine {kind} variable '{stmt.name}'"))
 
+    @staticmethod
+    def _place_root(expr):
+        """The name at the root of a place -- `v`, `t.xs`, `t.xs[i]` --
+        or None where the expression is not one.  A place is what may be
+        borrowed, and what a binding of it takes a copy of."""
+        while isinstance(expr, (GetAttr, Subscript, SliceAccess)):
+            if isinstance(expr, (Subscript, SliceAccess)):
+                # a slice already answers an array of its own, and a
+                # gather does too; neither is the place it reads
+                return None
+            expr = expr.obj
+        return expr.name if isinstance(expr, VarRef) else None
+
+    def _copy_bound_container(self, value):
+        """An array bound to a name, copied so the binding holds its own.
+
+        One level: the array is fresh and holds what the other held.  An
+        array of arrays is a matrix here, which the compiled subset does
+        not copy either, so it is left alone rather than half-copied.
+        """
+        arr = self._as_array(value)
+        if arr is None or arr.fixed_size is not None:
+            return value
+        first = arr.get(0) if arr.sizeof else None
+        if isinstance(first, SomeValue):
+            first = first.value
+        if isinstance(first, ObjectValue) and isinstance(first.obj, ArrayValue):
+            return value
+        return ObjectValue(ArrayValue(list(arr.values()),
+                                      element_type=arr.element_type,
+                                      element_unit=arr.element_unit))
+
     def _c_vardef_bind(self, stmt, value, borrow_ann):
         """The rest of a let, once its initializer is a value."""
         if stmt.type_annotation is None:
@@ -5702,6 +5734,12 @@ class Evaluator:
             # An allocation has already measured the value against
             # the whole of its type, so only the unit is left.
             value = apply_unit(value, unit, self._mk_int)
+        # `let v := w`, where w names a container, gives v an array of
+        # its own holding what w holds, so that what w does afterwards
+        # is w's business.  `let v : & = w` is how a program asks for
+        # the other thing, and everything else is already fresh.
+        if not borrow_ann and self._place_root(stmt.init_expr) is not None:
+            value = self._copy_bound_container(value)
         self.env.define(stmt.name, value,
                         Decl(self._declared_type_of(stmt, value), unit))
         if not self._bind_reshape_access(stmt):
@@ -5718,9 +5756,19 @@ class Evaluator:
             self._start_lend(stmt.name, stmt, pl[0], pl[1], held.obj)
             self._pending_lend = None
         elif borrow_ann:
-            raise coded(2436, TypeError(
-                f"'{stmt.name}' is written as a borrow, but what it is bound "
-                f"to is no borrowed answer"))
+            # `let v : & = w` borrows the place w names.  A borrowed
+            # answer arrives with the call's origins already noted; here
+            # the origin is the place itself, and saying so is what puts
+            # the rest of the lending machinery behind it.
+            origin = self._place_root(stmt.init_expr)
+            if origin is None or not isinstance(held, ObjectValue):
+                raise coded(2436, TypeError(
+                    f"'{stmt.name}' is written as a borrow, but what it is bound "
+                    f"to is no borrowed answer; a borrow names a place or what "
+                    f"a call lends"))
+            self._pending_lend = (origin, [origin], held.obj, "read")
+            self._start_lend(stmt.name, stmt, origin, [origin], held.obj)
+            self._pending_lend = None
         elif isinstance(held, ObjectValue) and id(held.obj) in self._lent_objs:
             self._refuse_stored_borrow(value, f"'{stmt.name}'")
         return none()

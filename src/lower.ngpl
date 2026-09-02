@@ -1482,6 +1482,42 @@ impl Lower:
         self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
         d
 
+    // What a let binds.  `let v := w`, where w names a container, gives
+    // v an array of its own holding what w holds, so that what happens
+    // to w afterwards is w's business; `let v : & = w` is how a program
+    // asks for the other thing, and everything else is already fresh.
+    // @post @result >= 0
+    fn lower_let_value(&mut self, sid : i64, na : i64) → i64:
+        let v : i64 = self.lower_expr(na)
+        if not self.binds_a_copy(sid, na):
+            return v
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, v, 0, 0, n, 0)
+        let d : i64 = self.tmp()
+        self.ir(ir.Ir.aslice, v, self.iconst(0), n, d, 0)
+        d
+
+    // Whether this let takes a copy: the value is an array that a place
+    // already names, and the binding did not ask to borrow it.  A sized
+    // array is copied into the frame however it is written, and a
+    // gather, a slice or a call already answers an array of its own.
+    fn binds_a_copy(&self, sid : i64, na : i64) → bool:
+        if sid ∊ self.a.blets or self.packed_n(na) >= 0:
+            return false
+        types.ty_is_arr(types.ty_strip_ref(self.tof(na))) and self.plain_place(na)
+
+    // A binding or a field of one, all the way down.  A subscript is
+    // left out on purpose: an element of a matrix is a row of it, and
+    // rows are how a matrix is worked, so a binding of one names it.
+    fn plain_place(&self, e : i64) → bool:
+        match self.kof(e):
+            ast.Nk.var:
+                true
+            ast.Nk.field:
+                self.plain_place(self.a.na[e × 1¤ptrdiff])
+            _:
+                false
+
     fn lower_ife(&mut self, nid : i64, na : i64, nb : i64, nc : i64) → i64:
         // Where each branch is one expression and both may be read
         // without harm, neither is worth a jump: read both and choose.
@@ -2982,7 +3018,7 @@ impl Lower:
             if nb = 0:
                 self.lower_stmt(na, trailing, ret_ty)
         elif k = ast.Nk.st_let:
-            let v : i64 = self.lower_expr(na)
+            let v : i64 = self.lower_let_value(sid, na)
             self.ir(ir.Ir.mov, v, 0, 0, self.nslot[sid × 1¤ptrdiff], 0)
         elif k = ast.Nk.st_lett:
             let n : i64 = self.a.extra[nc × 1¤ptrdiff]

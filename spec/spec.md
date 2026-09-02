@@ -642,13 +642,17 @@ t.extra ← t.extra ⧺ items       /* and so does a field's */
 ```
 
 There the array on the left is the one the join reads, so it is that
-array that grows rather than a fresh one built out of two, and another
-name for it sees the elements arrive -- as it does when they are pushed
-one at a time, which is what this says in one statement.  The place
-written may be a binding or a field of one, and it must be the same
-place, spelled the same way, on both sides; anything else is an ordinary
-join.  A string does not grow this way, nor does an array whose type
-names its length, since neither is resizable.
+array that grows rather than a fresh one built out of two -- what
+pushing the elements one at a time says, said in one statement.  The
+place written may be a binding or a field of one, and it must be the
+same place, spelled the same way, on both sides; anything else is an
+ordinary join.  A string does not grow this way, nor does an array whose
+type names its length, since neither is resizable.
+
+A binding of an array takes a copy, so a name bound before the join goes
+on holding what it was given.  What sees the elements arrive is a name
+for the same array: a borrow, or the field of a struct that two names
+reach.
 
 A character says its string with `.str()`:
 
@@ -3004,9 +3008,10 @@ t.extra ← t.extra × 2           /* and a field's */
 
 There the array on the left is one the operator reads, so the answers
 are written into that array, element for element, rather than into
-another one of the same length.  This is the rule `⧺` follows for a
-join written back into what it joins, and it holds under the same
-conditions: the place written is a binding or a field of one, spelled
+another one of the same length.  As with the join, a binding made before
+it holds a copy and is unchanged; what sees the answers is a name for
+the same array.  This is the rule `⧺` follows for a join written back
+into what it joins, and it holds under the same conditions: the place written is a binding or a field of one, spelled
 the same way on both sides, and the container is one that may be
 written — not a string, not an array whose type names its length,
 not a slice of another array.  Anything else answers into a container
@@ -3350,6 +3355,59 @@ let y : i32 = 42             /* immutable, explicit type */
 let z : mut = 0              /* mutable, type inferred */
 let w : mut i32 = 0          /* mutable, explicit type */
 ```
+
+#### A Binding of a Container Takes a Copy
+
+`let v1 := v2`, where `v2` names an array, gives `v1` an array of its
+own holding what `v2` held.  What `v2` does afterwards is `v2`'s
+business:
+
+```
+let v : mut i64[] = [1, 2]
+let copy := v
+v.push(3)                    /* v is [1, 2, 3] */
+                             /* copy is [1, 2] */
+```
+
+The copy is one level deep: the array is fresh and holds the values the
+other held.  It is taken where the right-hand side **names a place** — a
+binding, a field of one, an element of one.  Everything else already
+answers an array of its own: a literal, a call, a slice, a gather, a
+join, a reshape, a threaded operator.
+
+Because the copy is what makes the binding fresh, a `mut` binding may
+take a place as well:
+
+```
+let mine : mut i64[] = v     /* mine is v's elements, and mine's own */
+mine.push(9)                 /* v is unchanged */
+```
+
+#### A Binding That Names Instead: `let v : & = w`
+
+Writing `&` in place of the type asks for the other thing: `v` names the
+array `w` names, and no copy is taken.
+
+```
+let r : & = t.extra          /* one array, two names */
+let r2 : &i64[] = t.extra    /* the same, with the type written out */
+```
+
+A borrow is what a program reaches for where the copy would be waste and
+nothing changes the original while the borrow lives — which is the
+condition the borrow rules already enforce: `w` is lent out for reading
+until the borrow's last use, and changing it before then is refused.
+`let r1 := r2`, where `r2` is itself a borrow, copies the borrow: `r1`
+is another name for the same array, and the two are the same in every
+way that matters.
+
+A `&` binding says nothing new about mutability.  Changing a shared
+array is what `&mut` at a call is for.
+
+Two other kinds of value are references rather than values, and a
+binding of one is another name for it rather than a copy: a **struct**
+and a **dictionary**.  So two names for one struct reach the one array
+its field holds, which is the way to watch an array change.
 
 #### An Unused `mut` Is a Warning
 

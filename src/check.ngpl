@@ -5093,6 +5093,28 @@ impl Checker:
         let k : ast.Nk = self.kind_of(src)
         k ≠ ast.Nk.var and k ≠ ast.Nk.field and k ≠ ast.Nk.index and k ≠ ast.Nk.ref
 
+    // `let v := w` and `let v : mut T[] = w`, where w names a place,
+    // give v an array of its own: the elements w holds, copied, so that
+    // what w does afterwards is w's business.  Such a binding is fresh
+    // because the copy makes it so, which is what lets a mut one take
+    // a place at all.  `let v : & = w` asks for the other thing.
+    fn copies_place(&self, id : i64, na : i64) → bool:
+        if self.is_blet(id):
+            return false
+        self.plain_place(na)
+
+    // A binding or a field of one, all the way down.  A subscript is
+    // left out on purpose: an element of a matrix is a row of it, and
+    // rows are how a matrix is worked, so a binding of one names it.
+    fn plain_place(&self, e : i64) → bool:
+        match self.kind_of(e):
+            ast.Nk.var:
+                true
+            ast.Nk.field:
+                self.plain_place(self.a.na[e × 1¤ptrdiff])
+            _:
+                false
+
     fn is_blet(&self, id : i64) → bool:
         id ∊ self.a.blets
 
@@ -5104,10 +5126,20 @@ impl Checker:
         let bi : i64 = @dropunit(#self.snames) - 1
         if bi < 0 or self.snames[bi × 1¤ptrdiff] ≠ self.text(tok):
             return
-        let how : i64 = self.nlend[na × 1¤ptrdiff]
+        let how0 : i64 = self.nlend[na × 1¤ptrdiff]
+        // `let v : & = w` borrows the place w names.  A borrowed answer
+        // arrives with its origins already noted by the call that gave
+        // it; here the origin is the place itself, and saying so is
+        // what makes the rest of the lending machinery apply to it.
+        let how : mut i64 = how0
+        if how0 = 0 and self.is_blet(id) and self.base_slot(na) ≠ ⁻1:
+            how ← 1
+            self.nlend[na × 1¤ptrdiff] ← 1
+            self.lorig_node.push(na)
+            self.lorig_s.push(self.base_slot(na))
         if how = 0:
             if self.is_blet(id):
-                self.derrc(tok, 2436, "'" ⧺ self.text(tok) ⧺ "' is written as a borrow, but what it is bound to is no borrowed answer")
+                self.derrc(tok, 2436, "'" ⧺ self.text(tok) ⧺ "' is written as a borrow, but what it is bound to is no borrowed answer; a borrow names a place or what a call lends")
             elif self.kind_of(na) = ast.Nk.var:
                 self.refuse_kept(na, "'" ⧺ self.text(tok) ⧺ "'")
             return
@@ -5544,7 +5576,7 @@ impl Checker:
                                         " &mut to change a shared one""")
                         _ ← self.declare(tok, it, nb)
                         return
-                    if types.ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ ast.Nk.arrlit and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall and self.kind_of(na) ≠ ast.Nk.reshape and self.kind_of(na) ≠ ast.Nk.ccat and self.kind_of(na) ≠ ast.Nk.slice and self.kind_of(na) ≠ ast.Nk.scall:
+                    if types.ty_is_arr(it) and nb = 1 and not self.copies_place(id, na) and self.kind_of(na) ≠ ast.Nk.arrlit and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall and self.kind_of(na) ≠ ast.Nk.reshape and self.kind_of(na) ≠ ast.Nk.ccat and self.kind_of(na) ≠ ast.Nk.slice and self.kind_of(na) ≠ ast.Nk.scall:
                         self.derr(tok, """a mut array binding is born fresh, from its literal or a call;
                                         " borrow with &mut to change a shared one""")
                         _ ← self.declare(tok, it, nb)
@@ -5601,7 +5633,7 @@ impl Checker:
                         // a call answers a fresh array; any other right side
                         // names a shared one, which a mut binding may not
                         self.check_expr(na, nc)
-                        if nb = 1 and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall:
+                        if nb = 1 and not self.copies_place(id, na) and self.kind_of(na) ≠ ast.Nk.call and self.kind_of(na) ≠ ast.Nk.mcall:
                             self.derr(tok, """a mut array binding is born fresh, from its literal or a
                                             " call; borrow with &mut to change a shared one""")
                         if self.ty_of(na) ≠ nc:

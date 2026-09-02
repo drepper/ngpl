@@ -699,3 +699,45 @@ Tooling
     cannot hold the case, since it requires both to stop with the same status.  Moving the
     mismatch to a ProgramStop is what closes it, and takes @expect with it: there is no
     form for a stop today, only for an error.
+
+[ ] the "declared mut but is never modified" warning.  The interpreter reports it for a
+    binding and for a parameter, the spec's Bindings chapter describes it and a
+    statement-level @expect pins it; ngplc does not have it at all -- not for an array, not
+    for a scalar.  Found while making a let of a container take a copy, which is what first
+    made `let w : mut i64[] = v` legal and so made the divergence visible, but the gap is
+    older than that and neither implementation's own tests catch it: the shared suite
+    compares what a program writes, and a diagnostic only one implementation emits is not
+    part of that.
+
+[x] a let of a container takes a copy, and `let v : & = w` names one instead.  Both
+    implementations bound an array by reference and the spec said nothing about it, so
+    `let keep := v` then `v.push(3)` was seen through keep.  A let of a place -- a binding
+    or a field of one, all the way down -- now copies: lower_let_value slices the array
+    from 0 to its length, which is the copy the language already had a spelling for, and
+    binds_a_copy is the question it asks.  Since the copy is what makes a binding fresh,
+    the two "a mut array binding is born fresh" refusals now let a place through
+    (copies_place in the checker asks the same question).
+
+    A subscript is deliberately not a place here.  An element of a matrix is a row of it,
+    and rows are how a matrix is worked, so copying one would change what
+    t31_matrices and t54_rank3 compile to; both are byte-identical with the rule narrowed
+    to bindings and fields.
+
+    `let v : & = w` is the other half: the parser takes a & with no type after it, the
+    checker's bind_lend treats the place itself as the borrow's origin -- the lending
+    machinery is then the one a borrowed answer already uses -- and nothing is copied.  It
+    was meant for src/main.ngpl's binding of the program's text, which a copy duplicates
+    byte for byte -- but the text is handed to lex() and lands in a Lexer's field, and a
+    borrow may not be stored in a struct that outlives it.  The interpreter refuses it in
+    those words; ngplc compiled it without complaint, which is a gap of its own and is
+    below.  The binding is a copy again, and it costs nothing that shows.
+
+    A dictionary, a matrix and a struct still bind by reference.  A struct is documented as
+    one, and the other two want a copy primitive that does not exist yet.
+
+[ ] a borrow stored in a struct.  `let s : & = prog.src` handed to a function that keeps it
+    in a field is refused by the interpreter -- "'Lexer.src' may outlive that", the check
+    behind _refuse_stored_borrow -- and compiled by ngplc without a word.  The checker has
+    refuse_kept for a let of a borrow and nothing for a borrow that reaches a struct
+    literal's field through a call.  Found by writing exactly that line in main.ngpl and
+    watching stage 1 stop where stage 2 had not.

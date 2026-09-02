@@ -1,7 +1,10 @@
 // `v ← v ⧺ w` where v names the same array on both sides grows that
-// array rather than building a fresh one out of two.  What the join
-// means is unchanged, so the only way to tell is by what else still
-// sees the old contents: a copy taken beforehand must not grow with it.
+// array rather than building a fresh one out of two, and a listable
+// operator written back into what it reads writes into it.  What they
+// mean is unchanged, so telling takes something that still names the
+// same array: a binding of its own takes a copy, and a struct is a
+// reference, so two names for one struct are two ways to the one array
+// its field holds.
 
 struct Table:
     names : str[]
@@ -26,11 +29,21 @@ fn show(v : i64[]):
 @impure
 fn main():
     let v : mut i64[] = [1, 2]
+    // a binding of its own: what it holds is what v held, and v growing
+    // afterwards is v's business
     let keep : i64[] = v
     v ← v ⧺ [3, 4]
     v ← v ⧺ [5]
     show(v)
     show(keep)
+
+    // and the same array under two names, which is what sees it grow
+    let one : mut Table = Table{names: [], extra: [1, 2]}
+    let two : Table = one
+    one.extra ← one.extra ⧺ [3]
+    show(two.extra)
+    one.extra ← one.extra + 10
+    show(two.extra)
 
     let t : mut Table = Table{names: ["a"], extra: []}
     std.println("{} {}", @dropunit(t.push_list([7, 8])), @dropunit(t.push_list([9])))

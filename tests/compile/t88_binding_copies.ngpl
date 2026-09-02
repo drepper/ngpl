@@ -1,0 +1,46 @@
+// `let v1 := v2` gives v1 an array of its own holding what v2 held, so
+// that what v2 does afterwards is v2's business.  `let v1 : & = v2`
+// asks for the other thing: one array under two names, which is why
+// v2 may not be changed while v1 still names it.
+//
+// A struct is a reference rather than a value, so a binding of one is
+// another name for it, and the array in its field is the one array.
+
+struct Table:
+    names : str[]
+    extra : i64[]
+
+@impure
+fn show(v : i64[]):
+    foreach x := v:
+        std.print("{} ", x)
+    std.println("|")
+
+@start
+@impure
+fn main():
+    let v : mut i64[] = [1, 2]
+    let copy : i64[] = v
+    let inferred := v
+    v.push(3)
+    show(v)
+    show(copy)
+    show(inferred)
+
+    // a mut binding may take a place, since the copy is what makes it
+    // fresh; what it does afterwards is its own
+    let mine : mut i64[] = v
+    mine.push(9)
+    show(v)
+    show(mine)
+
+    // a field is a place like any other
+    let t : mut Table = Table{names: ["a"], extra: [7, 8]}
+    let held : i64[] = t.extra
+    t.extra.push(9)
+    show(t.extra)
+    show(held)
+
+    // and the borrow, which names the array rather than copying it
+    let r : & = t.extra
+    show(r)

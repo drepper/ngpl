@@ -1776,6 +1776,19 @@ impl Parser:
         let is_blet : bool = self.peek() = tokens.Tk.band
         if is_blet:
             self.pos ← self.pos + 1
+        // `let v : & = w` -- a borrow of what w names, with the type
+        // left to w, the way ':=' leaves it.  What is borrowed is a
+        // place, and a place already has a type worth reading.
+        if is_blet and self.peek() = tokens.Tk.eq:
+            if u ≠ types.UNIT_NONE:
+                self.err("a unit measures a stated type; write 'let x : &i64 ¤ptrdiff = …'")
+                return 0
+            self.pos ← self.pos + 1
+            let init3 : i64 = self.parse_expr()
+            self.end_stmt()
+            let bid : i64 = self.mknode(ast.Nk.st_let, name_tok, init3, is_mut, ⁻1)
+            self.blets.push(bid)
+            return bid
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ types.UNIT_NONE:

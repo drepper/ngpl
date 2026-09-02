@@ -1698,8 +1698,14 @@ class Parser:
         init_expr = self._parse_expr()
         self._try_eat(TokenType.PUNCT, ";")
 
-        return self._set_pos(VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation, init_expr, is_const,
-                      unit_spec=unit_spec), kw_tok)
+        node = VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation, init_expr, is_const,
+                      unit_spec=unit_spec)
+        if borrow_ann and type_annotation is None:
+            # `let v : & = w` -- a borrow with the type left to w, the
+            # way ':=' leaves it.  There is no annotation to carry the
+            # & in, so the node says it itself.
+            node._borrow_ann = True
+        return self._set_pos(node, kw_tok)
 
     # ------------------------------------------------------------------
     # Unit definition and spec parsing
