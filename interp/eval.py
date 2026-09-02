@@ -703,6 +703,13 @@ def _is_const_expr(node) -> bool:
                 and isinstance(node.obj.obj, VarRef)
                 and node.obj.obj.name == "std"):
             return True
+        # An enumerator: `Kind.member` is which member it is, settled
+        # where the enumeration was declared.  The compiler folds one,
+        # so a static_assert comparing two of them -- which is how a
+        # program says two enumerations were numbered alike -- must be
+        # readable here too.
+        if isinstance(node.obj, VarRef) and is_type_name(node.obj.name):
+            return True
         # A member that answers about the value rather than holding
         # part of it: how many elements it has, and how it is laid out.
         return (node.attr in _CONST_ATTRIBUTES
@@ -4374,6 +4381,16 @@ class Evaluator:
         return RefValue(self.env, node.name)
 
     def _ee_StaticAssert(self, node):
+        # What a static_assert reads is settled before the program runs
+        # -- literals, a type's size, what an enumerator stands for --
+        # so a node that has been checked once and held cannot stop
+        # holding.  The exception is a generic function, where a type
+        # name means a different type per instantiation, so a check
+        # made under one substitution says nothing about another; that
+        # is checked every time, as it was.
+        if node.__dict__.get("held"):
+            return none()
+        generic = bool(self._generic_map)
         for arg in node.args:
             if not _is_const_expr(arg):
                 raise coded(2615, TypeError(
@@ -4393,9 +4410,15 @@ class Evaluator:
                 raise TypeError("static_assert failed: value is zero")
         else:
             raise TypeError("static_assert condition must be bool or int")
+        if not generic:
+            node.__dict__["held"] = True
         return none()
 
     def _ee_StaticAssertEq(self, node):
+        # held once, held always -- see _ee_StaticAssert
+        if node.__dict__.get("held"):
+            return none()
+        generic = bool(self._generic_map)
         if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
             raise coded(2616, TypeError(
                 "static_assert_eq requires compile-time constant expressions"))
@@ -4444,6 +4467,8 @@ class Evaluator:
         else:
             raise TypeError(
                 f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        if not generic:
+            node.__dict__["held"] = True
         return none()
 
     def _ee_UnitExpr(self, node):

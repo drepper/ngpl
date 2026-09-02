@@ -1,0 +1,35 @@
+// What a static_assert may read includes an enumerator: `Kind.member`
+// is which member it is, settled where the enumeration was declared.
+// Two enumerations numbered alike is exactly what a program says with
+// one -- the compiler's own ast.ngpl says it of std.process's members
+// against the kernel's auxiliary-vector keys -- and both
+// implementations have to read it the same way.
+//
+// The assertion also stands in a function that is called more than
+// once, which is the other thing being pinned: an assertion that held
+// is not made again, and the answer does not change because it was
+// not made.
+
+enum Proc : u8:
+    pagesize = 6
+    uid = 11
+
+enum Auxv : u8:
+    pagesz = 6
+    uid = 11
+
+// the same number under both names, which is what makes the
+// conversion below a conversion and not a lookup
+fn key(m : Proc) → i64:
+    static_assert(Proc.pagesize.ord() = Auxv.pagesz.ord())
+    static_assert(Proc.uid.ord() = Auxv.uid.ord())
+    static_assert_eq(6, Auxv.pagesz.ord())
+    m.ord()
+
+@start
+@impure
+fn main():
+    let n : mut i64 = 0
+    foreach _ := 0…3:
+        n ← n + key(Proc.pagesize) + key(Proc.uid)
+    std.println("{}", n)

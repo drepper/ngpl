@@ -806,21 +806,31 @@ class StaticAssert:
     """Compile-time assertion: static_assert(cond) or static_assert(cond, msg).
 
     All arguments must be compile-time constant expressions.
+
+    `held` is set on the node once the assertion has been made and
+    held: what it reads is settled before the program runs, so the
+    answer cannot change, and a function holding one may be called a
+    hundred thousand times.  It is not set where the function is
+    generic, since a type name means a different type per
+    instantiation.
     """
 
     def __init__(self, args: list):
         self.args = args
+        self.held = False
 
 
 class StaticAssertEq:
     """Compile-time equality assertion: static_assert_eq(expected, actual).
 
-    Both arguments must be compile-time constant expressions.
+    Both arguments must be compile-time constant expressions.  `held`
+    is what it is on StaticAssert.
     """
 
     def __init__(self, expected, actual):
         self.expected = expected
         self.actual = actual
+        self.held = False
 
 
 class EnumerateExpr:
