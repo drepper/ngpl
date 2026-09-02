@@ -1242,12 +1242,24 @@ impl Lower:
                     self.ir(ir.Ir.ceq, d, z, 0, d2, 64)
                     return d2
                 return d
+        // a listable operator handed an array is the loop that asks
+        // it of each element; the checker marked the node where it is
+        if nc = 1:
+            return self.lower_thread_op(nid, k, na, nb)
         // the remaining family evaluates both sides
         let av : i64 = self.lower_expr(na)
         let bv : i64 = self.lower_expr(nb)
+        return self.lower_binop_vals(k, av, bv, self.tof(na), self.tof(nb), self.tof(nid), w)
+
+    // One turn of an operator: the two values, the types they came
+    // from and the type they answer.  Written apart from the node so
+    // that a threaded operator can ask for one element's worth of it
+    // as many times as the container is long.
+    // @pre av >= 0 and bv >= 0
+    fn lower_binop_vals(&mut self, k : ast.Nk, av : i64, bv : i64, ta : i64, tb : i64, tres : i64, w : i64) → i64:
         let d : i64 = self.tmp()
-        let owa : i64 = width_of(self.tof(na))
-        let owb : i64 = width_of(self.tof(nb))
+        let owa : i64 = width_of(ta)
+        let owb : i64 = width_of(tb)
         // mixed sides compare at the wider width; where signedness
         // mixes the checker admitted only unsigned-narrower-than-
         // signed, and the signed side's width carries the compare
@@ -1256,7 +1268,7 @@ impl Lower:
             ow ← if (owa » 8) = 1: owa else: owb
         elif (owb & 255) > (owa & 255):
             ow ← owb
-        if types.ty_is_bigint(self.tof(na)) and not types.ty_is_bigint(self.tof(nid)):
+        if types.ty_is_bigint(ta) and not types.ty_is_bigint(tres):
             // Comparing two ints answers a truth value, so the width
             // settled above says nothing about the operands and the
             // ordinary compare would ask its question of two addresses.
@@ -1284,7 +1296,7 @@ impl Lower:
             // the ⁻1 as the largest number there is
             self.ir(op, c, z, 0, d, 64 + 256)
             return d
-        if types.ty_is_bigint(self.tof(nid)):
+        if types.ty_is_bigint(tres):
             // int carries its own arithmetic, in the runtime: there is
             // no width here for a machine instruction to work at
             if k = ast.Nk.add:
@@ -1299,7 +1311,7 @@ impl Lower:
         match k:
             ast.Nk.add:
                 self.ir(if self.in_wrap > 0: ir.Ir.addw else: ir.Ir.add, av, bv, 0, d, w)
-                if self.tof(nid) = types.TY_CHAR:
+                if tres = types.TY_CHAR:
                     // a character and a number make the character that far
                     // on, and what is no character stops the program: the
                     // same judgement .chr() makes, made where the sum is
@@ -1344,7 +1356,7 @@ impl Lower:
                 self.ir(ir.Ir.const, 1, 0, 0, c1, 64)
                 self.ir(ir.Ir.bxorr, tt, c1, 0, d, 64)
             ast.Nk.iota:
-                let sf : i64 = if self.elem_of(self.tof(na)) = types.TY_STR: 1 else: 0
+                let sf : i64 = if self.elem_of(ta) = types.TY_STR: 1 else: 0
                 self.ir(ir.Ir.afind, av, bv, sf, d, 0)
             ast.Nk.satadd:
                 self.ir(ir.Ir.satadd, av, bv, 0, d, w)
@@ -1360,6 +1372,72 @@ impl Lower:
                 // no other kind reaches here; the checker said which do
                 _ ← 0
         return d
+
+    // A listable operator handed an array asks itself of each of the
+    // elements and answers an array of what they said.  The container
+    // says how many turns; a value operand stands still and is read
+    // once, outside the loop, since it is the same at every turn.
+    // Where both sides are containers they meet element against
+    // element, so their lengths have to agree.
+    // @pre self.a.nc[nid × 1¤ptrdiff] = 1
+    // @post @result >= 0
+    fn lower_thread_op(&mut self, nid : i64, k : ast.Nk, na : i64, nb : i64) → i64:
+        // a sized array lives in the frame as its elements; the loop
+        // reads an object, so it is made into one first
+        let av : i64 = self.lower_arr_operand(na)
+        let bv : i64 = self.lower_arr_operand(nb)
+        let ta : i64 = types.ty_strip_ref(self.tof(na))
+        let tb : i64 = types.ty_strip_ref(self.tof(nb))
+        let la : bool = types.ty_is_arr(ta)
+        let lb : bool = types.ty_is_arr(tb)
+        assert(la or lb, "a threaded operator has a container to thread over")
+        let ea : i64 = if la: self.elem_of(ta) else: ta
+        let eb : i64 = if lb: self.elem_of(tb) else: tb
+        let er : i64 = self.elem_of(self.tof(nid))
+        let ew : i64 = width_of(er)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, if la: av else: bv, 0, 0, n, 0)
+        if la and lb:
+            let n2 : i64 = self.tmp()
+            self.ir(ir.Ir.alen, bv, 0, 0, n2, 0)
+            let same : i64 = self.tmp()
+            self.ir(ir.Ir.ceq, n, n2, 0, same, 64 + 256)
+            let lok : i64 = self.label()
+            self.ir(ir.Ir.jnz, same, lok, 0, 0, 0)
+            let m : i64 = self.intern("""a listable operator meets element against element, and
+                                       " its operands are of different lengths\n""")
+            self.ir(ir.Ir.abort, m, 0, 0, 0, 0)
+            self.ir(ir.Ir.label, lok, 0, 0, 0, 0)
+        let d : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, d, 0)
+        let iv : i64 = self.tmp()
+        self.ir(ir.Ir.const, 0, 0, 0, iv, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(ir.Ir.label, ltop, 0, 0, 0, 0)
+        let c : i64 = self.tmp()
+        self.ir(ir.Ir.clt, iv, n, 0, c, 64 + 256)
+        self.ir(ir.Ir.jz, c, lend, 0, 0, 0)
+        let xa : mut i64 = av
+        if la:
+            let e1 : i64 = self.tmp()
+            self.ir(ir.Ir.aidx, av, iv, 0, e1, 0)
+            xa ← e1
+        let xb : mut i64 = bv
+        if lb:
+            let e2 : i64 = self.tmp()
+            self.ir(ir.Ir.aidx, bv, iv, 0, e2, 0)
+            xb ← e2
+        let r : i64 = self.lower_binop_vals(k, xa, xb, ea, eb, er, ew)
+        self.ir(ir.Ir.apush, d, r, 0, 0, 0)
+        let one : i64 = self.tmp()
+        self.ir(ir.Ir.const, 1, 0, 0, one, 0)
+        let ni : i64 = self.tmp()
+        self.ir(ir.Ir.addw, iv, one, 0, ni, 64 + 256)
+        self.ir(ir.Ir.mov, ni, 0, 0, iv, 0)
+        self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
+        d
 
     fn lower_ife(&mut self, nid : i64, na : i64, nb : i64, nc : i64) → i64:
         // Where each branch is one expression and both may be read

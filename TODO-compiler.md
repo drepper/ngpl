@@ -665,3 +665,37 @@ Tooling
 [ ] Functions marked as impure but which do not need this attribute are
     flagged with an error.  Unnecessary @impure attributes are not
     allowed.
+
+[x] the listable operators in the compiled subset.  The interpreter has always asked an
+    arithmetic or comparison operator of each element of a container it is handed, and the
+    spec has always said so; ngplc refused it with "this operator works numbers".  It now
+    threads: array against array, array against value, value against array, for the
+    operators whose one turn is a machine instruction -- numbers, truth values and
+    characters at any width, measured or not, a sized array read as the elements it is.
+
+    Three pieces.  The checker reads the two sides through elem_side, so one element of a
+    container answers the same questions the container's own type would have, and
+    thread_result puts the array type back on the node and marks it; check_arith_pair and
+    check_eq_pair are the old branch bodies, moved out so the mark can be set after they
+    return rather than at each of their exits.  Lowering reads the mark and builds the
+    loop (lower_thread_op), with lower_binop_vals -- the old scalar tail, parameterized by
+    the two operand types and the result type -- as its body.  A value operand is read once,
+    outside the loop.
+
+    What is not threaded, and refuses with a message saying so: a string, an optional, an
+    int, an enum.  Each is worked by the runtime a value at a time, so the loop would have
+    to call rather than compute, and none of them is wanted yet.  ÷ and % never arrive:
+    they answer an optional and must be written (a ÷ b) ?? d, which is a different node.
+    ⁻ over an array is still refused, where the interpreter threads it; it wants the same
+    loop with one operand and is the obvious next one.
+
+    One divergence goes with this, found by writing the test for it and left rather than
+    hidden.  Two containers of different lengths under one operator are a run-time
+    condition: the compiled program stops with 64, as every other runtime stop does.  The
+    interpreter reports it as error 2236 and leaves with 1, because it checks as it
+    evaluates and this is one of the stops that errors.ProgramStop does not carry yet --
+    its own docstring says so.  tests/test_listable.ngpl and
+    tests/output/listable_length_mismatch pin the interpreter's side; the shared suite
+    cannot hold the case, since it requires both to stop with the same status.  Moving the
+    mismatch to a ProgramStop is what closes it, and takes @expect with it: there is no
+    form for a stop today, only for an error.

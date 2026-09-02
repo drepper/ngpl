@@ -591,7 +591,9 @@ impl Checker:
                 // what it answers is fresh; one by a number is not
                 types.ty_is_arr(types.ty_strip_ref(self.ty_of(self.a.nb[e × 1¤ptrdiff])))
             _:
-                false
+                // a listable operator handed an array builds the array it
+                // answers, one element at a time; the mark is the checker's
+                self.a.nc[e × 1¤ptrdiff] = 1 and types.ty_is_arr(self.ty_of(e))
 
     fn is_fresh_struct(&self, id : i64) → bool:
         let k : ast.Nk = self.kind_of(id)
@@ -1283,46 +1285,17 @@ impl Checker:
             ast.Nk.eq, ast.Nk.ne:
                 self.check_expr(na, types.TY_UNIT)
                 self.check_expr(nb, types.TY_UNIT)
-                let tl : i64 = self.ty_of(na)
-                let tr : i64 = self.ty_of(nb)
-                if tl = types.TY_EMPTY or tr = types.TY_EMPTY:
-                    if tl = types.TY_EMPTY and tr = types.TY_EMPTY:
-                        self.derr(tok, "∅ against ∅ says nothing; state which optional is asked")
-                    elif tl = types.TY_EMPTY:
-                        if types.ty_is_opt(tr):
-                            self.adopt(na, tr)
-                        else:
-                            self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tr))
-                    elif types.ty_is_opt(tl):
-                        self.adopt(nb, tl)
-                    else:
-                        self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tl))
-                    self.set_type(id, types.TY_BOOL)
-                    return
-                if types.ty_is_opt(tl) or types.ty_is_opt(tr):
-                    let ob : i64 = types.ty_opt_base(if types.ty_is_opt(tl): tl else: tr)
-                    if tl ≠ tr:
-                        self.derr(tok, "an optional compares with its own kind or ∅; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
-                    elif not ((types.ty_is_int(ob) and types.ty_unit(ob) = 0) or ob = types.TY_BOOL or ob = types.TY_CHAR or ob = types.TY_STR):
-                        self.derr(tok, "an optional of " ⧺ self.tn(ob) ⧺ """ is not compared whole;
-                                " match takes it apart""")
-                    self.set_type(id, types.TY_BOOL)
-                    return
-                if tl = types.TY_STR and tr = types.TY_STR:
-                    self.set_type(id, types.TY_BOOL)
-                    return
-                if tl = types.TY_BOOL and tr = types.TY_BOOL:
-                    self.set_type(id, types.TY_BOOL)
-                    return
-                if types.ty_is_hash(tl) or types.ty_is_hash(tr) or types.ty_is_arr(tl) or types.ty_is_arr(tr) or types.ty_is_tup(tl) or types.ty_is_tup(tr) or types.ty_is_mat(tl) or types.ty_is_mat(tr) or types.ty_is_rg(tl) or types.ty_is_rg(tr):
-                    self.derr(tok, "core-2 does not compare " ⧺ self.tn(tl) ⧺ " with " ⧺ self.tn(tr) ⧺ "; ask the entries")
-                    self.set_type(id, types.TY_BOOL)
-                    return
-                self.check_cmp_operands(id, tok, k, na, nb)
+                let etl : i64 = self.ty_of(na)
+                let etr : i64 = self.ty_of(nb)
+                self.check_eq_pair(id, tok, k, na, nb)
+                self.thread_result(id, tok, na, nb, etl, etr)
             ast.Nk.lt, ast.Nk.le, ast.Nk.gt, ast.Nk.ge:
                 self.check_expr(na, types.TY_UNIT)
                 self.check_expr(nb, types.TY_UNIT)
+                let ltl : i64 = self.ty_of(na)
+                let ltr : i64 = self.ty_of(nb)
                 self.check_cmp_operands(id, tok, k, na, nb)
+                self.thread_result(id, tok, na, nb, ltl, ltr)
             ast.Nk.reshape:
                 self.check_reshape(id, tok, na, nb, want)
             ast.Nk.each:
@@ -1701,43 +1674,13 @@ impl Checker:
                 let side : i64 = if (k = ast.Nk.mul or k = ast.Nk.satmul or k = ast.Nk.div or k = ast.Nk.mod) and types.ty_is_int(want2): types.ty_drop_unit(want2) else: want2
                 self.check_expr(na, side)
                 self.check_expr(nb, side)
-                let tl : i64 = self.ty_of(na)
-                let tr : i64 = self.ty_of(nb)
-                if types.ty_is_enum(tl) or types.ty_is_enum(tr):
-                    // a @flag enum is a set of bits, and the bit operators
-                    // are its set operations; anything else two enums
-                    // cannot do to each other
-                    if not (k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor):
-                        self.derr(tok, "an enum is compared, not computed with")
-                        self.set_type(id, types.TY_I64)
-                        return
-                    if tl ≠ tr:
-                        self.derr(tok, "the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr) ⧺ "; a bit operation takes two of the same @flag enum")
-                        self.set_type(id, if types.ty_is_enum(tl): tl else: tr)
-                        return
-                    if not self.enum_is_flag(tl):
-                        self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[types.ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
-                    self.set_type(id, tl)
-                    return
-                if tl = types.TY_CHAR or tr = types.TY_CHAR:
-                    self.check_char_arith(id, tok, k, na, nb, tl, tr)
-                    return
-                if not (tl = types.TY_UNT or types.ty_is_int(tl) or types.ty_is_bigint(tl)) or not (tr = types.TY_UNT or types.ty_is_int(tr) or types.ty_is_bigint(tr)):
-                    self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
-                    self.set_type(id, types.TY_I64)
-                    return
-                if tl = types.TY_UNT and tr = types.TY_UNT and self.kind_of(na) = ast.Nk.lit_int and self.kind_of(nb) = ast.Nk.lit_int and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0 and k ≠ ast.Nk.satadd and k ≠ ast.Nk.satsub and k ≠ ast.Nk.satmul:
-                    self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
-                                  self.a.na[nb × 1¤ptrdiff])
-                    return
-                let t : i64 = self.unify_arith(tok, id, k, tl, tr)
-                if (k = ast.Nk.shl or k = ast.Nk.shr or k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor) and t ≠ types.TY_UNT and types.ty_unit(t) ≠ 0:
-                    self.derr(tok, "bit operations work plain integers, not measured ones")
-                if k = ast.Nk.shl or k = ast.Nk.shr:
-                    // the count is its own number; it does not widen the value
-                    self.set_type(id, if tl ≠ types.TY_UNT: tl else: t)
-                else:
-                    self.set_type(id, t)
+                // A listable operator handed an array is asked of each of
+                // its elements, so the sides are read at their element
+                // types and the answer is an array of what one said.
+                let lt9 : i64 = self.ty_of(na)
+                let rt9 : i64 = self.ty_of(nb)
+                self.check_arith_pair(id, tok, k, na, nb)
+                self.thread_result(id, tok, na, nb, lt9, rt9)
 
     // as above: the negation of a folded literal wraps rather than
     // reports, since the one value that would report is the one a
@@ -1761,9 +1704,130 @@ impl Checker:
             return
         self.derr(self.a.ntok[e × 1¤ptrdiff], "an int meets numbers; this is " ⧺ self.tn(t))
 
+
+
+    // The two sides of = or ≠, once they have been checked.  As with
+    // check_arith_pair their types are read through elem_side, so that
+    // one element of a container answers for the container.
+    fn check_eq_pair(&mut self, id : i64, tok : i64, k : ast.Nk, na : i64, nb : i64):
+        let tl : i64 = self.elem_side(self.ty_of(na))
+        let tr : i64 = self.elem_side(self.ty_of(nb))
+        if tl = types.TY_EMPTY or tr = types.TY_EMPTY:
+            if tl = types.TY_EMPTY and tr = types.TY_EMPTY:
+                self.derr(tok, "∅ against ∅ says nothing; state which optional is asked")
+            elif tl = types.TY_EMPTY:
+                if types.ty_is_opt(tr):
+                    self.adopt(na, tr)
+                else:
+                    self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tr))
+            elif types.ty_is_opt(tl):
+                self.adopt(nb, tl)
+            else:
+                self.derr(tok, "only an optional is asked about ∅; this is " ⧺ self.tn(tl))
+            self.set_type(id, types.TY_BOOL)
+            return
+        if types.ty_is_opt(tl) or types.ty_is_opt(tr):
+            let ob : i64 = types.ty_opt_base(if types.ty_is_opt(tl): tl else: tr)
+            if tl ≠ tr:
+                self.derr(tok, "an optional compares with its own kind or ∅; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+            elif not ((types.ty_is_int(ob) and types.ty_unit(ob) = 0) or ob = types.TY_BOOL or ob = types.TY_CHAR or ob = types.TY_STR):
+                self.derr(tok, "an optional of " ⧺ self.tn(ob) ⧺ """ is not compared whole;
+                        " match takes it apart""")
+            self.set_type(id, types.TY_BOOL)
+            return
+        if tl = types.TY_STR and tr = types.TY_STR:
+            self.set_type(id, types.TY_BOOL)
+            return
+        if tl = types.TY_BOOL and tr = types.TY_BOOL:
+            self.set_type(id, types.TY_BOOL)
+            return
+        if types.ty_is_hash(tl) or types.ty_is_hash(tr) or types.ty_is_arr(tl) or types.ty_is_arr(tr) or types.ty_is_tup(tl) or types.ty_is_tup(tr) or types.ty_is_mat(tl) or types.ty_is_mat(tr) or types.ty_is_rg(tl) or types.ty_is_rg(tr):
+            self.derr(tok, "core-2 does not compare " ⧺ self.tn(tl) ⧺ " with " ⧺ self.tn(tr) ⧺ "; ask the entries")
+            self.set_type(id, types.TY_BOOL)
+            return
+        self.check_cmp_operands(id, tok, k, na, nb)
+
+    // One element of a container stands for the container itself
+    // wherever a listable operator is asked what its sides may be, so
+    // this is what those questions are asked of.  Anything that is not
+    // an array is already one value and answers itself.
+    fn elem_side(&self, t : i64) → i64:
+        if types.ty_is_arr(t): self.elem_of(t) else: t
+
+    // The answer of a listable operator whose sides were containers:
+    // an array of what one element answered, and a mark on the node so
+    // that lowering builds the loop rather than one operation.  Sides
+    // that are no container leave the node as it was.
+    fn thread_result(&mut self, id : i64, tok : i64, na : i64, nb : i64, tl : i64, tr : i64):
+        if not (types.ty_is_arr(tl) or types.ty_is_arr(tr)):
+            return
+        // What one turn of the loop asks is what a machine instruction
+        // answers.  A string, an optional, an int or an enum is worked
+        // by the runtime a value at a time, and threading one of those
+        // is not written yet.
+        let et : i64 = self.ty_of(id)
+        if not (self.threadable(self.elem_side(tl)) and self.threadable(self.elem_side(tr)) and self.threadable(et)):
+            self.derr(tok, "a listable operator threads over numbers, truth values and characters so far; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+            return
+        // the loop reads the container as an object, which a sized
+        // array in the frame is not until it is asked to be
+        self.pack_safe(na)
+        self.pack_safe(nb)
+        self.a.nc[id × 1¤ptrdiff] ← 1
+        self.set_type(id, types.mk_aty(et))
+
+    // What one element may be for the loop above to hold it: a number
+    // of a width the machine works at, a truth value, or a character.
+    fn threadable(&self, t : i64) → bool:
+        (types.ty_is_int(t) and not types.ty_is_bigint(t)) or t = types.TY_UNT or t = types.TY_BOOL or t = types.TY_CHAR
+
+    // The two sides of an arithmetic operator, once they have been
+    // checked: what they may be, what they make together, and the
+    // type that goes on the node.  Their types are read through
+    // elem_side, which is what lets one element of a container stand
+    // for the container itself.
+    fn check_arith_pair(&mut self, id : i64, tok : i64, k : ast.Nk, na : i64, nb : i64):
+        let tl : i64 = self.elem_side(self.ty_of(na))
+        let tr : i64 = self.elem_side(self.ty_of(nb))
+        if types.ty_is_enum(tl) or types.ty_is_enum(tr):
+            // a @flag enum is a set of bits, and the bit operators
+            // are its set operations; anything else two enums
+            // cannot do to each other
+            if not (k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor):
+                self.derr(tok, "an enum is compared, not computed with")
+                self.set_type(id, types.TY_I64)
+                return
+            if tl ≠ tr:
+                self.derr(tok, "the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr) ⧺ "; a bit operation takes two of the same @flag enum")
+                self.set_type(id, if types.ty_is_enum(tl): tl else: tr)
+                return
+            if not self.enum_is_flag(tl):
+                self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[types.ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
+            self.set_type(id, tl)
+            return
+        if tl = types.TY_CHAR or tr = types.TY_CHAR:
+            self.check_char_arith(id, tok, k, na, nb, tl, tr)
+            return
+        if not (tl = types.TY_UNT or types.ty_is_int(tl) or types.ty_is_bigint(tl)) or not (tr = types.TY_UNT or types.ty_is_int(tr) or types.ty_is_bigint(tr)):
+            self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
+            self.set_type(id, types.TY_I64)
+            return
+        if tl = types.TY_UNT and tr = types.TY_UNT and self.kind_of(na) = ast.Nk.lit_int and self.kind_of(nb) = ast.Nk.lit_int and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0 and k ≠ ast.Nk.satadd and k ≠ ast.Nk.satsub and k ≠ ast.Nk.satmul:
+            self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
+                          self.a.na[nb × 1¤ptrdiff])
+            return
+        let t : i64 = self.unify_arith(tok, id, k, tl, tr)
+        if (k = ast.Nk.shl or k = ast.Nk.shr or k = ast.Nk.band or k = ast.Nk.bor or k = ast.Nk.bxor) and t ≠ types.TY_UNT and types.ty_unit(t) ≠ 0:
+            self.derr(tok, "bit operations work plain integers, not measured ones")
+        if k = ast.Nk.shl or k = ast.Nk.shr:
+            // the count is its own number; it does not widen the value
+            self.set_type(id, if tl ≠ types.TY_UNT: tl else: t)
+        else:
+            self.set_type(id, t)
+
     fn check_cmp_operands(&mut self, id : i64, tok : i64, k : ast.Nk, na : i64, nb : i64):
-        let tl : i64 = self.ty_of(na)
-        let tr : i64 = self.ty_of(nb)
+        let tl : i64 = self.elem_side(self.ty_of(na))
+        let tr : i64 = self.elem_side(self.ty_of(nb))
         if types.ty_is_bigint(tl) or types.ty_is_bigint(tr):
             if not types.ty_is_bigint(tl):
                 self.to_bigint(na, tl)
@@ -1789,8 +1853,8 @@ impl Checker:
             self.adopt(na, if types.ty_is_enum(tr): self.a.ewidth[types.ty_eidx(tr) × 1¤ptrdiff] else: tr)
         elif tr = types.TY_UNT:
             self.adopt(nb, if types.ty_is_enum(tl): self.a.ewidth[types.ty_eidx(tl) × 1¤ptrdiff] else: tl)
-        let l : i64 = self.ty_of(na)
-        let r : i64 = self.ty_of(nb)
+        let l : i64 = self.elem_side(self.ty_of(na))
+        let r : i64 = self.elem_side(self.ty_of(nb))
         if l = types.TY_CHAR and r = types.TY_CHAR:
             // characters order by code point; the slots hold small
             // positive numbers, so the signed compare serves

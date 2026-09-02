@@ -1,0 +1,60 @@
+// Every arithmetic and comparison operator is @listable: handed an
+// array it is asked of each of the elements and answers an array of
+// what they said.  Two containers meet element against element; a
+// value stands still and meets every element.  This is what makes
+// `2 × v` and `v < n` say what a loop pushing each answer would.
+
+@impure
+fn show(v : i64[]):
+    foreach x := v:
+        std.print("{} ", x)
+    std.println("|")
+
+@impure
+fn showb(v : bool[]):
+    foreach x := v:
+        std.print("{} ", x)
+    std.println("|")
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    let w : i64[] = [10, 20, 30]
+    show(v + w)
+    show(v × w)
+    show(w - v)
+    show(v + 1)
+    show(1 + v)
+    show(10 - v)
+    show(v ⌈ 2)
+    show(v ⌊ 2)
+    show(v « 1)
+    show(v | 4)
+
+    showb(v < 3)
+    showb(v = 2)
+    showb(v ≠ w)
+    showb(v >= 2)
+
+    // the answer is a fresh array, so a mut binding may take it
+    let m : mut i64[] = [1, 2, 3]
+    m ← m + 1
+    show(m)
+    m ← 10 - m
+    show(m)
+
+    // a measure rides along on the elements
+    let u : i64 ¤ptrdiff[] = [1¤ptrdiff, 2¤ptrdiff]
+    let uu : i64 ¤ptrdiff[] = u + 1¤ptrdiff
+    std.println("{} {}", @dropunit(uu[0¤ptrdiff]), @dropunit(uu[1¤ptrdiff]))
+
+    // a narrower width is worked at its own width
+    let b : u8[] = [1u8, 250u8]
+    let bb : u8[] = b ⊞ 10u8
+    std.println("{} {}", bb[0¤byte], bb[1¤byte])
+
+    // a sized array is read as the elements it is
+    let f : i64[3] = [4, 5, 6]
+    show(f + 1)
+    show(f × f)
