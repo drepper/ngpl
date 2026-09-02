@@ -141,6 +141,7 @@ enum Tk : i8:
     each = 112    // ¨ -- f ¨ v, what f says of each
     foldl = 113    // ⌿ -- f ⌿ v, folded from the left
     foldr = 114    // ⍀ -- f ⍀ v, folded from the right
+    where = 115    // ⍸ -- ⍸ b, the indices at which b is true
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -203,7 +204,8 @@ let GLYPHS3 : std.dict(i32, Tk) = ⸨
     14858409: Tk.rhash,     // ⸩
     14846090: Tk.elem,      // ∊
     14847167: Tk.foldl,     // ⌿
-    14847360: Tk.foldr⸩     // ⍀
+    14847360: Tk.foldr,     // ⍀
+    14847416: Tk.where⸩     // ⍸
 
 // ===========================================================================
 // Small helpers

@@ -1,0 +1,3 @@
+tests/compile/refuse/where_not_bool.ngpl:6:35: error: ⍸ reads an array of truth values; this is i64[]
+  6 |     std.println("{}", @dropunit(#(⍸ v)))
+    |                                   ^

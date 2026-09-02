@@ -2666,6 +2666,8 @@ class Evaluator:
         """
         if op == "#":
             return self._op_length(operand)
+        if op == "\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR}":
+            return self._op_where(operand)
         if op in ("\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}"):
             return self._op_halves(op, operand)
         if op in self._LISTABLE_UNOPS:
@@ -3567,6 +3569,25 @@ class Evaluator:
         value = layout.size if attr == "sizeof" else layout.align
         return UnitValue(mk_int(value), BUILTIN_UNITS["byte"])
 
+    def _op_where(self, operand):
+        """⍸ b: the indices at which an array of truth values is true,
+        in order, each measured as the array's own subscript is."""
+        u = unwrap_optional(operand)
+        if not (isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue)):
+            raise TypeError(
+                f"\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR} reads an array of "
+                f"truth values; this is {self._value_type_name(u)}")
+        out = []
+        for i, e in enumerate(u.obj.values()):
+            eu = unwrap_optional(e)
+            if not isinstance(eu, BoolValue):
+                raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL IOTA UNDERBAR} reads an array "
+                    f"of truth values; this one holds {runtime_type_of(eu)}")
+            if eu.value:
+                out.append(self._sizeof_result(i, u.obj.element_type))
+        return ObjectValue(ArrayValue(out))
+
     def _sizeof_result(self, count: int, element_type: str | None = None):
         from interp.units import BUILTIN_UNITS
         if element_type in ("u8", "byte"):
@@ -4234,6 +4255,15 @@ class Evaluator:
                 return unwrapped.get(iu.value)
             raise TypeError("tuple index must be an integer")
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+            if isinstance(iu, ObjectValue) and isinstance(iu.obj, ArrayValue):
+                # v[ix]: the elements at each index in turn, an array
+                arr = unwrapped.obj
+                picked = []
+                for k in iu.obj.values():
+                    ku = self._check_index_unit(unwrap_optional(k), arr)
+                    picked.append(arr.get(ku.value))
+                return ObjectValue(ArrayValue(picked, element_type=arr.element_type,
+                                              element_unit=arr.element_unit))
             iu = self._check_index_unit(iu, unwrapped.obj)
             return unwrapped.obj.get(iu.value)
         if isinstance(unwrapped, StrValue):
@@ -5329,8 +5359,27 @@ class Evaluator:
                 hv.put(key, value)
             elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 iu = unwrap_optional(_pre_idx[-1])
-                iu = self._check_index_unit(iu, unwrapped.obj)
-                unwrapped.obj.set(iu.value, rhs)
+                if isinstance(iu, ObjectValue) and isinstance(iu.obj, ArrayValue):
+                    # v[ix] ← w: each index takes the element of w at
+                    # the same position, or w itself where w is one value
+                    arr = unwrapped.obj
+                    ru = unwrap_optional(rhs)
+                    keys = iu.obj.values()
+                    if isinstance(ru, ObjectValue) and isinstance(ru.obj, ArrayValue):
+                        if ru.obj.sizeof != len(keys):
+                            raise coded(2757, TypeError(
+                                f"{len(keys)} indices and {ru.obj.sizeof} values: "
+                                f"an amend writes one value at each index"))
+                        for k, w in zip(keys, ru.obj.values()):
+                            ku = self._check_index_unit(unwrap_optional(k), arr)
+                            arr.set(ku.value, w)
+                    else:
+                        for k in keys:
+                            ku = self._check_index_unit(unwrap_optional(k), arr)
+                            arr.set(ku.value, rhs)
+                else:
+                    iu = self._check_index_unit(iu, unwrapped.obj)
+                    unwrapped.obj.set(iu.value, rhs)
             else:
                 raise TypeError(
                     f"cannot write through a subscript of "

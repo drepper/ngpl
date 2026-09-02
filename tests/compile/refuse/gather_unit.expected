@@ -1,0 +1,3 @@
+tests/compile/refuse/gather_unit.ngpl:8:36: error: this array's subscript is measured ¤ptrdiff, but the indices are i64
+  8 |     std.println("{}", @dropunit(#(v[ix])))
+    |                                    ^

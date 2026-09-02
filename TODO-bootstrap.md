@@ -338,3 +338,9 @@ Outstanding
     the full language's and is refused by name.  Each lowers to a loop with a direct call
     or the operator's instruction per element, so the six backends see nothing new.
     tests/compile/t85_each_fold and refuse/{each_lambda,fold_arity,each_not_array}.
+
+[x] `⍸ b`, `v[ix]` and `v[ix] ← w` -- where, gather and amend -- in both implementations:
+    the filter and the masked store without a loop or a branch.  A subscript by an array of
+    indices is told from a subscript by its type; the indices are measured as the array's
+    own subscript is, and every one is bounds-checked.  Spec "Where, Gather and Amend";
+    tests/compile/t86_where_gather_amend and refuse/{gather_unit,where_not_bool,amend_type}.

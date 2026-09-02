@@ -1,0 +1,8 @@
+// The indices in a gather are measured as the array's own subscript
+// is; plain numbers are not indices.
+@start
+@impure
+fn main():
+    let v : i64[] = [10, 20, 30]
+    let ix : i64[] = [0, 2]
+    std.println("{}", @dropunit(#(v[ix])))

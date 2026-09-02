@@ -1,0 +1,3 @@
+tests/compile/refuse/amend_type.ngpl:8:5: error: the array holds i64, and this stores str; an amend takes one of them or an array of them
+  8 |     w[ix] ← "x"
+    |     ^

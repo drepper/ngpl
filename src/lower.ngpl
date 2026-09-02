@@ -32,6 +32,7 @@ struct Lower:
     cur_ref : i64        // whether the function being lowered answers a borrow
     strs : str[]
     sat : names.Names    // where each string sits in strs, by hashing
+    loop_labels : i64[]  // the top and end labels of the loops being written, innermost last
     op : ir.Ir[]
     ia : i64[]
     ib : i64[]
@@ -281,6 +282,95 @@ impl Lower:
         self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
         self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
         out
+
+    // a loop over 0…n: answers the index vreg, having written the top
+    // label and the test; the caller writes the body and calls
+    // loop_close with what this answered
+    fn loop_over(&mut self, n : i64) → i64:
+        let i : i64 = self.iconst(0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.loop_labels.push(ltop)
+        self.loop_labels.push(lend)
+        self.ir(ir.Ir.label, ltop, 0, 0, 0, 0)
+        let more : i64 = self.tmp()
+        self.ir(ir.Ir.clt, i, n, 0, more, 64 + 256)
+        self.ir(ir.Ir.jz, more, lend, 0, 0, 0)
+        i
+
+    fn loop_close(&mut self, i : i64):
+        let lend : i64 = self.loop_labels.pop() ?? 0
+        let ltop : i64 = self.loop_labels.pop() ?? 0
+        let one : i64 = self.iconst(1)
+        let ni : i64 = self.tmp()
+        self.ir(ir.Ir.addw, i, one, 0, ni, 64 + 256)
+        self.ir(ir.Ir.mov, ni, 0, 0, i, 0)
+        self.ir(ir.Ir.jmp, ltop, 0, 0, 0, 0)
+        self.ir(ir.Ir.label, lend, 0, 0, 0, 0)
+
+    // ⍸ b: the indices at which the truth values are true
+    fn lower_where(&mut self, na : i64) → i64:
+        let bv : i64 = self.lower_expr(na)
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, bv, 0, 0, n, 0)
+        let out : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, out, 0)
+        let i : i64 = self.loop_over(n)
+        let e : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, bv, i, 0, e, 64)
+        let lskip : i64 = self.label()
+        self.ir(ir.Ir.jz, e, lskip, 0, 0, 0)
+        self.ir(ir.Ir.apush, out, i, 0, 0, 0)
+        self.ir(ir.Ir.label, lskip, 0, 0, 0, 0)
+        self.loop_close(i)
+        out
+
+    // v[ix]: the elements at each index, a fresh array of them
+    fn lower_gather(&mut self, av : i64, iv : i64, aty : i64, pn : i64, w : i64) → i64:
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, iv, 0, 0, n, 0)
+        let out : i64 = self.tmp()
+        self.ir(ir.Ir.anew, 4, 0, 0, out, 0)
+        let i : i64 = self.loop_over(n)
+        let k : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, iv, i, 0, k, 0)
+        // a sized array lives in the frame as its elements, and is
+        // read as farr_load reads it; any other is a descriptor
+        let e : i64 = if pn >= 0: self.farr_load(av, aty, pn, k, ⁻1) else: self.tmp()
+        if pn < 0:
+            self.ir(ir.Ir.aidx, av, k, 0, e, w)
+        self.ir(ir.Ir.apush, out, e, 0, 0, 0)
+        self.loop_close(i)
+        out
+
+    // v[ix] ← w: each index takes w, or its own element of w where w
+    // is an array -- of the same length, or the program stops
+    fn lower_amend(&mut self, sid : i64, bv : i64, iv : i64, vv : i64, by_elem : bool, aty : i64, pn : i64, w : i64):
+        let n : i64 = self.tmp()
+        self.ir(ir.Ir.alen, iv, 0, 0, n, 0)
+        if by_elem:
+            let m : i64 = self.tmp()
+            self.ir(ir.Ir.alen, vv, 0, 0, m, 0)
+            let same : i64 = self.tmp()
+            self.ir(ir.Ir.ceq, n, m, 0, same, 64 + 256)
+            let lok : i64 = self.label()
+            self.ir(ir.Ir.jnz, same, lok, 0, 0, 0)
+            let msg : i64 = self.intern("an amend writes one value at each index, and the indices and the values differ in number (line " ⧺ tokens.i64_str(@dropunit(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]))) ⧺ ")\n")
+            self.ir(ir.Ir.abort, msg, 0, 0, 0, 0)
+            self.ir(ir.Ir.label, lok, 0, 0, 0, 0)
+        let i : i64 = self.loop_over(n)
+        let k : i64 = self.tmp()
+        self.ir(ir.Ir.aidx, iv, i, 0, k, 0)
+        let e : i64 = self.tmp()
+        if by_elem:
+            self.ir(ir.Ir.aidx, vv, i, 0, e, w)
+        else:
+            self.ir(ir.Ir.mov, vv, 0, 0, e, 0)
+        if pn >= 0:
+            self.farr_store(bv, aty, pn, k, ⁻1, e)
+        else:
+            self.ir(ir.Ir.asto, bv, k, e, 0, 0)
+        self.loop_close(i)
 
     // one step of an operator fold: acc op e, at the elements' width
     fn fold_op(&mut self, op : i64, acc : i64, e : i64, et : i64) → i64:
@@ -534,6 +624,8 @@ impl Lower:
             return d
         if k = ast.Nk.each:
             return self.lower_each(nid, nb)
+        if k = ast.Nk.where:
+            return self.lower_where(na)
         if k = ast.Nk.fold:
             return self.lower_fold(nid, na, nb)
         if k = ast.Nk.reshape:
@@ -712,6 +804,11 @@ impl Lower:
                 self.ir(ir.Ir.sidx, av1, iv1, 0, d1, w)
                 return d1
             let pni : i64 = self.packed_n(na)
+            if types.ty_is_arr(types.ty_strip_ref(self.tof(nb))):
+                // v[ix]: the elements at each index in ix
+                let gav : i64 = self.lower_expr(na)
+                let giv : i64 = self.lower_expr(nb)
+                return self.lower_gather(gav, giv, self.tof(na), pni, width_of(self.elem_of(types.ty_strip_ref(self.tof(na)))))
             if pni >= 0:
                 let fav : i64 = self.lower_expr(na)
                 let ki : i64 = self.const_index(nb)
@@ -2650,6 +2747,12 @@ impl Lower:
         elif k = ast.Nk.storeidxp:
             let bv : i64 = self.lower_expr(na)
             let pns : i64 = self.packed_n(na)
+            if types.ty_is_arr(types.ty_strip_ref(self.tof(nb))):
+                // v[ix] ← w: a store at each index in ix
+                let aiv : i64 = self.lower_expr(nb)
+                let avv : i64 = self.lower_expr(nc)
+                self.lower_amend(sid, bv, aiv, avv, types.ty_strip_ref(self.tof(nc)) = types.ty_strip_ref(self.tof(na)), self.tof(na), pns, width_of(self.elem_of(types.ty_strip_ref(self.tof(na)))))
+                return
             if pns >= 0:
                 let fk : i64 = self.const_index(nb)
                 let fi : i64 = if fk ≠ ⁻1: 0 else: self.lower_expr(nb)

@@ -1312,6 +1312,13 @@ impl Checker:
                 self.check_reshape(id, tok, na, nb, want)
             ast.Nk.each:
                 self.check_each(id, tok, na, nb)
+            ast.Nk.where:
+                // the indices at which an array of truth values is true
+                self.check_expr(na, types.TY_UNIT)
+                let wt : i64 = types.ty_strip_ref(self.ty_of(na))
+                if not (types.ty_is_arr(wt) and self.elem_of(wt) = types.TY_BOOL):
+                    self.derr(tok, "⍸ reads an array of truth values; this is " ⧺ self.tn(wt))
+                self.set_type(id, types.mk_aty(types.ty_with_unit(types.TY_I64, types.UNIT_PTRDIFF)))
             ast.Nk.fold:
                 self.check_fold(id, tok, na, nb)
             ast.Nk.opval:
@@ -3114,6 +3121,11 @@ impl Checker:
         // the subscript carries the array's measure, or is an untyped
         // literal, which is exempt as the spec has it
         self.check_expr(idx, types.ty_with_unit(types.TY_I64, self.index_unit_of(arr_ty)))
+        self.index_fits(tok, arr_ty, idx)
+
+    // whether a subscript already checked measures what the array's
+    // subscript measures; the other half of check_index_expr
+    fn index_fits(&mut self, tok : i64, arr_ty : i64, idx : i64):
         let t : i64 = self.ty_of(idx)
         if t = types.TY_UNT:
             self.adopt(idx, types.TY_I64)
@@ -3167,8 +3179,21 @@ impl Checker:
             self.derr(tok, "only an array, a dictionary or a string is subscripted; this is " ⧺ self.tn(t))
             self.set_type(id, types.TY_I64)
             return
-        self.check_index_expr(tok, t, nb)
+        self.check_expr(nb, types.ty_with_unit(types.TY_I64, self.index_unit_of(t)))
+        if types.ty_is_arr(types.ty_strip_ref(self.ty_of(nb))):
+            // v[ix]: the elements at each index in ix, an array of them
+            self.check_index_array(tok, t, nb)
+            self.set_type(id, types.mk_aty(self.elem_of(t)))
+            return
+        self.index_fits(tok, t, nb)
         self.set_type(id, self.elem_of(t))
+
+    // an array of indices, each measured as the array's subscript is
+    fn check_index_array(&mut self, tok : i64, arr_ty : i64, ix : i64):
+        let et : i64 = self.elem_of(types.ty_strip_ref(self.ty_of(ix)))
+        if not types.ty_is_int(et) or not self.stands_for(types.ty_unit(et), self.index_unit_of(arr_ty)):
+            let uname : str = if self.index_unit_of(arr_ty) = types.UNIT_BYTE: "¤byte" else: "¤ptrdiff"
+            self.derr(tok, "this array's subscript is measured " ⧺ uname ⧺ ", but the indices are " ⧺ self.tn(et))
 
     fn check_call(&mut self, id : i64, tok : i64, args_off : i64 ¤"aextra"):
         let name := self.text(tok)
@@ -5553,7 +5578,23 @@ impl Checker:
                     self.check_expr(nc, types.TY_UNIT)
                     return
                 self.require_mut_base(na, tok)
-                self.check_index_expr(tok, bt0, nb)
+                self.check_expr(nb, types.ty_with_unit(types.TY_I64, self.index_unit_of(bt0)))
+                if types.ty_is_arr(types.ty_strip_ref(self.ty_of(nb))):
+                    // v[ix] ← w: each index takes w, or its own element
+                    // of w where w is an array of them
+                    self.check_index_array(tok, bt0, nb)
+                    // a written-out array of values is read against
+                    // the array's own type, one value against an
+                    // element's
+                    self.check_expr(nc, if self.kind_of(nc) = ast.Nk.arrlit: bt0 else: self.elem_of(bt0))
+                    let wt : i64 = types.ty_strip_ref(self.ty_of(nc))
+                    if wt = types.TY_UNT:
+                        self.adopt(nc, self.elem_of(bt0))
+                    elif wt ≠ bt0 and not self.try_fit(nc, self.elem_of(bt0)):
+                        self.derr(tok, "the array holds " ⧺ self.tn(self.elem_of(bt0)) ⧺ ", and this stores " ⧺ self.tn(wt) ⧺ "; an amend takes one of them or an array of them")
+                    self.set_type(id, bt0)
+                    return
+                self.index_fits(tok, bt0, nb)
                 self.check_expr(nc, self.elem_of(bt0))
                 if self.ty_of(nc) = types.TY_UNT:
                     self.adopt(nc, self.elem_of(bt0))

@@ -1,0 +1,9 @@
+// An amend stores one of the array's elements at each index, or an
+// array of them; a string is neither.
+@start
+@impure
+fn main():
+    let w : mut i64[] = [1, 2, 3]
+    let ix : i64 ¤ptrdiff[] = [0¤ptrdiff]
+    w[ix] ← "x"
+    std.println("{}", w[0¤ptrdiff])

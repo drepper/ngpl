@@ -174,6 +174,14 @@ Attempt 3 grows core-1 to **core-2** with structs:
   direct call or the operator's own instruction per turn, so nothing
   new reaches the backends.  An empty array without a starting value
   stops the program, as the interpreter's does.
+- **where, gather, amend**: `⍸ b` is the indices at which an array
+  of truth values is true; `v[ix]` with an array of indices is the
+  elements at each of them, a fresh array; `v[ix] ← w` stores at each,
+  `w` itself or its own element where `w` is an array of them (of the
+  same length, or the program stops).  The checker tells a gather from
+  a subscript by the index's type and the lowering by the same, so
+  the parser is untouched; a sized array in the frame takes the
+  farr_load/farr_store forms inside the same loops.
 - **finding, holding, slicing**: `container ⍳ wanted` answers the
   position as an optional ¤ptrdiff (string elements compared by
   content), `⊞ ⊟ ⊠` hold arithmetic at the type's edge — narrow

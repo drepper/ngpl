@@ -84,7 +84,7 @@ fn codegen_t(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt
     foreach i0 := 0¤ptrdiff…#strs0:
         sat0.add_at(strs0[i0], @dropunit(i0))
     let lw : mut lower.Lower = lower.Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
-                               nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0, sat: sat0,
+                               nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0, sat: sat0, loop_labels: [],
                                op: [], ia: [], ib: [], ic: [], idd: [],
                                iww: [], extra: [], tbase: 0, tnext: 0,
                                tmax: 0, nlabels: 0, breaks: [], conts: [],

@@ -1,0 +1,6 @@
+// ⍸ reads an array of truth values; numbers are not those.
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 0, 1]
+    std.println("{}", @dropunit(#(⍸ v)))

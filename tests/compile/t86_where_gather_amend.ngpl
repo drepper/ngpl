@@ -1,0 +1,35 @@
+// ⍸ b is the indices at which an array of truth values is true; v[ix]
+// with an array of indices is the elements at each of them, a fresh
+// array; v[ix] ← w writes at each, w itself where it is one value and
+// its own element where it is an array of them.  Together they are a
+// filter and a masked store without a loop or a branch in sight.
+
+fn is_even(n : i64) → bool:
+    ((n % 2) ?? 1) = 0
+
+fn is_slash(c : char) → bool:
+    c = '/'
+
+@start
+@impure
+fn main():
+    let v : i64[] = [10, 15, 20, 25, 30]
+    let evens : bool[] = is_even ¨ v
+    let at : i64 ¤ptrdiff[] = ⍸ evens
+    std.println("{} {} {} {}", @dropunit(#at), @dropunit(at[0¤ptrdiff]), @dropunit(at[1¤ptrdiff]), @dropunit(at[2¤ptrdiff]))
+    let picked : i64[] = v[at]
+    std.println("{} {} {}", @dropunit(#picked), picked[0¤ptrdiff], picked[2¤ptrdiff])
+    let none : i64[] = v[⍸ (5 ⍴ false)]
+    std.println("{}", @dropunit(#none))
+    let w : mut i64[] = 5 ⍴ 0
+    w[at] ← 1
+    std.println("{} {} {} {} {}", w[0¤ptrdiff], w[1¤ptrdiff], w[2¤ptrdiff], w[3¤ptrdiff], w[4¤ptrdiff])
+    w[at] ← [7, 8, 9]
+    std.println("{} {} {}", w[0¤ptrdiff], w[2¤ptrdiff], w[4¤ptrdiff])
+    let names : str[] = ["a", "b", "c", "d"]
+    let last_two : i64 ¤ptrdiff[] = [2¤ptrdiff, 3¤ptrdiff]
+    std.println("{}", ⧺⌿ names[last_two])
+    // the last index matching, as a walk used to find it
+    let path : str = "src/lib/x.ngpl"
+    let slashes : bool[] = is_slash ¨ path.chars()
+    std.println("{}", @dropunit(#(⍸ slashes)))

@@ -1094,6 +1094,10 @@ impl Parser:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
             return self.mknode(ast.Nk.len, at, e, 0, 0)
+        if k = tokens.Tk.where:
+            self.pos ← self.pos + 1
+            let e : i64 = self.parse_unary_operand()
+            return self.mknode(ast.Nk.where, at, e, 0, 0)
         if k = tokens.Tk.lpar:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_expr()

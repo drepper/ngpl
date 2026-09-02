@@ -1841,6 +1841,33 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
 
 
+### Where, Gather and Amend (`⍸`, `v[ix]`, `v[ix] ← w`)
+
+`⍸ b` answers the indices at which an array of truth values is true, in order, each measured as the array's own subscript is:
+
+```
+let v : i64[] = [10, 15, 20, 25, 30]
+let evens : bool[] = is_even ¨ v          // [true, false, true, false, true]
+⍸ evens                                   // [0, 2, 4], each a ¤ptrdiff
+```
+
+A subscript by an array of indices answers the elements at each of them, a fresh array in the order the indices were given — a *gather*:
+
+```
+v[⍸ evens]                                // [10, 20, 30]
+v[[4¤ptrdiff, 0¤ptrdiff]]                 // [30, 10]
+```
+
+Written to, the same subscript stores at each index — an *amend*.  One value goes to all of them; an array of values goes one to each, and has to be as long as the indices are, or the program stops:
+
+```
+let w : mut i64[] = 5 ⍴ 0
+w[⍸ evens] ← 1                            // [1, 0, 1, 0, 1]
+w[⍸ evens] ← [7, 8, 9]                    // [7, 0, 8, 0, 9]
+```
+
+The three together are the filter and the masked store: `v[⍸ (v ≠ 0)]` keeps what is not zero, and `w[⍸ done] ← 0` clears what is.  Every index is checked against the array as a single subscript is, and an index measured in something else is refused where it is written.  The glyph is APL's *where* (U+2378, APL FUNCTIONAL SYMBOL IOTA UNDERBAR); the subscript forms are the ordinary subscript with an array where a number went, which is how NumPy and APL both spell them.
+
 ### Dictionaries and Sets
 
 A **dictionary** maps keys to values and a **set** holds values, each once.  Both are written between `⸨` (U+2E28) and `⸩` (U+2E29), and a colon after the first entry is what says the entries have two halves:
