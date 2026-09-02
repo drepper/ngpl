@@ -741,3 +741,11 @@ Tooling
     refuse_kept for a let of a borrow and nothing for a borrow that reaches a struct
     literal's field through a call.  Found by writing exactly that line in main.ngpl and
     watching stage 1 stop where stage 2 had not.
+
+[ ] the lifetime of a borrow bound again.  `let r1 := r2` takes r2's origins, so the origin
+    is held until r1 is last read -- except where r2's own lend ends at the very statement
+    that binds r1, when end_lend puts back the hold it saved before r1's claim was made and
+    the origin comes free while r1 still names its array.  Both implementations are
+    permissive in the same way, so the shared suite sees nothing; what it wants is the
+    borrower's origins kept somewhere a lend's ending does not erase, and bind_lend reading
+    them from there rather than from the live records.

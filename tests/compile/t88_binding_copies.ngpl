@@ -44,3 +44,8 @@ fn main():
     // and the borrow, which names the array rather than copying it
     let r : & = t.extra
     show(r)
+
+    // a borrow bound again is another name for that borrow, not a copy
+    // of what it names: `let r1 := r2` copies the reference
+    let again := r
+    show(again)

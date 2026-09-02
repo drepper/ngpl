@@ -5137,6 +5137,25 @@ impl Checker:
             self.nlend[na × 1¤ptrdiff] ← 1
             self.lorig_node.push(na)
             self.lorig_s.push(self.base_slot(na))
+        // `let r1 := r2`, where r2 is itself a borrow: r1 is another
+        // name for that borrow rather than a copy of what it names, so
+        // it takes r2's own origins -- not r2 -- and holds them until
+        // r1 is last read.  Taking r2 would let the origin come free
+        // while r1 still named its array.
+        if how0 = 0 and how = 0 and self.kind_of(na) = ast.Nk.var:
+            let bs : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
+            if bs ≠ ⁻1 and self.sborrow[bs × 1¤ptrdiff] ≠ 0:
+                foreach li := 0¤ptrdiff…#self.lend_b:
+                    if self.lend_b[li] = bs:
+                        self.nlend[na × 1¤ptrdiff] ← self.sborrow[bs × 1¤ptrdiff]
+                        self.lorig_node.push(na)
+                        self.lorig_s.push(self.lend_o[li])
+                how ← self.nlend[na × 1¤ptrdiff]
+                // and the binding is a borrow like the one it came
+                // from, so that lowering names the array rather than
+                // taking a copy of it
+                if how ≠ 0:
+                    self.a.blets.push(id)
         if how = 0:
             if self.is_blet(id):
                 self.derrc(tok, 2436, "'" ⧺ self.text(tok) ⧺ "' is written as a borrow, but what it is bound to is no borrowed answer; a borrow names a place or what a call lends")
@@ -5264,6 +5283,12 @@ impl Checker:
     // finished with go back.
     fn after_stmt(&mut self, s : i64):
         let here : i64 ¤"line" = self.stmt_end
+        // The let is bound before the lends that end here are ended:
+        // this statement may be the last use of a borrow and the one
+        // that binds it again, and `let r1 := r2` has to see r2's
+        // origins to take them.
+        if self.kind_of(s) = ast.Nk.st_let:
+            self.bind_lend(s)
         let i : mut i64 ¤ptrdiff = 0
         while i < #self.lend_b:
             if self.lend_until[i] <= here:
@@ -5271,7 +5296,6 @@ impl Checker:
             else:
                 i ← i + 1
         if self.kind_of(s) = ast.Nk.st_let:
-            self.bind_lend(s)
             let ls : i64 = self.nslot[s × 1¤ptrdiff]
             let lk : ast.Nk = self.kind_of(self.a.na[s × 1¤ptrdiff])
             if ls >= 0:

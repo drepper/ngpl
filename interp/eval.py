@@ -5734,11 +5734,20 @@ class Evaluator:
             # An allocation has already measured the value against
             # the whole of its type, so only the unit is left.
             value = apply_unit(value, unit, self._mk_int)
+        held = value.value if isinstance(value, SomeValue) else value
         # `let v := w`, where w names a container, gives v an array of
         # its own holding what w holds, so that what w does afterwards
         # is w's business.  `let v : & = w` is how a program asks for
         # the other thing, and everything else is already fresh.
-        if not borrow_ann and self._place_root(stmt.init_expr) is not None:
+        # `let r1 := r2`, where r2 is itself a borrow: r1 is another name
+        # for that borrow rather than a copy of what it names, and it
+        # takes r2's origins and holds them until r1 is last read
+        inherits = (not borrow_ann
+                    and self._place_root(stmt.init_expr) is not None
+                    and isinstance(held, ObjectValue)
+                    and id(held.obj) in self._lent_objs)
+        if not borrow_ann and not inherits \
+                and self._place_root(stmt.init_expr) is not None:
             value = self._copy_bound_container(value)
         self.env.define(stmt.name, value,
                         Decl(self._declared_type_of(stmt, value), unit))
@@ -5746,7 +5755,6 @@ class Evaluator:
             if stmt.is_const:
                 self._frozen_vars[stmt.name] = Held.let
         pl = self._pending_lend
-        held = value.value if isinstance(value, SomeValue) else value
         if pl is not None and isinstance(held, ObjectValue) and pl[2] is held.obj:
             if stmt.type_annotation is not None and not borrow_ann:
                 raise coded(2436, TypeError(
@@ -5768,6 +5776,11 @@ class Evaluator:
                     f"a call lends"))
             self._pending_lend = (origin, [origin], held.obj, "read")
             self._start_lend(stmt.name, stmt, origin, [origin], held.obj)
+            self._pending_lend = None
+        elif inherits:
+            fn_name, origins, obj = self._lent_objs[id(held.obj)]
+            self._pending_lend = (fn_name, origins, obj, "read")
+            self._start_lend(stmt.name, stmt, fn_name, origins, obj)
             self._pending_lend = None
         elif isinstance(held, ObjectValue) and id(held.obj) in self._lent_objs:
             self._refuse_stored_borrow(value, f"'{stmt.name}'")

@@ -3397,9 +3397,9 @@ A borrow is what a program reaches for where the copy would be waste and
 nothing changes the original while the borrow lives — which is the
 condition the borrow rules already enforce: `w` is lent out for reading
 until the borrow's last use, and changing it before then is refused.
-`let r1 := r2`, where `r2` is itself a borrow, copies the borrow: `r1`
-is another name for the same array, and the two are the same in every
-way that matters.
+`let r1 := r2`, where `r2` is itself a borrow, copies the borrow rather
+than what it names: `r1` is another name for the same array, holding
+`r2`'s origins until `r1` is last read.
 
 A `&` binding says nothing new about mutability.  Changing a shared
 array is what `&mut` at a call is for.
