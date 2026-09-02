@@ -755,8 +755,8 @@ def unwrap_optional(value):
     t = type(value)
     if t is IntValue or t is StrValue or t is BoolValue or t is CharValue \
             or t is ObjectValue or t is UnitValue or t is FloatValue \
-            or t is NoneValue:
-        # the three added at the end fall through every question below
+            or t is NoneValue or t is EnumValue:
+        # the four added at the end fall through every question below
         # unchanged, so answering here says the same thing sooner
         return value
     if isinstance(value, SomeValue):
@@ -771,6 +771,16 @@ def unwrap_optional(value):
     if isinstance(value, Reference):
         return value.get()
     return value
+
+
+def _enum_same(left, right) -> bool:
+    """Whether two enumerators are the same one: of one enumeration,
+    and the same member of it.  Two enumerations are not compared."""
+    if left.enum_type is not right.enum_type:
+        raise coded(2810, TypeError(
+            f"cannot compare enum '{left.enum_type.name}' "
+            f"with enum '{right.enum_type.name}'"))
+    return left.value == right.value
 
 
 def _side_name(v, ev) -> str:
@@ -806,7 +816,7 @@ def _unwrap_operand(value):
     # asking costs less than the two calls that answer the same.
     t = type(value)
     if t is IntValue or t is StrValue or t is BoolValue or t is CharValue \
-            or t is ObjectValue or t is FloatValue:
+            or t is ObjectValue or t is FloatValue or t is EnumValue:
         return value
     if t is UnitValue:
         return value.inner
@@ -1749,6 +1759,11 @@ class Evaluator:
 
     def _op_eq(self, left, right):
         """Equality comparison."""
+        # Two enumerators are most of what a compiler compares -- token
+        # kinds, node kinds, opcodes -- and neither is unwrapped or
+        # looked at through the ladder below.
+        if type(left) is EnumValue and type(right) is EnumValue:
+            return TRUE_VALUE if _enum_same(left, right) else FALSE_VALUE
         if type(left) is IntValue and type(right) is IntValue \
                 and left.width == right.width:
             return TRUE_VALUE if left.value == right.value else FALSE_VALUE
@@ -1817,6 +1832,8 @@ class Evaluator:
         if type(left) is IntValue and type(right) is IntValue \
                 and left.width == right.width:
             return TRUE_VALUE if left.value != right.value else FALSE_VALUE
+        if type(left) is EnumValue and type(right) is EnumValue:
+            return FALSE_VALUE if _enum_same(left, right) else TRUE_VALUE
         eq = self._op_eq(left, right)
         return mk_bool(not eq.value)
 
@@ -2770,6 +2787,9 @@ class Evaluator:
             h = self._ops.get(op)
             if h is not None:
                 return h(left, right)
+        elif type(left) is EnumValue and type(right) is EnumValue \
+                and (op == "=" or op == "\N{NOT EQUAL TO}"):
+            return self._ops[op](left, right)
         if op == "\N{DOUBLE PLUS}":
             return self._op_concat(left, right)
         if op == "\N{APL FUNCTIONAL SYMBOL IOTA}":
@@ -3277,12 +3297,18 @@ class Evaluator:
     def _convert_unit_value(self, value: UnitValue, target_unit) -> UnitValue:
         """Convert a UnitValue to a target unit, checking lossless for integers."""
         from fractions import Fraction
+        # the measure it already carries is nothing to convert, and the
+        # same scale under another name is a relabelling
+        if value.unit is target_unit:
+            return value
         if not value.unit.same_dimension(target_unit):
             if value.unit.stands_in_for(target_unit):
                 return UnitValue(value.inner, target_unit)
             raise TypeError(
                 f"incompatible units: {value.unit.display_name} "
                 f"and {target_unit.display_name}")
+        if value.unit.factor == target_unit.factor:
+            return UnitValue(value.inner, target_unit)
         ratio = value.unit.factor / target_unit.factor
         inner = value.inner
         if isinstance(inner, IntValue):
@@ -4128,6 +4154,8 @@ class Evaluator:
         return True
 
     def _c_method(self, node, obj, args):
+        if type(obj) is EnumValue:
+            return self._call_method(obj, node.method, args)
         result = self._call_method(obj, node.method, args)
         unwrapped_obj = unwrap_optional(obj)
         if self._pending_lend is not None \
@@ -6219,15 +6247,33 @@ class Evaluator:
         about the value that was matched.
         """
         subject = self.eval_expr(node.subject)
+        return self._match_on(node, subject)
 
-        # A sum type is matched by naming an alternative, so the arm to
-        # run is the one whose type the value actually has.
-        if any(arm.kind == "type" for arm in node.arms):
-            return self._eval_match_by_type(node, subject)
+    @staticmethod
+    def _match_kind(node: MatchStmt) -> str:
+        """Which kind of match this is, read off the arms once."""
+        kind = node.__dict__.get("_match_kind")
+        if kind is None:
+            # A sum type is matched by naming an alternative, so the
+            # arm to run is the one whose type the value actually has;
+            # an enumeration by naming a value of it; anything else by
+            # its shape.
+            if any(arm.kind == "type" for arm in node.arms):
+                kind = "type"
+            elif any(arm.kind == "enum" for arm in node.arms):
+                kind = "enum"
+            else:
+                kind = "shape"
+            node.__dict__["_match_kind"] = kind
+        return kind
 
-        # An enumeration is matched by naming a value of it.
-        if any(arm.kind == "enum" for arm in node.arms):
+    def _match_on(self, node: MatchStmt, subject):
+        """The arm the subject reaches, run."""
+        kind = self._match_kind(node)
+        if kind == "enum":
             return self._eval_match_by_enum(node, subject)
+        if kind == "type":
+            return self._eval_match_by_type(node, subject)
 
         shape, inner = self._match_shape(subject)
 
@@ -6256,8 +6302,61 @@ class Evaluator:
         program runs -- see _static_match_check -- so reaching the end
         here means the subject was not a value the enumeration has,
         which a number admitted into an enum-typed binding cannot be.
+
+        The arms are a table, built the first time the match runs and
+        kept on the node: which arm each member reaches, and the one
+        the rest reach.  A match over a hundred node kinds is then one
+        probe rather than a walk down a hundred arms, which is what a
+        compiler's dispatch is for.  The table holds for the
+        enumeration it was built against; a subject of another one
+        takes the walk below, which says why.
         """
-        from interp.value import EnumValue
+        val = unwrap_optional(subject)
+        if type(val) is not EnumValue:
+            raise coded(2248, TypeError(
+                f"match names values of an enumeration, but the subject "
+                f"is {runtime_type_of(val)}"))
+        plan = node.__dict__.get("_enum_plan")
+        et = val.enum_type
+        if plan is None or plan[0] is not et:
+            plan = self._enum_match_plan(node, et)
+        arm = plan[1].get(val.value)
+        if arm is None:
+            arm = plan[2]
+            if arm is None:
+                shown = et.values_to_names.get(val.value, str(val.value))
+                raise coded(2250, TypeError(
+                    f"match has no arm for {et.name}.{shown}; add the "
+                    f"missing pattern or a _ arm"))
+        return self.eval_stmts(arm.body)
+
+    def _enum_match_plan(self, node: MatchStmt, et):
+        """The table an enum match dispatches through, for one
+        enumeration: member value to the first arm naming it, and the
+        wildcard arm, walked in the order the arms were written so
+        that an arm naming another enumeration is refused where the
+        walk would have refused it."""
+        table = {}
+        wildcard = None
+        for arm in node.arms:
+            if arm.kind == "wildcard":
+                wildcard = wildcard if wildcard is not None else arm
+                continue
+            if arm.kind != "enum":
+                continue
+            if arm.type_name != et.name:
+                raise coded(2249, TypeError(
+                    f"the subject is {et.name} and this arm "
+                    f"names {arm.type_name}.{arm.member}"))
+            v = et.members.get(arm.member)
+            if v is not None and v not in table:
+                table[v] = arm
+        plan = (et, table, wildcard)
+        node.__dict__["_enum_plan"] = plan
+        return plan
+
+    def _eval_match_by_enum_walk(self, node: MatchStmt, subject):
+        """The table's specification: the arms walked in order."""
         val = unwrap_optional(subject)
         if not isinstance(val, EnumValue):
             raise coded(2248, TypeError(
@@ -7232,6 +7331,13 @@ class Evaluator:
         self, we pass the list as-is.  Otherwise we unpack args for ordinary
         Python methods like ``fs.cwd()``.
         """
+        if type(obj) is EnumValue and method_name == "ord":
+            # the number an enumerator stands for, asked wherever a
+            # kind meets a table; the ladder below answers the same,
+            # after everything else has been asked first
+            if args:
+                raise TypeError("ord takes no arguments")
+            return mk_int(obj.value, obj.enum_type.underlying_type or "u64")
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)

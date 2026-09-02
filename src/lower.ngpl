@@ -891,65 +891,69 @@ impl Lower:
             // ÷ and % over an int are not written yet; the checker
             // says so before this is reached
             return av
-        if k = ast.Nk.add:
-            self.ir(if self.in_wrap > 0: ir.Ir.addw else: ir.Ir.add, av, bv, 0, d, w)
-            if self.tof(nid) = types.TY_CHAR:
-                // a character and a number make the character that far
-                // on, and what is no character stops the program: the
-                // same judgement .chr() makes, made where the sum is
-                let c9 : i64 = self.tmp()
-                self.ir(ir.Ir.chr, d, 0, 0, c9, w)
-                return c9
-        elif k = ast.Nk.sub:
-            self.ir(if self.in_wrap > 0: ir.Ir.subw else: ir.Ir.sub, av, bv, 0, d, w)
-        elif k = ast.Nk.mul:
-            self.ir(if self.in_wrap > 0: ir.Ir.mulw else: ir.Ir.mul, av, bv, 0, d, w)
-        elif k = ast.Nk.shl:
-            self.ir(ir.Ir.shll, av, bv, 0, d, w)
-        elif k = ast.Nk.shr:
-            self.ir(ir.Ir.shrr, av, bv, 0, d, w)
-        elif k = ast.Nk.band:
-            self.ir(ir.Ir.band, av, bv, 0, d, w)
-        elif k = ast.Nk.bor:
-            self.ir(ir.Ir.borr, av, bv, 0, d, w)
-        elif k = ast.Nk.bxor:
-            self.ir(ir.Ir.bxorr, av, bv, 0, d, w)
-        elif k = ast.Nk.eq:
-            self.ir(ir.Ir.ceq, av, bv, 0, d, ow)
-        elif k = ast.Nk.ne:
-            self.ir(ir.Ir.cne, av, bv, 0, d, ow)
-        elif k = ast.Nk.lt:
-            self.ir(ir.Ir.clt, av, bv, 0, d, ow)
-        elif k = ast.Nk.le:
-            self.ir(ir.Ir.cle, av, bv, 0, d, ow)
-        elif k = ast.Nk.gt:
-            self.ir(ir.Ir.cgt, av, bv, 0, d, ow)
-        elif k = ast.Nk.ge:
-            self.ir(ir.Ir.cge, av, bv, 0, d, ow)
-        elif k = ast.Nk.land or k = ast.Nk.lor:
-            // both sides are bools already; one and or or does it
-            self.ir(if k = ast.Nk.land: ir.Ir.band else: ir.Ir.borr, av, bv, 0, d, 64)
-        elif k = ast.Nk.lxor:
-            self.ir(ir.Ir.cne, av, bv, 0, d, 64)
-        elif k = ast.Nk.lnand or k = ast.Nk.lnor:
-            let tt : i64 = self.tmp()
-            self.ir(if k = ast.Nk.lnand: ir.Ir.band else: ir.Ir.borr, av, bv, 0, tt, 64)
-            let c1 : i64 = self.tmp()
-            self.ir(ir.Ir.const, 1, 0, 0, c1, 64)
-            self.ir(ir.Ir.bxorr, tt, c1, 0, d, 64)
-        elif k = ast.Nk.iota:
-            let sf : i64 = if self.elem_of(self.tof(na)) = types.TY_STR: 1 else: 0
-            self.ir(ir.Ir.afind, av, bv, sf, d, 0)
-        elif k = ast.Nk.satadd:
-            self.ir(ir.Ir.satadd, av, bv, 0, d, w)
-        elif k = ast.Nk.satsub:
-            self.ir(ir.Ir.satsub, av, bv, 0, d, w)
-        elif k = ast.Nk.satmul:
-            self.ir(ir.Ir.satmul, av, bv, 0, d, w)
-        elif k = ast.Nk.maxop:
-            self.ir(ir.Ir.maxx, av, bv, 0, d, w)
-        elif k = ast.Nk.minop:
-            self.ir(ir.Ir.minn, av, bv, 0, d, w)
+        match k:
+            ast.Nk.add:
+                self.ir(if self.in_wrap > 0: ir.Ir.addw else: ir.Ir.add, av, bv, 0, d, w)
+                if self.tof(nid) = types.TY_CHAR:
+                    // a character and a number make the character that far
+                    // on, and what is no character stops the program: the
+                    // same judgement .chr() makes, made where the sum is
+                    let c9 : i64 = self.tmp()
+                    self.ir(ir.Ir.chr, d, 0, 0, c9, w)
+                    return c9
+            ast.Nk.sub:
+                self.ir(if self.in_wrap > 0: ir.Ir.subw else: ir.Ir.sub, av, bv, 0, d, w)
+            ast.Nk.mul:
+                self.ir(if self.in_wrap > 0: ir.Ir.mulw else: ir.Ir.mul, av, bv, 0, d, w)
+            ast.Nk.shl:
+                self.ir(ir.Ir.shll, av, bv, 0, d, w)
+            ast.Nk.shr:
+                self.ir(ir.Ir.shrr, av, bv, 0, d, w)
+            ast.Nk.band:
+                self.ir(ir.Ir.band, av, bv, 0, d, w)
+            ast.Nk.bor:
+                self.ir(ir.Ir.borr, av, bv, 0, d, w)
+            ast.Nk.bxor:
+                self.ir(ir.Ir.bxorr, av, bv, 0, d, w)
+            ast.Nk.eq:
+                self.ir(ir.Ir.ceq, av, bv, 0, d, ow)
+            ast.Nk.ne:
+                self.ir(ir.Ir.cne, av, bv, 0, d, ow)
+            ast.Nk.lt:
+                self.ir(ir.Ir.clt, av, bv, 0, d, ow)
+            ast.Nk.le:
+                self.ir(ir.Ir.cle, av, bv, 0, d, ow)
+            ast.Nk.gt:
+                self.ir(ir.Ir.cgt, av, bv, 0, d, ow)
+            ast.Nk.ge:
+                self.ir(ir.Ir.cge, av, bv, 0, d, ow)
+            ast.Nk.land, ast.Nk.lor:
+                // both sides are bools already; one and or or does it
+                self.ir(if k = ast.Nk.land: ir.Ir.band else: ir.Ir.borr, av, bv, 0, d, 64)
+            ast.Nk.lxor:
+                self.ir(ir.Ir.cne, av, bv, 0, d, 64)
+            ast.Nk.lnand, ast.Nk.lnor:
+                let tt : i64 = self.tmp()
+                self.ir(if k = ast.Nk.lnand: ir.Ir.band else: ir.Ir.borr, av, bv, 0, tt, 64)
+                let c1 : i64 = self.tmp()
+                self.ir(ir.Ir.const, 1, 0, 0, c1, 64)
+                self.ir(ir.Ir.bxorr, tt, c1, 0, d, 64)
+            ast.Nk.iota:
+                let sf : i64 = if self.elem_of(self.tof(na)) = types.TY_STR: 1 else: 0
+                self.ir(ir.Ir.afind, av, bv, sf, d, 0)
+            ast.Nk.satadd:
+                self.ir(ir.Ir.satadd, av, bv, 0, d, w)
+            ast.Nk.satsub:
+                self.ir(ir.Ir.satsub, av, bv, 0, d, w)
+            ast.Nk.satmul:
+                self.ir(ir.Ir.satmul, av, bv, 0, d, w)
+            ast.Nk.maxop:
+                self.ir(ir.Ir.maxx, av, bv, 0, d, w)
+            ast.Nk.minop:
+                self.ir(ir.Ir.minn, av, bv, 0, d, w)
+            _:
+                // no other kind reaches here; the checker said which do
+                _ ← 0
         return d
 
     fn lower_ife(&mut self, nid : i64, na : i64, nb : i64, nc : i64) → i64:
@@ -3341,15 +3345,14 @@ impl Lower:
 // the box into the slots the body reads
 @export
 fn lower_lambda_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, j : i64) → ir.IrFn:
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.fbytes ← 0¤byte
     let nid : i64 = chk.lams[j × 1¤ptrdiff]
@@ -3397,28 +3400,15 @@ fn lower_lambda_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, j : i64) →
             lw.ir(ir.Ir.ret, bb, 0, 0, 0, 0)
         else:
             lw.ir(ir.Ir.ret, rv, 0, 0, 0, 0)
-    let opc : mut ir.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    let exc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
-    if #lw.extra > 0:
-        foreach v := lw.extra:
-            exc.push(v)
+    // the columns, cut whole: a slice is one operation where a loop
+    // over the elements is one per instruction lowered
+    let opc : ir.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
+    let exc : i64[] = lw.extra[0¤ptrdiff…#lw.extra]
     ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 
@@ -3427,15 +3417,14 @@ fn lower_lambda_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, j : i64) →
 // bound values come out of the box in front
 @export
 fn lower_shim_fn(lw : &mut Lower, chk : &check.Chk, j : i64) → ir.IrFn:
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.fbytes ← 0¤byte
     let target : i64 = chk.psfn[j × 1¤ptrdiff]
@@ -3477,81 +3466,55 @@ fn lower_shim_fn(lw : &mut Lower, chk : &check.Chk, j : i64) → ir.IrFn:
         lw.ir(ir.Ir.fld, src, 0, 0, ad, 0)
         lw.ir(ir.Ir.calli, ad, off, 0, d, 0)
     lw.ir(ir.Ir.ret, d, 0, 0, 0, 0)
-    let opc : mut ir.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    let exc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
-    if #lw.extra > 0:
-        foreach v := lw.extra:
-            exc.push(v)
+    // the columns, cut whole: a slice is one operation where a loop
+    // over the elements is one per instruction lowered
+    let opc : ir.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
+    let exc : i64[] = lw.extra[0¤ptrdiff…#lw.extra]
     ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 
 @export
 fn lower_stub_fn(lw : &mut Lower, np : i64) → ir.IrFn:
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.fbytes ← 0¤byte
     lw.tbase ← np + 1
     lw.tnext ← lw.tbase
     lw.tmax ← lw.tbase
     lw.ir(ir.Ir.ret, ⁻1, 0, 0, 0, 0)
-    let opc : mut ir.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
+    // the columns, cut whole
+    let opc : ir.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
     ir.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: [], nvregs: lw.tmax, nlabels: 0, fbytes: lw.fbytes}
 
 @export
 fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrFn:
     let d := a.fns[f × 1¤ptrdiff]
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.fbytes ← 0¤byte
     // A function that answers a sized array is handed the space to
@@ -3643,28 +3606,15 @@ fn lower_fn(lw : &mut Lower, a : &ast.Ast, chk : &check.Chk, f : i64) → ir.IrF
             lw.ir(ir.Ir.abort, m, 0, 0, 0, 0)
             lw.ir(ir.Ir.label, lok, 0, 0, 0, 0)
         lw.ir(ir.Ir.ret, lw.res_vreg, 0, 0, 0, 0)
-    let opc : mut ir.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    let exc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
-    if #lw.extra > 0:
-        foreach v := lw.extra:
-            exc.push(v)
+    // the columns, cut whole: a slice is one operation where a loop
+    // over the elements is one per instruction lowered
+    let opc : ir.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
+    let exc : i64[] = lw.extra[0¤ptrdiff…#lw.extra]
     assert(#opc = #iac and #opc = #ibc and #opc = #icc, "ir arrays in step")
     assert(#opc = #idc and #opc = #iwc, "ir arrays in step")
     assert(lw.tmax >= chk.fslots[f × 1¤ptrdiff], "the frame covers the locals")

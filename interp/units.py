@@ -16,7 +16,7 @@ class Unit:
     """
 
     __slots__ = ("components", "factor", "display_name", "decay",
-                 "_stands")
+                 "_stands", "_dim")
 
     def __init__(self, components: dict[str, int], factor: Fraction,
                  display_name: str, decay: "Unit | None" = None):
@@ -35,16 +35,19 @@ class Unit:
         # asked-about unit itself is the key, which also keeps it
         # alive, so no other object can turn up under its identity.
         self._stands: dict = {}
+        # The dimension as one comparable thing: the nonzero exponents
+        # in a fixed order.  Components never change after a unit is
+        # made -- every operation on one builds another -- so this is
+        # worked out once, and asking whether two units measure the
+        # same thing is one tuple comparison rather than two
+        # dictionaries built and thrown away per question.
+        self._dim = tuple(sorted((k, v) for k, v in components.items() if v != 0))
 
     def same_dimension(self, other: "Unit") -> bool:
         # Measures are shared: the ¤byte two operands carry is one
         # object, so asking whether it has its own dimension settles
-        # most of these without building anything.
-        if self is other:
-            return True
-        a = {k: v for k, v in self.components.items() if v != 0}
-        b = {k: v for k, v in other.components.items() if v != 0}
-        return a == b
+        # most of these without comparing anything.
+        return self is other or self._dim == other._dim
 
     def stands_in_for(self, wanted: "Unit") -> bool:
         """Whether a value measured in self may go where `wanted` is asked.
@@ -74,7 +77,7 @@ class Unit:
         return answer
 
     def is_dimensionless(self) -> bool:
-        return all(v == 0 for v in self.components.values())
+        return not self._dim
 
     def base_form(self) -> "Unit":
         components = {k: v for k, v in self.components.items() if v != 0}
@@ -111,16 +114,14 @@ class Unit:
                     f"\N{SQUARE ROOT}{self.display_name}")
 
     def __eq__(self, other):
+        if self is other:
+            return True
         if not isinstance(other, Unit):
             return NotImplemented
-        a = {k: v for k, v in self.components.items() if v != 0}
-        b = {k: v for k, v in other.components.items() if v != 0}
-        return a == b and self.factor == other.factor
+        return self._dim == other._dim and self.factor == other.factor
 
     def __hash__(self):
-        return hash((tuple(sorted(
-            (k, v) for k, v in self.components.items() if v != 0
-        )), self.factor))
+        return hash((self._dim, self.factor))
 
 
 def _isqrt_exact(n: int) -> int | None:

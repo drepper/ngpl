@@ -666,7 +666,7 @@ and the binary they compiled to was byte-identical on all six targets,
 which is how the split was checked.  The rest were written afterwards,
 `comptime.ngpl` first.
 
-    tokens imports types diag lex ast parse dumpast check abi comptime
+    tokens imports types diag lex ast parse dumpast names check abi comptime
     ir lower emit sha256 symbols sbom incr elf machine
     arch_x86_64 rt_x86_64 arch_a64 arch_rv64 arch_i386 arch_arm
     arch_rv32 dispatch tdriver rt_hash rt_sha256 rt_bigint rt_signal
@@ -701,6 +701,15 @@ Each machine's `*_startup` -- the program's door, which a target spells
 whole rather than composing out of the abstract operations -- lives
 beside that machine's instructions rather than in the shared driver,
 and `dispatch.g_startup` picks between them like every other operation.
+
+`names.ngpl` is a hash table from a name to the index it was added
+under.  It was written for the incremental build, to line a new bill of
+materials up with an old one, and the checker uses it now for every
+name it resolves: a function by its bare name and by its whole one, a
+global, a struct, an enumeration.  Each had been a walk down the array
+-- `fn_in` built a `module.name` string for every function in the
+program on every call-site lookup -- and the walks were a third of
+the native compiler's time on its own source.
 
 ## Modules
 

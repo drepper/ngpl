@@ -72,15 +72,14 @@ struct Compiled:
 
 // a synthesized function starts from a clean sheet
 fn lw_reset(lw : &mut lower.Lower, fname : str):
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir_m.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.tbase ← 0
     lw.tnext ← 0
@@ -93,28 +92,15 @@ fn lw_reset(lw : &mut lower.Lower, fname : str):
 
 // …and leaves its instructions behind as an IrFn
 fn lw_snapshot(lw : lower.Lower) → ir_m.IrFn:
-    let opc : mut ir_m.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    let exc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
-    if #lw.extra > 0:
-        foreach v := lw.extra:
-            exc.push(v)
+    // the columns, cut whole: a slice is one operation where a loop
+    // over the elements is one per instruction lowered
+    let opc : ir_m.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
+    let exc : i64[] = lw.extra[0¤ptrdiff…#lw.extra]
     ir_m.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 
@@ -261,15 +247,14 @@ fn lower_testdriver(lw : &mut lower.Lower, a : &ast.Ast) → ir_m.IrFn:
 // global's literal is built and stored where GLOAD reads it
 @export
 fn lower_ginit(lw : &mut lower.Lower, a : &ast.Ast, chk : &check.Chk) → ir_m.IrFn:
-    while #lw.op > 0:
-        _ ← lw.op.pop() ?? ir_m.Ir.const
-        _ ← lw.ia.pop() ?? 0
-        _ ← lw.ib.pop() ?? 0
-        _ ← lw.ic.pop() ?? 0
-        _ ← lw.idd.pop() ?? 0
-        _ ← lw.iww.pop() ?? 0
-    while #lw.extra > 0:
-        _ ← lw.extra.pop() ?? 0
+    // fresh columns: what the last function left is its own now
+    lw.op ← []
+    lw.ia ← []
+    lw.ib ← []
+    lw.ic ← []
+    lw.idd ← []
+    lw.iww ← []
+    lw.extra ← []
     lw.nlabels ← 0
     lw.tbase ← 0
     lw.tnext ← 0
@@ -284,28 +269,15 @@ fn lower_ginit(lw : &mut lower.Lower, a : &ast.Ast, chk : &check.Chk) → ir_m.I
         let v : i64 = lw.lower_expr(a.globals[g × 1¤ptrdiff].init)
         lw.ir(ir_m.Ir.gstore, g, v, 0, 0, 0)
     lw.ir(ir_m.Ir.ret, ⁻1, 0, 0, 0, 0)
-    let opc : mut ir_m.Ir[] = []
-    let iac : mut i64[] = []
-    let ibc : mut i64[] = []
-    let icc : mut i64[] = []
-    let idc : mut i64[] = []
-    let iwc : mut i64[] = []
-    let exc : mut i64[] = []
-    foreach v := lw.op:
-        opc.push(v)
-    foreach v := lw.ia:
-        iac.push(v)
-    foreach v := lw.ib:
-        ibc.push(v)
-    foreach v := lw.ic:
-        icc.push(v)
-    foreach v := lw.idd:
-        idc.push(v)
-    foreach v := lw.iww:
-        iwc.push(v)
-    if #lw.extra > 0:
-        foreach v := lw.extra:
-            exc.push(v)
+    // the columns, cut whole: a slice is one operation where a loop
+    // over the elements is one per instruction lowered
+    let opc : ir_m.Ir[] = lw.op[0¤ptrdiff…#lw.op]
+    let iac : i64[] = lw.ia[0¤ptrdiff…#lw.ia]
+    let ibc : i64[] = lw.ib[0¤ptrdiff…#lw.ib]
+    let icc : i64[] = lw.ic[0¤ptrdiff…#lw.ic]
+    let idc : i64[] = lw.idd[0¤ptrdiff…#lw.idd]
+    let iwc : i64[] = lw.iww[0¤ptrdiff…#lw.iww]
+    let exc : i64[] = lw.extra[0¤ptrdiff…#lw.extra]
     ir_m.IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes}
 

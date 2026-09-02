@@ -34,7 +34,7 @@ from typing import Any
 
 from interp.value import DISCARD_NAME
 from interp.ast import (
-    BinOp, ExprStmt, FuncCall, GetAttr, IfStmt, IntLit, MethodCall,
+    BinOp, ExprStmt, FuncCall, GetAttr, IfStmt, IntLit, MatchStmt, MethodCall,
     ForEachStmt, ReturnStmt, Subscript, UnitExpr, VarDef, VarRef, WhileStmt,
 )
 
@@ -270,6 +270,11 @@ class _Emit:
             self.line(d + 1, f"if not to_bool({c}): break")
             self.line(d + 1, f"if not ev._run_loop_body({self.const(stmt.body)}, {n}): break")
             self.line(d, "result = none()")
+        elif cls is MatchStmt:
+            # _eval_match with the subject evaluated here; which arm it
+            # reaches is a table probe on the node (see _match_on)
+            subj = self.expr(d, stmt.subject)
+            self.line(d, f"result = ev._match_on({n}, {subj})")
         elif isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             # the generalized assignment, its right side evaluated here
             target = self.const(stmt[1])

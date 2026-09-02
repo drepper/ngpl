@@ -1,0 +1,28 @@
+// Several keys before one body are one arm.  The body is written once
+// and checked once: a second pass over it would meet nodes the first
+// had already settled -- a literal adopted to a width, a member folded
+// -- and read them as something else.  The compiler did check it once
+// per key, and refused this body on the second pass, where the
+// interpreter had been running it all along.
+//
+// The body asks which of its keys it was reached by, which is the one
+// thing a shared body would want to know.
+
+enum K : u8:
+    a = 1
+    b = 2
+    c = 3
+
+fn which(k : K) → i64:
+    let d : mut i64 = 0
+    match k:
+        K.a, K.b:
+            d ← if k = K.a: 5 else: 6
+        _:
+            d ← 9
+    d
+
+@start
+@impure
+fn main():
+    std.println("{} {} {}", which(K.a), which(K.b), which(K.c))

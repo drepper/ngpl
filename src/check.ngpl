@@ -6,6 +6,7 @@ let ast := @import("ast")
 let diag := @import("diag")
 let elf := @import("elf")
 let lex := @import("lex")
+let names := @import("names")
 let tokens := @import("tokens")
 let types := @import("types")
 
@@ -252,6 +253,17 @@ struct Checker:
     fnames : str[]
     snm : str[]          // the structs' names, in their own order, so a
                          // message writes what the program wrote
+    // What a name reaches, by hashing: the functions by bare name and
+    // by whole name, the globals, the structs, and the enumerations
+    // the program declared.  Each answers the first entry of that name
+    // in its array, as the walk it replaces did; a checker asks these
+    // once per call site, and walking the arrays was that many times
+    // the size of the program.
+    fn_at : names.Names
+    fw_at : names.Names
+    g_at : names.Names
+    s_at : names.Names
+    e_at : names.Names
     curmod : str         // the module the function being checked lives in
     gnames : str[]
     gvals : i64[]
@@ -551,11 +563,7 @@ impl Checker:
         self.struct_index(name)
 
     fn struct_index(&self, name : str) → i64:
-        if #self.a.structs > 0:
-            foreach i := 0…#self.a.structs:
-                if self.a.structs[i].name = name:
-                    return @dropunit(i)
-        ⁻1
+        self.s_at.find(name)
 
     // a field's position and type within a struct, by name; (⁻1, 0)
     // when the struct has no such field
@@ -588,19 +596,10 @@ impl Checker:
 
     // the function whose whole name is this, or ⁻1
     fn fn_in(&self, whole : str) → i64:
-        if #self.a.fns > 0:
-            foreach i := 0…#self.a.fns:
-                let d := self.a.fns[i]
-                let w : str = if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
-                if w = whole:
-                    return @dropunit(i)
-        ⁻1
+        self.fw_at.find(whole)
 
     fn fn_index(&self, name : str) → i64:
-        foreach i := 0…#self.fnames:
-            if self.fnames[i] = name:
-                return @dropunit(i)
-        ⁻1
+        self.fn_at.find(name)
 
     // A global named from inside a module: its own first, then the
     // names that belong to nobody, as a call is found.
@@ -613,11 +612,7 @@ impl Checker:
         self.global_index(name)
 
     fn global_index(&self, name : str) → i64:
-        if #self.gnames > 0:
-            foreach i := 0…#self.gnames:
-                if self.gnames[i] = name:
-                    return @dropunit(i)
-        ⁻1
+        self.g_at.find(name)
 
     fn lookup(&self, name : str) → i64:
         foreach i := @dropunit(#self.snames) - 1…self.scope_floor - 1:
@@ -2766,11 +2761,10 @@ impl Checker:
         self.enum_index(name)
 
     fn enum_index(&self, name : str) → i64:
-        if @dropunit(#self.a.enames) > types.NBUILTIN_ENUMS:
-            foreach i := types.NBUILTIN_ENUMS × 1¤ptrdiff…#self.a.enames:
-                if self.a.enames[i] = name:
-                    return @dropunit(i)
-        ⁻1
+        // the table holds the declared enumerations only, in their
+        // order after the builtins, so an answer is offset by those
+        let at : i64 = self.e_at.find(name)
+        if at = ⁻1: ⁻1 else: at + types.NBUILTIN_ENUMS
 
     fn enum_member(&self, ei : i64, m : str) → i64:
         let f : i64 = self.a.estart[ei × 1¤ptrdiff]
@@ -2851,6 +2845,13 @@ impl Checker:
         let taken : mut i64[] = []
         foreach ci := 0…ecount:
             taken.push(0)
+        // Several keys before one body are one arm, written down as
+        // one entry per key sharing the body.  The body is checked the
+        // first time it is met and not again: a second pass would meet
+        // nodes the first already settled -- a literal adopted to a
+        // width, a member folded -- and read them as something else.
+        let prev_blk : mut i64 = ⁻1
+        let prev_v : mut i64 = ⁻1
         foreach i := 0…n:
             let etok : i64 = self.a.extra[(nb + 2 + i × 3) × 1¤ptrdiff]
             let mtok : i64 = self.a.extra[(nb + 3 + i × 3) × 1¤ptrdiff]
@@ -2873,13 +2874,16 @@ impl Checker:
             // An arm that leaves rather than falls through -- a
             // return, or a call to something @noreturn -- has no value
             // to hand on, so a trailing match does not ask it for one.
+            if blk ≠ prev_blk:
+                if vwant ≠ ⁻1:
+                    prev_v ← self.ife_block_value(blk, self.value_hint(settled))
+                    if settled = types.TY_UNIT and self.states_a_type(prev_v):
+                        settled ← self.ty_of(prev_v)
+                else:
+                    self.check_block(blk, trailing and not self.block_returns(blk))
+                prev_blk ← blk
             if vwant ≠ ⁻1:
-                let v : i64 = self.ife_block_value(blk, self.value_hint(settled))
-                vals.push(v)
-                if settled = types.TY_UNIT and self.states_a_type(v):
-                    settled ← self.ty_of(v)
-            else:
-                self.check_block(blk, trailing and not self.block_returns(blk))
+                vals.push(prev_v)
         if dflt ≠ ⁻1:
             if vwant ≠ ⁻1:
                 let v : i64 = self.ife_block_value(dflt, self.value_hint(settled))
@@ -6401,7 +6405,26 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
     let snm : mut str[] = []
     foreach sd := a.structs:
         snm.push(sd.name)
+    // the tables a name is found in, each holding the first entry of
+    // that name; a bare name and a whole one are two tables because a
+    // module's f and another's are one bare name and two whole ones
+    let fn_at : mut names.Names = names.names_new(@dropunit(#a.fns))
+    let fw_at : mut names.Names = names.names_new(@dropunit(#a.fns))
+    foreach f := a.fns:
+        fn_at.add(f.name)
+        fw_at.add(if f.modname = "": f.name else: f.modname ⧺ "." ⧺ f.name)
+    let g_at : mut names.Names = names.names_new(@dropunit(#a.globals))
+    foreach g := a.globals:
+        g_at.add(g.name)
+    let s_at : mut names.Names = names.names_new(@dropunit(#a.structs))
+    foreach sd := a.structs:
+        s_at.add(sd.name)
+    let e_at : mut names.Names = names.names_new(@dropunit(#a.enames))
+    if @dropunit(#a.enames) > types.NBUILTIN_ENUMS:
+        foreach i := types.NBUILTIN_ENUMS × 1¤ptrdiff…#a.enames:
+            e_at.add(a.enames[i])
     let c : mut Checker = Checker{a: a, toks: toks, src: src, fnames: fnames, snm: snm, curmod: "",
+                                  fn_at: fn_at, fw_at: fw_at, g_at: g_at, s_at: s_at, e_at: e_at,
                                   gnames: gnames, gvals: [], ginit: [], ite: [],
                                   ntype: ntype, nslot: nslot, ncvt: ncvt,
                                   nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,

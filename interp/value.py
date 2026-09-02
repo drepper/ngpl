@@ -2870,9 +2870,16 @@ def convert_unit_value(value: "UnitValue", target_unit, mk=None) -> "UnitValue":
     wrapping and one that reports keeps reporting.
     """
     from fractions import Fraction
+    unit = value.unit
+    # Nearly every conversion is to the measure the value already
+    # carries -- a ¤byte bound to a ¤byte -- and that is nothing to do;
+    # one at the same scale under another name is a relabelling, and
+    # neither wants the fraction arithmetic below.
+    if unit is target_unit:
+        return value
     if mk is None:
         mk = mk_int
-    if not value.unit.same_dimension(target_unit):
+    if not unit.same_dimension(target_unit):
         if value.unit.stands_in_for(target_unit):
             # A measure that stands in for another is relabelled, not
             # rescaled: `unit tok -> ptrdiff` says a token index may be
@@ -2881,6 +2888,8 @@ def convert_unit_value(value: "UnitValue", target_unit, mk=None) -> "UnitValue":
         raise coded(2327, TypeError(
             f"incompatible units: {value.unit.display_name} "
             f"and {target_unit.display_name}"))
+    if unit.factor == target_unit.factor:
+        return UnitValue(value.inner, target_unit)
     ratio = value.unit.factor / target_unit.factor
     inner = value.inner
     if isinstance(inner, IntValue):

@@ -1,0 +1,63 @@
+// A table of names, looked up by hashing.  The compiler keeps its
+// functions, globals, structs and enumerations in arrays, and what a
+// name reaches is that array's index: this is how a name finds it
+// without walking the array, which a checker does once per call site
+// and would otherwise pay for every name in the program each time.
+
+// The table a name is looked up in.  Its size is a power of two and is
+// settled when it is made, from the number of names it will hold: a
+// linear probe walks forever in a table that fills up.
+@export
+struct Names:
+    slot : i64[]         // 1 + the name's index, or 0 for an empty slot
+    name : str[]
+
+fn names_hash(s : str) → i64:
+    let h : mut i64 = 0
+    foreach ch := s:
+        h ← @wrap(h × 31 + ch.ord()) & 1073741823
+    h
+
+impl Names:
+    fn probe(&self, s : str) → i64:
+        let mask : i64 = @dropunit(#self.slot) - 1
+        let at : mut i64 = names_hash(s) & mask
+        while true:
+            let held : i64 = self.slot[at × 1¤ptrdiff]
+            if held = 0 or self.name[(held - 1) × 1¤ptrdiff] = s:
+                return at
+            at ← (at + 1) & mask
+        at
+
+    // the index the name was added under, or ⁻1
+    fn find(&self, s : str) → i64:
+        let held : i64 = self.slot[self.probe(s) × 1¤ptrdiff]
+        if held = 0: ⁻1 else: held - 1
+
+    fn add(&mut self, s : str):
+        // A linear probe walks forever in a table that is full, so the
+        // room is settled when the table is made rather than grown
+        // when it fills; this is what says the settling was right.
+        assert(@dropunit(#self.name) × 2 < @dropunit(#self.slot),
+               "the name table keeps half its slots free")
+        let at : i64 = self.probe(s)
+        if self.slot[at × 1¤ptrdiff] = 0:
+            self.name.push(s)
+            self.slot[at × 1¤ptrdiff] ← @dropunit(#self.name)
+
+// Slots for that many names with half the table left over, rounded up
+// to a power of two so a probe can mask rather than divide.
+@pre(want >= 0)
+@post(r: r >= 64 and (r & (r - 1)) = 0 and r > want × 2)
+fn names_slots(want : i64) → i64:
+    let n : mut i64 = 64
+    while n <= want × 2:
+        n ← n × 2
+    n
+
+@export
+fn names_new(want : i64) → Names:
+    let sl : mut i64[] = []
+    foreach _ := 0…names_slots(want):
+        sl.push(0)
+    Names{slot: sl, name: []}

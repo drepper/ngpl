@@ -312,3 +312,15 @@ Outstanding
     recognized before a descriptor is spent on it, where it used to be recognized from the
     descriptor's own statx afterwards.  tests/compile/t81_file_id checks that the two ways
     of asking -- the name and a descriptor opened from it -- answer the same file.
+
+[x] a match over an enumeration dispatches through a table kept on the node -- member value
+    to arm, built the first time it runs -- and has a compiled form, so a hundred-arm match
+    is one probe rather than a walk down the arms twice over.  Enumerators take the fast
+    paths through unwrapping, comparison and .ord(); a unit's dimension is one precomputed
+    tuple; converting a value to the measure it already carries is nothing.  Sampled
+    self-compile 1806 s → 1604 s on the same source, identical binary.
+
+[x] the compiler checks a multi-key match arm's body once.  It checked it once per key, and
+    the second pass met nodes the first had settled -- so a body that compared the subject
+    against a member was refused with "an enum is asked about its own kind" where the
+    interpreter ran it.  tests/compile/t82_match_keys_body.

@@ -180,6 +180,61 @@ and probing one or two dictionaries, and no exact shortcut is left
 that skips either.  Clean pair after this round: **the walk 1191 s,
 compiled 893 s, 1.33 times**, identical binaries throughout.
 
+## 4b. The match, and the compiler's own work
+
+By 2026-09-01 the compiler had grown to 1.6 MB of source from the
+925 KB the table in §4 was measured on, and its dispatch had been
+rewritten: `check_expr`, `check_stmt` and the lexer's byte classes
+are `match` statements over enumerations rather than `if` chains,
+and every token kind, node kind and opcode is an enumerator rather
+than a number.  The sampled self-compile took **1806 s**, and the
+sampler put 31% of all samples under `_eval_match_by_enum`.
+
+The match was a walk down the arms -- `arm.kind`, a string compare
+of the enumeration's name, a dictionary probe for the member's value,
+per arm, per execution -- and `_eval_match` scanned the arms twice
+more before that to decide which kind of match it was.  Now the kind
+is read off the arms once and kept on the node, and an enum match
+keeps a table on the node from member value to arm, built the first
+time it runs against the enumeration it saw: one probe, whatever the
+arm count.  `MatchStmt` has a compiled form too, so the subject is
+evaluated inline and only the probe is a call.  Beside it, the
+enumerator went into the fast type lists of `unwrap_optional` and
+`_unwrap_operand`, two enumerators compare at the top of `_op_eq` and
+`_op_neq` without being unwrapped, and `.ord()` on one answers at the
+top of `_call_method` before the ladder.  Units, which the lexer's
+byte arithmetic carries everywhere, keep their dimension as one
+precomputed tuple, so `same_dimension` and `__eq__` compare that
+rather than building two dictionaries, and a conversion to the unit
+a value already carries returns the value rather than dividing two
+fractions to find a ratio of one.
+
+Sampled self-compile, same source, same machine, one run each:
+**1806 s → 1604 s**, 11%, identical binaries.  The match's own
+dispatch was the visible part; what stayed under it was the arm
+bodies, which is the checker's work.
+
+The larger finding was in that work.  Timed natively the compiler's
+own name lookups -- `fn_index`, `fn_in`, `global_index`,
+`struct_index`, `enum_index` -- were a walk down every function in
+the program at every call site, `fn_in` building a `module.name`
+string per candidate as it went.  Under the interpreter each turn of
+that walk is a handful of statements, and the compiler resolves tens
+of thousands of names.  They are hash tables now (`names.ngpl`, the
+table the incremental build already had), and the IR columns a
+function leaves behind are cut with one slice each rather than pushed
+element by element.  Native self-compile: **1.14 s → 0.80 s**.  Interpreted, as
+the bootstrap's stage 1 runs it (no sampler): **1318 s**, against
+the 1604 s the sampled run of the old source took a moment before --
+about 17% from the compiler's own work, and **1806 s → 1318 s**, 27%,
+for the round as a whole.  Identical binaries throughout, and the
+fixed point holds.
+
+**A rule that came out of it:** what the interpreter runs is the
+compiler's algorithms, and a quadratic walk in the compiler costs the
+interpreter a thousand times what any per-node shortcut recovers.
+Read the compiler's hot functions before reading the interpreter's.
+
 ## 5. What is next, in the order it pays
 
 1. **`_reachable_ids`** (7%): every call answering an array or a

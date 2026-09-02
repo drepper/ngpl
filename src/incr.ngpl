@@ -19,6 +19,7 @@
 let ast := @import("ast")
 let emit := @import("emit")
 let lex := @import("lex")
+let names := @import("names")
 let sbom := @import("sbom")
 let tokens := @import("tokens")
 
@@ -317,62 +318,6 @@ fn read_prev(path : str) → Prev:
 // generates a function that need not have been -- the safe direction,
 // and the only one worth taking for an answer nothing else checks.
 
-// The table a name is looked up in.  Its size is a power of two and is
-// settled when it is made, from the number of names it will hold: a
-// linear probe walks forever in a table that fills up.
-struct Names:
-    slot : i64[]         // 1 + the name's index, or 0 for an empty slot
-    name : str[]
-
-fn names_hash(s : str) → i64:
-    let h : mut i64 = 0
-    foreach ch := s:
-        h ← @wrap(h × 31 + ch.ord()) & 1073741823
-    h
-
-impl Names:
-    fn probe(&self, s : str) → i64:
-        let mask : i64 = @dropunit(#self.slot) - 1
-        let at : mut i64 = names_hash(s) & mask
-        while true:
-            let held : i64 = self.slot[at × 1¤ptrdiff]
-            if held = 0 or self.name[(held - 1) × 1¤ptrdiff] = s:
-                return at
-            at ← (at + 1) & mask
-        at
-
-    // the index the name was added under, or ⁻1
-    fn find(&self, s : str) → i64:
-        let held : i64 = self.slot[self.probe(s) × 1¤ptrdiff]
-        if held = 0: ⁻1 else: held - 1
-
-    fn add(&mut self, s : str):
-        // A linear probe walks forever in a table that is full, so the
-        // room is settled when the table is made rather than grown
-        // when it fills; this is what says the settling was right.
-        assert(@dropunit(#self.name) × 2 < @dropunit(#self.slot),
-               "the name table keeps half its slots free")
-        let at : i64 = self.probe(s)
-        if self.slot[at × 1¤ptrdiff] = 0:
-            self.name.push(s)
-            self.slot[at × 1¤ptrdiff] ← @dropunit(#self.name)
-
-// Slots for that many names with half the table left over, rounded up
-// to a power of two so a probe can mask rather than divide.
-@pre(want >= 0)
-@post(r: r >= 64 and (r & (r - 1)) = 0 and r > want × 2)
-fn names_slots(want : i64) → i64:
-    let n : mut i64 = 64
-    while n <= want × 2:
-        n ← n × 2
-    n
-
-fn names_new(want : i64) → Names:
-    let sl : mut i64[] = []
-    foreach _ := 0…names_slots(want):
-        sl.push(0)
-    Names{slot: sl, name: []}
-
 // The name the bill knows a function by: the module it was written in,
 // then its own.
 fn incr_fn_name(a : &ast.Ast, f : i64) → str:
@@ -386,7 +331,7 @@ fn incr_regenerate(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
                    rows : sbom.SbomRow[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
     // what the previous build said each function was
-    let was : mut Names = names_new(@dropunit(#prev.row_name))
+    let was : mut names.Names = names.names_new(@dropunit(#prev.row_name))
     let washash : mut str[] = []
     foreach i := 0¤ptrdiff…#prev.row_name:
         if prev.row_kind[i] = sbom.Sbomkind.function.ord():
@@ -401,7 +346,7 @@ fn incr_regenerate(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
     // belongs to, so neither is trusted: both are written again.  The
     // bill names a function by its module and its own name, and an
     // overload gives two definitions one such name.
-    let now : mut Names = names_new(@dropunit(#rows))
+    let now : mut names.Names = names.names_new(@dropunit(#rows))
     let nowhash : mut str[] = []
     let twice : mut bool[] = []
     foreach r := rows:
@@ -418,7 +363,7 @@ fn incr_regenerate(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
     // a function whose digest moved, or which the previous build did
     // not have at all
     let moved : mut bool[] = []
-    let fnames : mut Names = names_new(@dropunit(nf))
+    let fnames : mut names.Names = names.names_new(@dropunit(nf))
     foreach i := 0¤ptrdiff…nf:
         let nm : str = incr_fn_name(&a, @dropunit(i))
         fnames.add(nm)
@@ -500,7 +445,7 @@ fn name_holds_dot(nm : str) → bool:
 @post(r: #r = #a.fns)
 fn reached_fns(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → bool[]:
     let nf : i64 ¤ptrdiff = #a.fns
-    let byname : mut Names = names_new(@dropunit(nf) + 1)
+    let byname : mut names.Names = names.names_new(@dropunit(nf) + 1)
     foreach i := 0¤ptrdiff…nf:
         byname.add(a.fns[i].name)
     let out : mut bool[] = []
@@ -572,7 +517,7 @@ struct Incr:
     // Both are offsets into .text and neither is measured, because the
     // emitter's own cursor is not: em.here() answers a plain number,
     // and these are compared against it on every function.
-    sym : Names
+    sym : names.Names
     sym_at : i64[]
     sym_end : i64[]
     // What the previous build gave the two regions, which a build laid
@@ -595,7 +540,7 @@ struct Incr:
 
 @export
 fn incr_off() → Incr:
-    Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
+    Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names.names_new(0),
          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
          tx_ends: [], text: [], ro: []}
 
@@ -603,7 +548,7 @@ fn incr_off() → Incr:
 // every function is written as usual and each is left room to grow.
 @export
 fn incr_first(fill : i64) → Incr:
-    Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
+    Incr{mode: 1, fill: fill, fresh: [], sym: names.names_new(0),
          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
          tx_ends: [], text: [], ro: []}
 
@@ -621,7 +566,7 @@ fn incr_prev(a : &ast.Ast, toks : &lex.Toks, src : byte[], prev : &Prev,
         return incr_first(fill)
     if prev.text_size = 0¤byte or #prev.sym_name = 0¤ptrdiff:
         return incr_first(fill)
-    let sym : mut Names = names_new(@dropunit(#prev.sym_name))
+    let sym : mut names.Names = names.names_new(@dropunit(#prev.sym_name))
     let at : mut i64[] = []
     let end : mut i64[] = []
     foreach i := 0¤ptrdiff…#prev.sym_name:
