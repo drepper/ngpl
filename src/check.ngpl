@@ -1820,13 +1820,11 @@ impl Checker:
     // first count and not the second, so the answer is no.
 
     fn pack_reset(&mut self, nslots : i64):
-        while #self.pcnt > 0:
-            _ ← self.pcnt.pop() ?? 0
-            _ ← self.puse.pop() ?? 0
-            _ ← self.psafe.pop() ?? 0
-        while #self.pnode_slot > 0:
-            _ ← self.pnode_slot.pop() ?? 0
-            _ ← self.pnode_id.pop() ?? 0
+        self.pcnt ← []
+        self.puse ← []
+        self.psafe ← []
+        self.pnode_slot ← []
+        self.pnode_id ← []
         foreach i := 0…nslots:
             self.pcnt.push(⁻1)
             self.puse.push(0)
@@ -3246,33 +3244,15 @@ impl Checker:
             if vmap[rix × 1¤ptrdiff] ≠ ⁻1:
                 self.a.fns[f × 1¤ptrdiff].ret ← vmap[rix × 1¤ptrdiff]
         // the caller's scopes are parked while the shaped body checks
-        let sv_names : mut str[] = []
-        foreach v := self.snames:
-            sv_names.push(v)
-        let sv_type : mut i64[] = []
-        foreach v := self.stype:
-            sv_type.push(v)
-        let sv_mut : mut i64[] = []
-        foreach v := self.smut:
-            sv_mut.push(v)
-        let sv_slot : mut i64[] = []
-        foreach v := self.sslot:
-            sv_slot.push(v)
-        let sv_held : mut Hold[] = []
-        foreach v := self.sheld:
-            sv_held.push(v)
-        let sv_marks : mut i64[] = []
-        foreach v := self.marks:
-            sv_marks.push(v)
-        let sv_hslot : mut i64[] = []
-        foreach v := self.hslot:
-            sv_hslot.push(v)
-        let sv_hback : mut Hold[] = []
-        foreach v := self.hback:
-            sv_hback.push(v)
-        let sv_hmark : mut i64[] = []
-        foreach v := self.hmark:
-            sv_hmark.push(v)
+        let sv_names : str[] = self.snames[0¤ptrdiff…#self.snames]
+        let sv_type : i64[] = self.stype[0¤ptrdiff…#self.stype]
+        let sv_mut : i64[] = self.smut[0¤ptrdiff…#self.smut]
+        let sv_slot : i64[] = self.sslot[0¤ptrdiff…#self.sslot]
+        let sv_held : Hold[] = self.sheld[0¤ptrdiff…#self.sheld]
+        let sv_marks : i64[] = self.marks[0¤ptrdiff…#self.marks]
+        let sv_hslot : i64[] = self.hslot[0¤ptrdiff…#self.hslot]
+        let sv_hback : Hold[] = self.hback[0¤ptrdiff…#self.hback]
+        let sv_hmark : i64[] = self.hmark[0¤ptrdiff…#self.hmark]
         let sv_nslots : i64 = self.nslots
         let sv_cur : i64 = self.cur_fn
         let sv_loop : i64 = self.loop_depth
@@ -3281,19 +3261,15 @@ impl Checker:
         self.scope_floor ← 0
         self.fdone[f × 1¤ptrdiff] ← 2
         self.check_fn(f)
-        while #self.snames > 0:
-            _ ← self.snames.pop() ?? ""
-            _ ← self.stype.pop() ?? 0
-            _ ← self.smut.pop() ?? 0
-            _ ← self.sslot.pop() ?? 0
-            _ ← self.sheld.pop() ?? 0
-        while #self.marks > 0:
-            _ ← self.marks.pop() ?? 0
-        while #self.hslot > 0:
-            _ ← self.hslot.pop() ?? 0
-            _ ← self.hback.pop() ?? 0
-        while #self.hmark > 0:
-            _ ← self.hmark.pop() ?? 0
+        self.snames ← []
+        self.stype ← []
+        self.smut ← []
+        self.sslot ← []
+        self.sheld ← []
+        self.marks ← []
+        self.hslot ← []
+        self.hback ← []
+        self.hmark ← []
         foreach v := sv_names:
             self.snames.push(v)
         foreach v := sv_type:
@@ -4005,7 +3981,7 @@ impl Checker:
             self.set_type(id, types.mk_aty(types.TY_U8))
             return
         if sb = ast.Sb.hdigest.ord() or sb = ast.Sb.hstart.ord():
-            let algs := ast.hash_algs()
+            let algs := ast.HASH_ALGS
             let who : str = "std.hash." ⧺ algs[self.a.nc[id × 1¤ptrdiff] × 1¤ptrdiff]
             if sb = ast.Sb.hstart.ord():
                 if argc ≠ 0:
@@ -4245,7 +4221,7 @@ impl Checker:
             // and with one algorithm it does not have to.  A second
             // would have to be told apart here, so the day one arrives
             // this stops rather than answering the wrong width.
-            assert(#ast.hash_algs() = 1, """a second hash algorithm wants the handle's type to carry
+            assert(#ast.HASH_ALGS = 1, """a second hash algorithm wants the handle's type to carry
                                       " which it is""")
             self.set_type(id, self.digest_type(0))
             return
@@ -4492,10 +4468,9 @@ impl Checker:
     // the recipe's name resolves to nothing, since it is not among the
     // functions; saying so is better than saying it does not exist
     fn is_build_name(&self, name : str) → bool:
-        if #self.a.builds > 0:
-            foreach b := self.a.builds:
-                if b.name = name:
-                    return true
+        foreach b := self.a.builds:
+            if b.name = name:
+                return true
         false
 
     fn call_noreturn(&self, e : i64) → bool:
@@ -4660,10 +4635,9 @@ impl Checker:
         while #self.lu_used > 0:
             let u : i64 = self.lu_used.pop() ?? 0
             self.lu_slot[u × 1¤ptrdiff] ← 0
-        while #self.lu_name > 0:
-            _ ← self.lu_name.pop() ?? ""
-            _ ← self.lu_line.pop() ?? 0¤"line"
-            _ ← self.lu_tok.pop() ?? 0
+        self.lu_name ← []
+        self.lu_line ← []
+        self.lu_tok ← []
         let d := self.a.fns[f × 1¤ptrdiff]
         // from the name, which the parameters follow, to the body's
         // end.  Not from tok_lo: for a method that is where the impl
@@ -4993,10 +4967,9 @@ impl Checker:
             self.rec_stmt.push(self.rec_cand_stmt[i])
             self.rec_slot.push(slot)
             self.log.push("{\"function\": \"" ⧺ self.a.fns[self.cur_fn × 1¤ptrdiff].name ⧺ "\", \"line\": " ⧺ tokens.i64_str(@dropunit(self.toks.line[ltok × 1¤ptrdiff])) ⧺ ", \"decision\": \"reclaim\", \"name\": \"" ⧺ self.text(ltok) ⧺ "\", \"at\": " ⧺ tokens.i64_str(@dropunit(self.toks.line[self.a.ntok[self.rec_cand_stmt[i] × 1¤ptrdiff] × 1¤ptrdiff])) ⧺ "}")
-        while #self.rec_cand_slot > 0:
-            _ ← self.rec_cand_slot.pop() ?? 0
-            _ ← self.rec_cand_stmt.pop() ?? 0
-            _ ← self.rec_cand_tok.pop() ?? 0
+        self.rec_cand_slot ← []
+        self.rec_cand_stmt ← []
+        self.rec_cand_tok ← []
 
     // ------------------------------------------------------------------
     // How long a binding lives
@@ -6083,30 +6056,23 @@ impl Checker:
         self.scan_last_use(f)
         while #self.lend_b > 0:
             self.end_lend(#self.lend_b - 1¤ptrdiff)
-        while #self.loop_end > 0:
-            _ ← self.loop_end.pop() ?? 0¤"line"
-        while #self.lrec > 0:
-            _ ← self.lrec.pop() ?? 0
-        while #self.smove > 0:
-            _ ← self.smove.pop() ?? 0
+        self.loop_end ← []
+        self.lrec ← []
+        self.smove ← []
         self.blk_end ← self.toks.line[self.a.fns[f × 1¤ptrdiff].tok_hi × 1¤ptrdiff]
         self.stmt_end ← self.blk_end
         self.pack_reset(0)
         self.nslots ← 0
         self.loop_depth ← 0
-        while #self.snames > 0:
-            _ ← self.snames.pop() ?? ""
-            _ ← self.stype.pop() ?? 0
-            _ ← self.smut.pop() ?? 0
-            _ ← self.sslot.pop() ?? 0
-            _ ← self.sheld.pop() ?? 0
-        while #self.marks > 0:
-            _ ← self.marks.pop() ?? 0
-        while #self.hslot > 0:
-            _ ← self.hslot.pop() ?? 0
-            _ ← self.hback.pop() ?? 0
-        while #self.hmark > 0:
-            _ ← self.hmark.pop() ?? 0
+        self.snames ← []
+        self.stype ← []
+        self.smut ← []
+        self.sslot ← []
+        self.sheld ← []
+        self.marks ← []
+        self.hslot ← []
+        self.hback ← []
+        self.hmark ← []
         let d := self.a.fns[f × 1¤ptrdiff]
         self.push_scope()
         let np : i64 ¤ptrdiff = self.a.extra[d.params_off] × 1¤ptrdiff
@@ -6276,14 +6242,12 @@ impl Checker:
 // not -- at run time, mostly, where a compiler is not looking -- and
 // is passed over rather than failed.  Keep this in step with the
 // derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
-fn diag_codes() → i64[]:
-    [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256,
+let DIAG_CODES : i64[] = [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256,
      2290, 2291, 2293,
      2400, 2401, 2402, 2403, 2404, 2421, 2430, 2431, 2432, 2433, 2436,
      2619, 2728, 2729, 2741, 2910, 2911]
-
 fn draws_code(code : i64) → bool:
-    foreach c := diag_codes():
+    foreach c := DIAG_CODES:
         if c = code:
             return true
     false
@@ -6291,7 +6255,7 @@ fn draws_code(code : i64) → bool:
 // Hold each @expect definition to what it said.
 //
 // The check is by number: where an expectation names a number this
-// compiler draws -- diag_codes() says which -- that number must appear
+// compiler draws -- DIAG_CODES says which -- that number must appear
 // among what the definition drew.  This is what holds the two
 // implementations to the same warnings.  A warning the interpreter
 // makes and this compiler quietly dropped fails here, by number,
@@ -6312,7 +6276,7 @@ fn draws_code(code : i64) → bool:
 // missing from one the interpreter only finds by running: `v[3]` on an
 // array of three is refused by the interpreter and is not something
 // this compiler looks for.  The coverage is therefore exactly
-// diag_codes(), and it grows as numbers are assigned.
+// DIAG_CODES, and it grows as numbers are assigned.
 //
 // No code is written for any of them.  They are put on the schedule to
 // be checked and taken off again, so what the emission sees is what it
@@ -6452,28 +6416,27 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
                                   stmt_end: 0¤"line", blk_end: 0¤"line",
                                   rec_stmt: [], rec_slot: [], lrec: [],
                                   rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: [], smove: [], nmove: nmove}
-    if #a.structs > 0:
-        foreach i := 0…#a.structs:
-            let sd := a.structs[i]
-            foreach j := 0…#a.structs:
-                if j > i and a.structs[j].name = sd.name:
-                    c.derr(a.structs[j].tok, "'" ⧺ sd.name ⧺ "' is already defined")
-            let nf : i64 ¤ptrdiff = a.extra[sd.fields_off] × 1¤ptrdiff
-            foreach x := 0…nf:
-                foreach y := x + 1…nf:
-                    let tx : i64 = a.extra[sd.fields_off + 1 + x × 2]
-                    let ty0 : i64 = a.extra[sd.fields_off + 1 + y × 2]
-                    if c.text(tx) = c.text(ty0):
-                        c.derr(ty0, "'" ⧺ sd.name ⧺ "' names field '" ⧺ c.text(tx) ⧺ "' twice")
-            // a @repr(C) struct is held to what C can represent where
-            // it is written, not where its size is first asked for, so
-            // the complaint points at the offending field
-            if sd.is_repr_c:
-                let bad : i64 = c_bad_field(a, @dropunit(i))
-                if bad ≠ ⁻1:
-                    let btok : i64 = a.extra[sd.fields_off + 1 + bad × 2¤ptrdiff]
-                    let bty : i64 = a.extra[sd.fields_off + 2 + bad × 2¤ptrdiff]
-                    c.derr(btok, "in @repr(C) struct '" ⧺ sd.name ⧺ "', field '" ⧺ c.text(btok) ⧺ "': " ⧺ c.tn(bty) ⧺ " has no defined C representation")
+    foreach i := 0…#a.structs:
+        let sd := a.structs[i]
+        foreach j := 0…#a.structs:
+            if j > i and a.structs[j].name = sd.name:
+                c.derr(a.structs[j].tok, "'" ⧺ sd.name ⧺ "' is already defined")
+        let nf : i64 ¤ptrdiff = a.extra[sd.fields_off] × 1¤ptrdiff
+        foreach x := 0…nf:
+            foreach y := x + 1…nf:
+                let tx : i64 = a.extra[sd.fields_off + 1 + x × 2]
+                let ty0 : i64 = a.extra[sd.fields_off + 1 + y × 2]
+                if c.text(tx) = c.text(ty0):
+                    c.derr(ty0, "'" ⧺ sd.name ⧺ "' names field '" ⧺ c.text(tx) ⧺ "' twice")
+        // a @repr(C) struct is held to what C can represent where
+        // it is written, not where its size is first asked for, so
+        // the complaint points at the offending field
+        if sd.is_repr_c:
+            let bad : i64 = c_bad_field(a, @dropunit(i))
+            if bad ≠ ⁻1:
+                let btok : i64 = a.extra[sd.fields_off + 1 + bad × 2¤ptrdiff]
+                let bty : i64 = a.extra[sd.fields_off + 2 + bad × 2¤ptrdiff]
+                c.derr(btok, "in @repr(C) struct '" ⧺ sd.name ⧺ "', field '" ⧺ c.text(btok) ⧺ "': " ⧺ c.tn(bty) ⧺ " has no defined C representation")
     let starts : mut i64 = 0
     if #a.fns > 0:
       foreach i := 0…#a.fns:
@@ -6500,17 +6463,15 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
 
     // per-function state first: a global's initializer may call, and
     // the call consults it
-    if #a.fns > 0:
-        foreach i := 0…#a.fns:
-            c.fslots.push(0)
-            c.fdone.push(0)
-            c.skipfn.push(0)
-    if #a.globals > 0:
-        foreach i := 0…#a.globals:
-            foreach j := 0…#a.globals:
-                if j > i and a.globals[j].name = a.globals[i].name:
-                    c.derr(a.globals[j].tok, "'" ⧺ a.globals[i].name ⧺ "' is already defined")
-            c.check_global(@dropunit(i))
+    foreach i := 0…#a.fns:
+        c.fslots.push(0)
+        c.fdone.push(0)
+        c.skipfn.push(0)
+    foreach i := 0…#a.globals:
+        foreach j := 0…#a.globals:
+            if j > i and a.globals[j].name = a.globals[i].name:
+                c.derr(a.globals[j].tok, "'" ⧺ a.globals[i].name ⧺ "' is already defined")
+        c.check_global(@dropunit(i))
     let ntests : mut i64 = 0
     foreach f2 := a.fns:
         if f2.is_test:
@@ -6525,9 +6486,8 @@ fn check(a : &ast.Ast, toks : &lex.Toks, src : byte[]) → Chk:
         c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: why, level: diag.Level.error, code: diag.DIAG_NONE})
     if starts > 1:
         c.diags.push(diag.Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: diag.Level.error, code: diag.DIAG_NONE})
-    if #a.structs > 0:
-        foreach i := 0…#a.structs:
-            c.check_invariants(@dropunit(i))
+    foreach i := 0…#a.structs:
+        c.check_invariants(@dropunit(i))
     if #a.fns > 0:
         foreach i := 0…#a.fns:
             if not c.fn_is_generic(@dropunit(i)):

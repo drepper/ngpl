@@ -255,19 +255,17 @@ fn a64_svc(em : &mut emit.Emit):
 // after the labels of a function settle, its local branches do
 @export
 fn a64_resolve(em : &mut emit.Emit):
-    if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos:
-            let pos : i64 = em.tf_pos[i]
-            let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            let word : i64 = machine.code_word(em, pos)
-            if em.tf_form[i] = A64F_B26:
-                em.patch32(pos, word + (((delta » 2) & 67108863)))
-            else:
-                em.patch32(pos, word + (((delta » 2) & 524287) « 5))
-    while #em.tf_pos > 0:
-        _ ← em.tf_pos.pop() ?? 0
-        _ ← em.tf_lab.pop() ?? 0
-        _ ← em.tf_form.pop() ?? 0
+    foreach i := 0…#em.tf_pos:
+        let pos : i64 = em.tf_pos[i]
+        let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
+        let word : i64 = machine.code_word(em, pos)
+        if em.tf_form[i] = A64F_B26:
+            em.patch32(pos, word + (((delta » 2) & 67108863)))
+        else:
+            em.patch32(pos, word + (((delta » 2) & 524287) « 5))
+    em.tf_pos ← []
+    em.tf_lab ← []
+    em.tf_form ← []
 
 // ---------------------------------------------------------------------------
 // The abstract operations, dispatched on the target.  Every function

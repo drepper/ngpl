@@ -1,0 +1,22 @@
+// n ⍴ x fills a table with any scalar, and n may be a measured count:
+// #v is a ¤ptrdiff, and a count of elements is what a reshape asks
+// for.  The compiler read both that way; the interpreter refused a
+// truth value as the filler and a measured count on the left, so the
+// compiler's own fills -- `nfns ⍴ 0` over a count of functions --
+// could not be run.  Both read them alike now.
+
+enum K : u8:
+    a = 1
+    b = 2
+
+@start
+@impure
+fn main():
+    let v : i64[] = [5, 6, 7]
+    let zeros : i64[] = #v ⍴ 0
+    let flags : bool[] = 4 ⍴ false
+    let names : str[] = 2 ⍴ "x"
+    let kinds : K[] = 3 ⍴ K.b
+    let none : i64[] = 0 ⍴ 1
+    std.println("{} {} {} {} {}", @dropunit(#zeros), @dropunit(#flags), names[1¤ptrdiff], @dropunit(#kinds), @dropunit(#none))
+    std.println("{} {} {}", zeros[2¤ptrdiff], flags[3¤ptrdiff], kinds[0¤ptrdiff] = K.b)

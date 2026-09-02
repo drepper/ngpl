@@ -640,9 +640,7 @@ impl Incr:
 // every build.  The cost is the odd literal nobody reads.
 @export
 fn incr_all_used(n : i64 ¤ptrdiff) → i64[]:
-    let u : mut i64[] = []
-    foreach _ := 0¤ptrdiff…n:
-        u.push(1)
+    let u : i64[] = @dropunit(n) ⍴ 1
     u
 
 // The jump tables sit at the end of .rodata so that a build lining up

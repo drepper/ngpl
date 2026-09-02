@@ -14,6 +14,7 @@ let incr_m := @import("incr")
 let ir_m := @import("ir")
 let lex := @import("lex")
 let lower := @import("lower")
+let names := @import("names")
 let machine := @import("machine")
 let rt_backtrace := @import("rt_backtrace")
 let rt_x86_64 := @import("rt_x86_64")
@@ -157,10 +158,9 @@ fn lower_argsfilter(lw : &mut lower.Lower) → ir_m.IrFn:
 fn lower_testdriver(lw : &mut lower.Lower, a : &ast.Ast) → ir_m.IrFn:
     lw_reset(&lw, "the test driver")
     let tests : mut i64[] = []
-    if #a.fns > 0:
-        foreach fi := 0…#a.fns:
-            if a.fns[fi].is_test:
-                tests.push(@dropunit(fi))
+    foreach fi := 0…#a.fns:
+        if a.fns[fi].is_test:
+            tests.push(@dropunit(fi))
     let total : i64 = @dropunit(#tests) + @dropunit(#a.igtests)
     let argv : i64 = lw.tmp()
     lw.ir(ir_m.Ir.args, 0, 0, 0, argv, 0)
@@ -214,18 +214,16 @@ fn lower_testdriver(lw : &mut lower.Lower, a : &ast.Ast) → ir_m.IrFn:
         lw.ir(ir_m.Ir.const, 1, 0, 0, z0, 0)
         lw.ir(ir_m.Ir.exit, z0, 0, 0, 0, 0)
     else:
-        if #a.igtests > 0:
-            foreach gname := a.igtests:
-                lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
+        foreach gname := a.igtests:
+            lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
         lw.ir(ir_m.Ir.eprints, lw.intern("\nrunning " ⧺ tokens.i64_str(total) ⧺ " tests\n"), 0, 0, 0, 0)
-        if #tests > 0:
-            foreach fi2 := tests:
-                lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
-                let coff : i64 = @dropunit(#lw.extra)
-                lw.extra.push(0)
-                let d : i64 = lw.tmp()
-                lw.ir(ir_m.Ir.call, fi2, coff, 0, d, 0)
-                lw.ir(ir_m.Ir.eprints, lw.intern("ok\n"), 0, 0, 0, 0)
+        foreach fi2 := tests:
+            lw.ir(ir_m.Ir.eprints, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
+            let coff : i64 = @dropunit(#lw.extra)
+            lw.extra.push(0)
+            let d : i64 = lw.tmp()
+            lw.ir(ir_m.Ir.call, fi2, coff, 0, d, 0)
+            lw.ir(ir_m.Ir.eprints, lw.intern("ok\n"), 0, 0, 0, 0)
         lw.ir(ir_m.Ir.eprints, lw.intern("\ntest result: ok. " ⧺ tokens.i64_str(total) ⧺ " passed; 0 failed\n"), 0, 0, 0, 0)
         let z1 : i64 = lw.tmp()
         lw.ir(ir_m.Ir.const, 0, 0, 0, z1, 0)
@@ -233,12 +231,11 @@ fn lower_testdriver(lw : &mut lower.Lower, a : &ast.Ast) → ir_m.IrFn:
     lw.ir(ir_m.Ir.label, lrun, 0, 0, 0, 0)
     lw.ir(ir_m.Ir.jnz, skp, lend, 0, 0, 0)
     // the ordinary run: every test, silently, before @start
-    if #tests > 0:
-        foreach fi3 := tests:
-            let coff2 : i64 = @dropunit(#lw.extra)
-            lw.extra.push(0)
-            let d2 : i64 = lw.tmp()
-            lw.ir(ir_m.Ir.call, fi3, coff2, 0, d2, 0)
+    foreach fi3 := tests:
+        let coff2 : i64 = @dropunit(#lw.extra)
+        lw.extra.push(0)
+        let d2 : i64 = lw.tmp()
+        lw.ir(ir_m.Ir.call, fi3, coff2, 0, d2, 0)
     lw.ir(ir_m.Ir.label, lend, 0, 0, 0, 0)
     lw.ir(ir_m.Ir.ret, ⁻1, 0, 0, 0, 0)
     lw_snapshot(lw)
@@ -383,14 +380,16 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // convention it had.  Under --incremental every function keeps the
     // architecture's, which is the same in every build.
     let privs : mut i64[] = []
-    if #a.fns > 0:
-        foreach i := 0…#a.fns:
-            privs.push(if incr.mode ≠ 0: 0 else: ab.private[i])
+    foreach i := 0…#a.fns:
+        privs.push(if incr.mode ≠ 0: 0 else: ab.private[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
+    let sat0 : mut names.Names = names.names_new(@dropunit(#strs0))
+    foreach i0 := 0¤ptrdiff…#strs0:
+        sat0.add_at(strs0[i0], @dropunit(i0))
     let lw : mut lower.Lower = lower.Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
-                               nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0,
+                               nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, nmove: chk.nmove, cur_ref: 0, strs: strs0, sat: sat0,
                                op: [], ia: [], ib: [], ic: [], idd: [],
                                iww: [], extra: [], tbase: 0, tnext: 0,
                                tmax: 0, nlabels: 0, breaks: [], conts: [],
@@ -423,9 +422,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // the initializer builds, and what the kernel handed us -- and is
     // made read-only there, which is what PT_GNU_RELRO records.  The
     // rest is written throughout and stays writable.
-    let is_relro : mut i64[] = []
-    foreach _ := 0…nglobals:
-        is_relro.push(0)
+    let is_relro : mut i64[] = nglobals ⍴ 0
     foreach g := chk.ginit:
         is_relro[g × 1¤ptrdiff] ← 1
     let n_ro : mut i64 = 0
@@ -730,25 +727,23 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     let b3 : i64 = em.here()
     arch_x86_64.emit_fn(&em, dir, 0, lw.strs, 0, privs)
     incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, "<tests>", b3))
-    if #chk.lams > 0:
-        foreach j := 0…#chk.lams:
-            let lir := lower.lower_lambda_fn(&lw, &a, &chk, @dropunit(j))
-            let lnm : str = "λ#" ⧺ tokens.i64_str(@dropunit(j))
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, lnm))
-            em.fn_off.push(em.here())
-            let b4 : i64 = em.here()
-            let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
-            arch_x86_64.emit_fn(&em, lir, lnp + 1, lw.strs, 0, privs)
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, lnm, b4))
-    if #chk.psfn > 0:
-        foreach j := 0…#chk.psfn:
-            let sir := lower.lower_shim_fn(&lw, &chk, @dropunit(j))
-            let pnm : str = "partial#" ⧺ tokens.i64_str(@dropunit(j))
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, pnm))
-            em.fn_off.push(em.here())
-            let b5 : i64 = em.here()
-            arch_x86_64.emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, privs)
-            incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, pnm, b5))
+    foreach j := 0…#chk.lams:
+        let lir := lower.lower_lambda_fn(&lw, &a, &chk, @dropunit(j))
+        let lnm : str = "λ#" ⧺ tokens.i64_str(@dropunit(j))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, lnm))
+        em.fn_off.push(em.here())
+        let b4 : i64 = em.here()
+        let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
+        arch_x86_64.emit_fn(&em, lir, lnp + 1, lw.strs, 0, privs)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, lnm, b4))
+    foreach j := 0…#chk.psfn:
+        let sir := lower.lower_shim_fn(&lw, &chk, @dropunit(j))
+        let pnm : str = "partial#" ⧺ tokens.i64_str(@dropunit(j))
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_before(&em, &incr, pnm))
+        em.fn_off.push(em.here())
+        let b5 : i64 = em.here()
+        arch_x86_64.emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, privs)
+        incr_why ← incr_m.incr_first_reason(incr_why, incr_m.incr_after(&em, &incr, pnm, b5))
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What the program calls, and what that calls in turn.  Everything
@@ -768,7 +763,7 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // old one lacked still goes in -- and moves the ones after it,
     // which the check on the symbol table then catches.
     if incr.mode = 2:
-        let rtn0 := emit.rt_names()
+        let rtn0 := emit.RT_NAMES
         foreach i := 0…nrt:
             if incr.at_of(rtn0[i]) >= 0:
                 em.rt_need[i] ← 1
@@ -776,12 +771,11 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // before the set is closed rather than after it is written
     foreach t := dfr_rt:
         em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
-    if #em.cf_target > 0:
-        foreach i := 0…#em.cf_target:
-            let t : i64 = em.cf_target[i]
-            if t < 0:
-                em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
-    let edges := emit.rt_edges()
+    foreach i := 0…#em.cf_target:
+        let t : i64 = em.cf_target[i]
+        if t < 0:
+            em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
+    let edges := emit.RT_EDGES
     let npair : i64 = @dropunit(#edges) ÷ 2 ?? 0
     let changed : mut bool = true
     while changed:
@@ -880,15 +874,14 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
                 placed.push(ov_f)
             tx_ends.push(em.here())
     // calls resolve now that every target has a place
-    if #em.cf_pos > 0:
-        foreach i := 0…#em.cf_pos:
-            let pos : i64 = em.cf_pos[i]
-            let t : i64 = em.cf_target[i]
-            let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
-            // a call whose target was passed over means the edge list
-            // does not say everything the emitter does
-            assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
-            em.patch32(pos, dest - (pos + 4))
+    foreach i := 0…#em.cf_pos:
+        let pos : i64 = em.cf_pos[i]
+        let t : i64 = em.cf_target[i]
+        let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
+        // a call whose target was passed over means the edge list
+        // does not say everything the emitter does
+        assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
+        em.patch32(pos, dest - (pos + 4))
     // rodata: the strings' bytes, then their descriptors
     let text_size : i64 = em.here()
     // What the text region is given, which is where the read-only
@@ -906,44 +899,38 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     let descidx : mut i64[] = []
     let acc : mut i64 = 0
     let nstr : mut i64 = 0
-    if #lw.strs > 0:
-        foreach i := 0…#lw.strs:
-            stroffs.push(acc)
-            descidx.push(nstr)
-            if used[i] = 1:
-                acc ← acc + emit.str_len(lw.strs[i])
-                nstr ← nstr + 1
+    foreach i := 0…#lw.strs:
+        stroffs.push(acc)
+        descidx.push(nstr)
+        if used[i] = 1:
+            acc ← acc + emit.str_len(lw.strs[i])
+            nstr ← nstr + 1
     let descbase : i64 = elf.align_up(acc, 8)
-    if #em.sf_pos > 0:
-        foreach i := 0…#em.sf_pos:
-            em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
-    if #em.sd_pos > 0:
-        foreach i := 0…#em.sd_pos:
-            em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
+    foreach i := 0…#em.sf_pos:
+        em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
+    foreach i := 0…#em.sd_pos:
+        em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
     assert(#stroffs = #lw.strs, "one offset per string")
     let rodata : mut u8[] = []
-    if #lw.strs > 0:
-        foreach i := 0…#lw.strs:
-            if used[i] = 1:
-                foreach c := lw.strs[i]:
-                    rodata.push(c.ord() & 255)
+    foreach i := 0…#lw.strs:
+        if used[i] = 1:
+            foreach c := lw.strs[i]:
+                rodata.push(c.ord() & 255)
     while @dropunit(#rodata) < descbase:
         rodata.push(0)
-    if #lw.strs > 0:
-        foreach i := 0…#lw.strs:
-            if used[i] = 1:
-                elf.push64(&rodata, ro_vaddr + stroffs[i])
-                elf.push64(&rodata, emit.str_len(lw.strs[i]))
+    foreach i := 0…#lw.strs:
+        if used[i] = 1:
+            elf.push64(&rodata, ro_vaddr + stroffs[i])
+            elf.push64(&rodata, emit.str_len(lw.strs[i]))
     // the constant tables the runtime reads: the UTF-8 decoder's byte
     // classes, then its transition words, one to a class
     let rx_base : i64 = @dropunit(#rodata)
     foreach b := emit.utf8_class_bytes():
         rodata.push(b)
-    foreach w := emit.utf8_dfa_words():
+    foreach w := emit.UTF8_DFA_WORDS:
         elf.push64(&rodata, w)
-    if #em.rx_pos > 0:
-        foreach i := 0…#em.rx_pos:
-            em.patch64(em.rx_pos[i], ro_vaddr + rx_base + em.rx_off[i])
+    foreach i := 0…#em.rx_pos:
+        em.patch64(em.rx_pos[i], ro_vaddr + rx_base + em.rx_off[i])
     // The table a backtrace reads: where every function of the program
     // begins, how far it runs, and what it is called.  Built here
     // because here is where all three are known, and read by RT_BT,
@@ -978,9 +965,8 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
             if em.gseg[i] = 0:
                 elf.push64(&rodata, chk.gvals[i])
     let gro_end : i64 = @dropunit(#rodata)
-    if #em.gr_pos > 0:
-        foreach i := 0…#em.gr_pos:
-            em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+    foreach i := 0…#em.gr_pos:
+        em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
     // A jump table holds code addresses, a value table its data, and
     // both come last: see incr_jt_prefix for why the end is where they
     // have to be.
@@ -988,23 +974,20 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     while @dropunit(#rodata) < jt_base:
         rodata.push(0)
     let jt_kept : i64 = incr_m.incr_jt_prefix(&rodata, &incr, jt_base)
-    if #em.jt_pos > 0:
-        foreach i := 0…#em.jt_pos:
-            em.patch64(em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
-    if #em.jt_starts > 0:
-        foreach t := 0…#em.jt_starts:
-            let lo2 : i64 = em.jt_starts[t]
-            let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
-            let base2 : i64 = if em.jt_is_code[t] = 1: elf.IMAGE_BASE + elf.PAGE else: 0
-            foreach e3 := lo2…hi2:
-                elf.push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
+    foreach i := 0…#em.jt_pos:
+        em.patch64(em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+    foreach t := 0…#em.jt_starts:
+        let lo2 : i64 = em.jt_starts[t]
+        let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
+        let base2 : i64 = if em.jt_is_code[t] = 1: elf.IMAGE_BASE + elf.PAGE else: 0
+        foreach e3 := lo2…hi2:
+            elf.push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
     // data: what is written before @start and then sealed, then what
     // stays writable throughout
     let ro_room : i64 ¤byte = incr_m.incr_room_ro(&incr, #rodata)
     let d_vaddr : i64 = elf.IMAGE_BASE + elf.align_up(ro_vaddr - elf.IMAGE_BASE + @dropunit(ro_room), elf.PAGE)
-    if #em.df_pos > 0:
-        foreach i := 0…#em.df_pos:
-            em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
+    foreach i := 0…#em.df_pos:
+        em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
         foreach i := 0…nglobals:
@@ -1070,12 +1053,10 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
         synth.push("<globals>")
     synth.push("<args>")
     synth.push("<tests>")
-    if #chk.lams > 0:
-        foreach j := 0…#chk.lams:
-            synth.push("λ#" ⧺ tokens.i64_str(@dropunit(j)))
-    if #chk.psfn > 0:
-        foreach j := 0…#chk.psfn:
-            synth.push("partial#" ⧺ tokens.i64_str(@dropunit(j)))
+    foreach j := 0…#chk.lams:
+        synth.push("λ#" ⧺ tokens.i64_str(@dropunit(j)))
+    foreach j := 0…#chk.psfn:
+        synth.push("partial#" ⧺ tokens.i64_str(@dropunit(j)))
     foreach j := 0…#synth:
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
@@ -1087,31 +1068,29 @@ fn codegen(a : &ast.Ast, toks : &lex.Toks, src : byte[], chk : &check.Chk, tgt :
     // agreement, the routines that survived are put in address order
     // here.  There are a few dozen of them, so the plainest sort is
     // the right one.
-    let rtn := emit.rt_names()
+    let rtn := emit.RT_NAMES
     assert(@dropunit(#rtn) = nrt, "one name for every runtime routine")
     let rname : mut str[] = []
     let roff : mut i64[] = []
-    if #em.rt_off > 0:
-        foreach i := 0…#em.rt_off:
-            // a routine nobody reached is in no binary, and so is no
-            // symbol either
-            if em.rt_off[i] ≠ ⁻1:
-                let at : i64 = em.rt_off[i]
-                let nm : str = rtn[i]
-                let k : mut i64 = @dropunit(#roff)
-                rname.push(nm)
-                roff.push(at)
-                while k > 0 and roff[(k - 1) × 1¤ptrdiff] > at:
-                    rname[k × 1¤ptrdiff] ← rname[(k - 1) × 1¤ptrdiff]
-                    roff[k × 1¤ptrdiff] ← roff[(k - 1) × 1¤ptrdiff]
-                    k ← k - 1
-                rname[k × 1¤ptrdiff] ← nm
-                roff[k × 1¤ptrdiff] ← at
-    if #roff > 0:
-        foreach i := 0…#roff:
-            sname.push(rname[i])
-            soffs.push(roff[i])
-            sglob.push(false)
+    foreach i := 0…#em.rt_off:
+        // a routine nobody reached is in no binary, and so is no
+        // symbol either
+        if em.rt_off[i] ≠ ⁻1:
+            let at : i64 = em.rt_off[i]
+            let nm : str = rtn[i]
+            let k : mut i64 = @dropunit(#roff)
+            rname.push(nm)
+            roff.push(at)
+            while k > 0 and roff[(k - 1) × 1¤ptrdiff] > at:
+                rname[k × 1¤ptrdiff] ← rname[(k - 1) × 1¤ptrdiff]
+                roff[k × 1¤ptrdiff] ← roff[(k - 1) × 1¤ptrdiff]
+                k ← k - 1
+            rname[k × 1¤ptrdiff] ← nm
+            roff[k × 1¤ptrdiff] ← at
+    foreach i := 0…#roff:
+        sname.push(rname[i])
+        soffs.push(roff[i])
+        sglob.push(false)
     // and the moved ones last, in the order they were laid out there
     foreach mv := placed:
         sname.push(symbols.fn_symbol(&a, &toks, src, mv))

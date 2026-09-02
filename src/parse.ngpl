@@ -1,6 +1,7 @@
 let ast := @import("ast")
 let diag := @import("diag")
 let lex := @import("lex")
+let names := @import("names")
 let tokens := @import("tokens")
 let types := @import("types")
 
@@ -30,6 +31,13 @@ struct Parser:
     globals : ast.GlobalDef[]
     structs : ast.SDef[]
     tanames : str[]      // the names standing for types, and what they stand for
+    // the names by hashing: the enumerations (builtin first, as in
+    // enames), the structs, the measures, and the names standing for
+    // types, each answering its position in the array beside it
+    e_at : names.Names
+    s_at : names.Names
+    u_at : names.Names
+    t_at : names.Names
     tatypes : i64[]
     unames : str[]       // the measures this file knows, builtin then defined
     udecay : i64[]       // … and what each may stand in for
@@ -415,10 +423,9 @@ impl Parser:
         if #name >= 2 and name[#name - 1] = '\'':
             // a type variable: whatever the call hands over
             let tv : mut i64 = ⁻1
-            if #self.tvn > 0:
-                foreach i := 0…#self.tvn:
-                    if self.tvn[i] = name:
-                        tv ← 194048 + @dropunit(i)
+            foreach i := 0…#self.tvn:
+                if self.tvn[i] = name:
+                    tv ← 194048 + @dropunit(i)
             if tv = ⁻1:
                 if #self.tvn >= 32:
                     self.err("this file spells more than 32 type variables")
@@ -567,7 +574,7 @@ impl Parser:
     fn intern_digest_types(&mut self):
         if #self.hdty > 0:
             return
-        foreach w := ast.hash_digest_bytes():
+        foreach w := ast.HASH_DIGEST_BYTES:
             self.hdty.push(types.mk_fty(self.farr_intern(types.TY_U8, w)))
 
     // equal lambda signatures share one type code, as tuple shapes do
@@ -625,10 +632,7 @@ impl Parser:
     // import has no module to try and asks once, as it always did.
     // where an enum's whole name stands in the table, or ⁻1
     fn enum_slot(&self, whole : str) → i64:
-        foreach i := 0¤ptrdiff…#self.enames:
-            if self.enames[i] = whole:
-                return @dropunit(i)
-        ⁻1
+        self.e_at.find(whole)
 
     fn sindex_here(&self, name : str, at : i64) → i64:
         let m : str = self.mod_at(at)
@@ -678,27 +682,26 @@ impl Parser:
         // from NBUILTIN_ENUMS on: a builtin enum is a value under std,
         // not a type a program may write down, which is how the
         // interpreter has it
-        if @dropunit(#self.enames) > types.NBUILTIN_ENUMS:
-            foreach i := types.NBUILTIN_ENUMS × 1¤ptrdiff…#self.enames:
-                if self.enames[i] = name:
-                    return types.mk_ety(@dropunit(i))
+        // a declared enumeration; the builtins stand first in enames
+        // and are not reached by name here
+        let ei : i64 = self.e_at.find(name)
+        if ei >= types.NBUILTIN_ENUMS:
+            return types.mk_ety(ei)
         // a name standing for a type answers what it stands for
-        if #self.tanames > 0:
-            foreach i := 0…#self.tanames:
-                if self.tanames[i] = name:
-                    return self.tatypes[i]
-        if #self.snames > 0:
-            foreach i := 0…#self.snames:
-                if self.snames[i] = name:
-                    return types.mk_sty(@dropunit(i))
+        let ti : i64 = self.t_at.find(name)
+        if ti ≠ ⁻1:
+            return self.tatypes[ti × 1¤ptrdiff]
+        let si : i64 = self.s_at.find(name)
+        if si ≠ ⁻1:
+            return types.mk_sty(si)
         ⁻1
 
     // the ¤unit that may follow a binding's or parameter's name
     fn unit_index(&self, name : str) → i64:
-        foreach i := 1…#self.unames:
-            if self.unames[i] = name:
-                return @dropunit(i)
-        ⁻1
+        // the table holds unames whole, and the first entry is the
+        // measure of nothing, which no name reaches
+        let at : i64 = self.u_at.find(name)
+        if at >= 1: at else: ⁻1
 
     // A measure written before the type measures what an array holds,
     // the way it measures a bare number: `xs : i64 ¤meter[]` is an
@@ -865,9 +868,8 @@ impl Parser:
             self.extra.push(ptoks[i])
             self.extra.push(pts[i])
         self.extra.push(@dropunit(#caps))
-        if #caps > 0:
-            foreach i := 0…#caps:
-                self.extra.push(caps[i])
+        foreach i := 0…#caps:
+            self.extra.push(caps[i])
         self.extra.push(ret)
         self.mknode(ast.Nk.lambda, at, off, body, li)
 
@@ -1318,7 +1320,7 @@ impl Parser:
                     // names inside std.hash
                     _ ← self.eat(tokens.Tk.dot, "'.' and which algorithm")
                     let aname := self.ttext(self.pos)
-                    let algs := ast.hash_algs()
+                    let algs := ast.HASH_ALGS
                     let alg : mut i64 = ⁻1
                     foreach k := 0…#algs:
                         if algs[k] = aname:
@@ -1380,10 +1382,9 @@ impl Parser:
     // answers about itself, folded to constants before anything runs,
     // so a comptime check reads them for free
     fn impl_str(&mut self, s : str) → i64:
-        if #self.toks.strs > 0:
-            foreach i := 0…#self.toks.strs:
-                if self.toks.strs[i] = s:
-                    return @dropunit(i)
+        foreach i := 0…#self.toks.strs:
+            if self.toks.strs[i] = s:
+                return @dropunit(i)
         let idx : i64 = @dropunit(#self.toks.strs)
         self.toks.strs.push(s)
         idx
@@ -2272,10 +2273,9 @@ impl Parser:
             self.pos ← self.pos + 1
         let params_off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ptoks))
-        if #ptoks > 0:
-            foreach i := 0…#ptoks:
-                self.extra.push(ptoks[i])
-                self.extra.push(ptypes[i])
+        foreach i := 0…#ptoks:
+            self.extra.push(ptoks[i])
+            self.extra.push(ptypes[i])
         let pre_off : mut i64 ¤"aextra" = ⁻1
         if #pres > 0:
             pre_off ← self.push_list(pres)
@@ -2697,6 +2697,7 @@ impl Parser:
         _ ← self.eat(tokens.Tk.eq, "'=' and the type the name stands for")
         let t : i64 = self.parse_type(false)
         if self.failed(): return
+        self.t_at.add(name)
         self.tanames.push(name)
         self.tatypes.push(t)
         self.end_stmt()
@@ -2749,10 +2750,9 @@ impl Parser:
             self.pos ← self.pos + 1
         let off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ftoks))
-        if #ftoks > 0:
-            foreach i := 0…#ftoks:
-                self.extra.push(ftoks[i])
-                self.extra.push(ftypes[i])
+        foreach i := 0…#ftoks:
+            self.extra.push(ftoks[i])
+            self.extra.push(ftypes[i])
         let inv_off : mut i64 ¤"aextra" = ⁻1
         if #invs > 0:
             inv_off ← self.push_list(invs)
@@ -2897,8 +2897,7 @@ impl Parser:
         // and not the `fn`: a contract is part of what a function is
         self.def_start ← self.pos
         // the @old nodes belong to the definition being read
-        while #self.olds > 0:
-            _ ← self.olds.pop() ?? 0
+        self.olds ← []
         let imp : mut bool = false
         let is_start : mut bool = false
         let is_noreturn : mut bool = false
@@ -3122,12 +3121,21 @@ fn parse_mods(toks : &lex.Toks, src : byte[], mods : ast.Mods) → ast.Ast:
 fn parse_recipe(toks : &lex.Toks, src : byte[]) → ast.Ast:
     parse_mode(&toks, src, true, ast.no_mods())
 
+// a table over every name in an array, in its order
+fn names_over(v : str[]) → names.Names:
+    let t : mut names.Names = names.names_new(@dropunit(#v))
+    foreach s := v:
+        t.add(s)
+    t
+
 fn parse_mode(toks : &lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) → ast.Ast:
     let p : mut Parser = Parser{mtab: mods, udecl: [], edecl: [], toks: toks, src: src, pos: 0, blets: [],
                                 nkind: [], ntok: [], na: [], nb: [], nc: [],
                                 extra: [], fns: [], qmods: [],
                                 builds: [], globals: [], structs: [],
                                 tanames: [], tatypes: [],
+                                e_at: names_over(types.builtin_enum_names()), s_at: names.names_new(0),
+                                u_at: names_over(types.unit_names()), t_at: names.names_new(0),
                                 unames: types.unit_names(), umarks: types.unit_marks(),
                                 udecay: types.unit_decays(),
                                 udname: types.unit_none_names(),
@@ -3164,6 +3172,7 @@ fn parse_mode(toks : &lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         if toks.kind[i × 1¤ptrdiff] = tokens.Tk.kw_struct and toks.kind[(i + 1) × 1¤ptrdiff] = tokens.Tk.ident:
             let sn : str = tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                    toks.len[(i + 1) × 1¤ptrdiff])
+            p.s_at.add(if fmod = "": sn else: fmod ⧺ "." ⧺ sn)
             p.snames.push(if fmod = "": sn else: fmod ⧺ "." ⧺ sn)
             p.sexp.push(exp_open)
         // A measure is gathered here too, and for the same reason a
@@ -3181,6 +3190,7 @@ fn parse_mode(toks : &lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
                                    toks.len[(i + 1) × 1¤ptrdiff])
             let ewhole : str = if fmod = "": en else: fmod ⧺ "." ⧺ en
             if p.enum_slot(ewhole) = ⁻1:
+                p.e_at.add(ewhole)
                 p.enames.push(ewhole)
                 p.eexp.push(exp_open)
                 p.ewidth.push(types.TY_I64)
@@ -3191,6 +3201,7 @@ fn parse_mode(toks : &lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
             let un : str = tokens.run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                    toks.len[(i + 1) × 1¤ptrdiff])
             if p.unit_index(un) = ⁻1 and @dropunit(#p.unames) < 125:
+                p.u_at.add(un)
                 p.unames.push(un)
                 p.umarks.push(un)
                 p.udecay.push(0)

@@ -23,6 +23,7 @@
 let ast := @import("ast")
 let diag := @import("diag")
 let lex := @import("lex")
+let names_m := @import("names")
 let tokens := @import("tokens")
 let types := @import("types")
 
@@ -101,6 +102,8 @@ struct Cev:
     a : ast.Ast
     toks : lex.Toks
     src : byte[]
+    fn_at : names_m.Names     // the functions and the globals by name
+    g_at : names_m.Names
     gvals : i64[]           // what the checker folded each global to,
                             // empty where it has not run
     names : str[]           // the bindings in scope, innermost last
@@ -214,9 +217,7 @@ fn ev_nchildren(k : ast.Nk) → i64:
 // which orderings each comparison admits, indexed by Nk.eq…Nk.ge:
 // less is 1, equal is 2, greater is 4.  One subtraction and a mask
 // answers all six, over integers, strings and truth values alike.
-fn ev_cmp_admits() → i64[]:
-    [2, 5, 1, 3, 4, 6]
-
+let EV_CMP_ADMITS : i64[] = [2, 5, 1, 3, 4, 6]
 impl Cev:
     fn derr(&mut self, tok : i64, m : str):
         let at : i64 ¤ptrdiff = tok
@@ -334,11 +335,7 @@ impl Cev:
                                          " declare; """ ⧺ ev_subset())
 
     fn fn_index(&self, name : str) → i64:
-        if #self.a.fns > 0:
-            foreach i := 0…#self.a.fns:
-                if self.a.fns[i].name = name:
-                    return @dropunit(i)
-        ⁻1
+        self.fn_at.find(name)
 
     // -------------------------------------------------------------------
     // Scope: the checker's watermark, and its floor for a called frame
@@ -729,11 +726,7 @@ impl Cev:
         cv_none()
 
     fn global_index(&self, name : str) → i64:
-        if #self.a.globals > 0:
-            foreach i := 0…#self.a.globals:
-                if self.a.globals[i].name = name:
-                    return @dropunit(i)
-        ⁻1
+        self.g_at.find(name)
 
     fn ev_arrlit(&mut self, tok : i64, off : i64) → CVal:
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
@@ -832,7 +825,7 @@ impl Cev:
             ord ← if l.s = r.s: two else: one
         else:
             ord ← if l.n = r.n: two else: (if l.n < r.n: one else: four)
-        let admits : i64[] = ev_cmp_admits()
+        let admits : i64[] = EV_CMP_ADMITS
         cv_bool(admits[(k.ord() - ast.Nk.eq.ord()) × 1¤ptrdiff] & ord ≠ 0)
 
     // -------------------------------------------------------------------
@@ -1014,7 +1007,13 @@ fn build_recipe(a : &ast.Ast, toks : &lex.Toks, src : byte[], gvals : i64[],
         return Recipe{names: [], roots: [], outdirs: [], targets: [],
                       optimizes: [], paths: [], flags: [], diags: []}
     let recipe : ast.FnDef = a.builds[0¤ptrdiff]
-    let ev : mut Cev = Cev{a: a, toks: toks, src: src, gvals: gvals,
+    let fn_at : mut names_m.Names = names_m.names_new(@dropunit(#a.fns))
+    foreach f := a.fns:
+        fn_at.add(f.name)
+    let g_at : mut names_m.Names = names_m.names_new(@dropunit(#a.globals))
+    foreach g := a.globals:
+        g_at.add(g.name)
+    let ev : mut Cev = Cev{a: a, toks: toks, src: src, gvals: gvals, fn_at: fn_at, g_at: g_at,
                          names: [], vals: [], vmut: [], marks: [], floor: 0,
                          pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
                          cfg_tgt: [], cfg_opt: [], added: [], opt_output: output,

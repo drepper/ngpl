@@ -11,6 +11,8 @@
 struct Names:
     slot : i64[]         // 1 + the name's index, or 0 for an empty slot
     name : str[]
+    val : i64[]          // what each name answers: its index here,
+                         // unless it was added with an answer of its own
 
 fn names_hash(s : str) → i64:
     let h : mut i64 = 0
@@ -29,21 +31,48 @@ impl Names:
             at ← (at + 1) & mask
         at
 
-    // the index the name was added under, or ⁻1
+    // what the name answers, or ⁻1
     fn find(&self, s : str) → i64:
         let held : i64 = self.slot[self.probe(s) × 1¤ptrdiff]
-        if held = 0: ⁻1 else: held - 1
+        if held = 0: ⁻1 else: self.val[(held - 1) × 1¤ptrdiff]
 
+    // the name, answering its position here: the nth name added
+    // answers n
     fn add(&mut self, s : str):
+        self.add_at(s, @dropunit(#self.name))
+
+    // The name, answering v.  A name already held keeps what it
+    // answered: the first of two alike is the one found, as a walk
+    // down an array would find it, and the table stands beside such
+    // an array -- the compiler's string pool holds a literal once per
+    // place it was written and interns to the first.
+    fn add_at(&mut self, s : str, v : i64):
         // A linear probe walks forever in a table that is full, so the
-        // room is settled when the table is made rather than grown
-        // when it fills; this is what says the settling was right.
-        assert(@dropunit(#self.name) × 2 < @dropunit(#self.slot),
-               "the name table keeps half its slots free")
+        // table keeps half its slots free: when the names reach half,
+        // the slots double and every name is placed again.  A table
+        // made for the names it will hold never grows; one that
+        // interns as it reads -- the compiler's strings, the parser's
+        // types -- grows a few times and is then done.
+        if @dropunit(#self.name) × 2 >= @dropunit(#self.slot):
+            self.grow()
         let at : i64 = self.probe(s)
         if self.slot[at × 1¤ptrdiff] = 0:
             self.name.push(s)
+            self.val.push(v)
             self.slot[at × 1¤ptrdiff] ← @dropunit(#self.name)
+
+    // twice the slots, every name placed again where the wider mask
+    // puts it; the names keep their numbers, since a number is the
+    // position in `name` and that does not move
+    fn grow(&mut self):
+        let wider : i64 = @dropunit(#self.slot) × 2
+        self.slot ← wider ⍴ 0
+        let mask : i64 = wider - 1
+        foreach i := 0¤ptrdiff…#self.name:
+            let at : mut i64 = names_hash(self.name[i]) & mask
+            while self.slot[at × 1¤ptrdiff] ≠ 0:
+                at ← (at + 1) & mask
+            self.slot[at × 1¤ptrdiff] ← @dropunit(i) + 1
 
 // Slots for that many names with half the table left over, rounded up
 // to a power of two so a probe can mask rather than divide.
@@ -57,7 +86,5 @@ fn names_slots(want : i64) → i64:
 
 @export
 fn names_new(want : i64) → Names:
-    let sl : mut i64[] = []
-    foreach _ := 0…names_slots(want):
-        sl.push(0)
-    Names{slot: sl, name: []}
+    let sl : i64[] = names_slots(want) ⍴ 0
+    Names{slot: sl, name: [], val: []}

@@ -506,7 +506,7 @@ for r in "$testdir"/refuse/*.ngpl; do
     fi
 done
 
-# diag_codes() is what @expect is held to, and it is a hand-written
+# DIAG_CODES is what @expect is held to, and it is a hand-written
 # list beside hand-written derrc/dwarn calls.  A number drawn but not
 # listed is an expectation that would quietly pass; a number listed but
 # not drawn is one that would always fail.  Both are checked here
@@ -515,13 +515,13 @@ done
 echo
 drawn=$(grep -rho 'derrc(\([^,]*\), *[0-9]\{4\}\|dwarn(\([^,]*\), *[0-9]\{4\}' \
             "$topdir"/src/*.ngpl | grep -o '[0-9]\{4\}$' | sort -u)
-listed=$(sed -n '/^fn diag_codes/,/^$/p' "$topdir"/src/check.ngpl \
+listed=$(sed -n '/^let DIAG_CODES/,/^$/p' "$topdir"/src/check.ngpl \
              | grep -o '[0-9]\{4\}' | sort -u)
 if [ "$drawn" = "$listed" ]; then
-    echo "ok   diag_codes() lists the $(echo "$drawn" | wc -l) numbers the compiler draws"
+    echo "ok   DIAG_CODES lists the $(echo "$drawn" | wc -l) numbers the compiler draws"
     pass=$((pass + 1))
 else
-    echo "FAIL diag_codes() and the derrc/dwarn calls disagree"
+    echo "FAIL DIAG_CODES and the derrc/dwarn calls disagree"
     diff <(echo "$listed") <(echo "$drawn") | sed 's/^</    listed, never drawn: /;s/^>/    drawn, never listed: /'
     fail=$((fail + 1))
 fi

@@ -195,10 +195,7 @@ let IR_READS : i64[] = [
 @export
 @post(r: @dropunit(#r) = nv)
 fn se_counts(ir : IrFn, nv : i64) → i64[]:
-    let cnt : mut i64[] = []
-    if nv > 0:
-        foreach _ := 0…nv:
-            cnt.push(0)
+    let cnt : mut i64[] = nv ⍴ 0
     let nrd : i64 = @dropunit(#IR_READS)
     let ne : i64 = @dropunit(#ir.extra)
     let n : i64 ¤ptrdiff = #ir.op
@@ -304,10 +301,7 @@ let IR_COPIES : i64[] = [
 @pre(freecmp >= 0 and freecmp <= 15 and freediv >= 0 and freediv <= 15)
 @post(r: @dropunit(#r) = nv)
 fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
-    let want : mut i64[] = []
-    if nv > 0:
-        foreach _ := 0…nv:
-            want.push(0)
+    let want : mut i64[] = nv ⍴ 0
     let nnc : i64 = @dropunit(#IR_NEEDS_CANON)
     let ne : i64 = @dropunit(#ir.extra)
     let n : i64 ¤ptrdiff = #ir.op

@@ -239,10 +239,9 @@ fn rt_bt_ir(tg : &elf.Target, lw : &mut lower.Lower) → ir.IrFn:
 @export
 fn bt_fn_names(a : &ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     let out : mut str[] = []
-    if #a.fns > 0:
-        foreach i := 0…#a.fns:
-            let d := a.fns[i]
-            out.push(if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name)
+    foreach i := 0…#a.fns:
+        let d := a.fns[i]
+        out.push(if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name)
     if ninit > 0:
         out.push("<globals>")
     out.push("<args>")
@@ -261,10 +260,9 @@ fn bt_fn_names(a : &ast.Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
 @export
 fn bt_text_end(em : emit.Emit, text_size : i64) → i64:
     let end : mut i64 = text_size
-    if #em.rt_off > 0:
-        foreach i := 0…#em.rt_off:
-            let at : i64 = em.rt_off[i]
-            end ← end ⌊ (if at = ⁻1: text_size else: at)
+    foreach i := 0…#em.rt_off:
+        let at : i64 = em.rt_off[i]
+        end ← end ⌊ (if at = ⁻1: text_size else: at)
     end
 
 // How far each function runs: to where the next begins, and the last

@@ -509,16 +509,14 @@ fn rvg_epilogue(em : &mut emit.Emit, tg : &elf.Target):
 
 @export
 fn rvg_resolve(em : &mut emit.Emit, tg : &elf.Target):
-    if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos:
-            let pos : i64 = em.tf_pos[i]
-            let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            assert(delta >= ⁻1048576 and delta < 1048576, "a local jump inside jal's reach")
-            em.patch32(pos, machine.code_word(em, pos) + rv_jimm(delta))
-    while #em.tf_pos > 0:
-        _ ← em.tf_pos.pop() ?? 0
-        _ ← em.tf_lab.pop() ?? 0
-        _ ← em.tf_form.pop() ?? 0
+    foreach i := 0…#em.tf_pos:
+        let pos : i64 = em.tf_pos[i]
+        let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
+        assert(delta >= ⁻1048576 and delta < 1048576, "a local jump inside jal's reach")
+        em.patch32(pos, machine.code_word(em, pos) + rv_jimm(delta))
+    em.tf_pos ← []
+    em.tf_lab ← []
+    em.tf_form ← []
 
 @export
 fn rvg_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):

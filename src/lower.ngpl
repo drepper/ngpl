@@ -4,6 +4,7 @@ let elf := @import("elf")
 let emit := @import("emit")
 let ir := @import("ir")
 let lex := @import("lex")
+let names := @import("names")
 let tokens := @import("tokens")
 let types := @import("types")
 
@@ -30,6 +31,7 @@ struct Lower:
     nmove : i64[]        // see Chk
     cur_ref : i64        // whether the function being lowered answers a borrow
     strs : str[]
+    sat : names.Names    // where each string sits in strs, by hashing
     op : ir.Ir[]
     ia : i64[]
     ib : i64[]
@@ -140,14 +142,15 @@ impl Lower:
         l
 
     fn intern(&mut self, s : str) → i64:
-        // a program without one string literal arrives here empty, and
-        // 0…⁻1 would walk down; the guard keeps the range ascending
-        if #self.strs > 0:
-            foreach i := 0…#self.strs:
-                if self.strs[i] = s:
-                    return @dropunit(i)
+        // every literal and every message the compiler emits passes
+        // here, and the pool holds thousands by the end: a hash, not
+        // a walk down all of them
+        let seen : i64 = self.sat.find(s)
+        if seen ≠ ⁻1:
+            return seen
         let idx : i64 = @dropunit(#self.strs)
         self.strs.push(s)
+        self.sat.add_at(s, idx)
         idx
 
     fn fname_index(&self, name : str) → i64:

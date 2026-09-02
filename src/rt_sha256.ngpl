@@ -57,11 +57,11 @@ fn sha_ir_w(b : &mut rt_portable.RtB, h : i64, idx : i64, three : i64) → i64:
 fn rt_sha256init_ir() → ir.IrFn:
     let b : mut rt_portable.RtB = rt_portable.rtb(1)
     b.stn(0, rt_hash.HS_BLK, b.cst(64), 8)
-    let h0 : u32[] = sha256.sha_h0()
+    let h0 : u32[] = sha256.SHA_H0
     assert(@dropunit(#h0) = 8, "eight starting words")
     foreach i := 0…8:
         b.stn(0, rt_hash.HS_H + i × 8, b.cst(h0[i × 1¤ptrdiff]), 8)
-    let kt : u32[] = sha256.sha_k()
+    let kt : u32[] = sha256.SHA_K
     assert(@dropunit(#kt) = 64, "sixty-four round constants")
     foreach i := 0…64:
         b.stn(0, rt_hash.HS_K + i × 8, b.cst(kt[i × 1¤ptrdiff]), 8)

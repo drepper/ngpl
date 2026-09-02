@@ -67,10 +67,7 @@ fn analyze_abi(a : &ast.Ast, toks : &lex.Toks, argregs : i64, extra : i64, want_
     // the caller picked without knowing which body it would land in, so
     // that function keeps the architecture's convention.  One sweep of
     // the nodes finds every one of them; nothing else here needs a node.
-    let taken : mut i64[] = []
-    if nfns > 0:
-        foreach _ := 0…nfns:
-            taken.push(0)
+    let taken : mut i64[] = nfns ⍴ 0
     let nnodes : i64 ¤ptrdiff = #a.nkind
     if nnodes > 0:
         foreach i := 0…nnodes:

@@ -709,7 +709,13 @@ name it resolves: a function by its bare name and by its whole one, a
 global, a struct, an enumeration.  Each had been a walk down the array
 -- `fn_in` built a `module.name` string for every function in the
 program on every call-site lookup -- and the walks were a third of
-the native compiler's time on its own source.
+the native compiler's time on its own source.  The table grows
+(slots double at half full, every name placed again), and a name may
+answer a value of its own rather than its position, which is what
+lets one stand beside an array that holds a string more than once --
+`lower.intern`'s pool -- and answer the first, as the walk it
+replaced did.  The parser's enum, struct, unit and type-alias tables
+and comptime's function and global lookups probe it too.
 
 ## Modules
 

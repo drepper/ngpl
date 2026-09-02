@@ -324,3 +324,11 @@ Outstanding
     the second pass met nodes the first had settled -- so a body that compared the subject
     against a member was refused with "an enum is asked about its own kind" where the
     interpreter ran it.  tests/compile/t82_match_keys_body.
+
+[x] the compiler's own flow control, first pass: 71 `if #v > 0:` guards around one loop are
+    gone (an empty range runs zero times in both implementations); fills are `n ⍴ x`;
+    the scope copies are slices; pop-to-empty loops are `v ← []`; nine literal tables are
+    global constants; lower.intern, the parser's name tables and comptime's lookups hash
+    through names.Names, which grows now and lets a name answer a value of its own.  `⍴`
+    in the interpreter takes any scalar filler and a measured count, as the compiler
+    does.  design/array-ops/README.md holds the census and what waits on the language.

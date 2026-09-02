@@ -671,14 +671,12 @@ fn i3g_epilogue(em : &mut emit.Emit, tg : &elf.Target):
 
 @export
 fn i3g_resolve(em : &mut emit.Emit, tg : &elf.Target):
-    if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos:
-            let pos : i64 = em.tf_pos[i]
-            em.patch32(pos, em.labels[em.tf_lab[i] × 1¤ptrdiff] - (pos + 4))
-    while #em.tf_pos > 0:
-        _ ← em.tf_pos.pop() ?? 0
-        _ ← em.tf_lab.pop() ?? 0
-        _ ← em.tf_form.pop() ?? 0
+    foreach i := 0…#em.tf_pos:
+        let pos : i64 = em.tf_pos[i]
+        em.patch32(pos, em.labels[em.tf_lab[i] × 1¤ptrdiff] - (pos + 4))
+    em.tf_pos ← []
+    em.tf_lab ← []
+    em.tf_form ← []
 
 @export
 fn i3g_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):

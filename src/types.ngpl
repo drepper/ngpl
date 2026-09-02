@@ -57,20 +57,29 @@ let EI_FILETYPE : i64 = 0
 @export
 let NBUILTIN_ENUMS : i64 = 1
 
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn builtin_enum_names() → str[]:
     ["filetype"]
-
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn builtin_enum_widths() → i64[]:
     [TY_U32]
-
 // the S_IF* constants from <sys/stat.h>, as the interpreter holds
 // them; the kernel's d_type is this value shifted right twelve
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn builtin_enum_members() → str[]:
     ["unknown", "fifo", "chr", "dir", "blk", "reg", "lnk", "sock"]
-
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn builtin_enum_values() → i64[]:
     [0, 4096, 8192, 16384, 24576, 32768, 40960, 49152]
@@ -120,6 +129,9 @@ let UNIT_BYTE : i64 = 2
 // name is what the program writes; the spelling beside it is what a
 // printed value carries, and is the interpreter's for that measure.
 // A unit the program defines is added after these.
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn unit_names() → str[]:
     ["", "ptrdiff", "byte", "meter", "second", "kilogram", "count",
@@ -127,21 +139,27 @@ fn unit_names() → str[]:
      "microsecond", "minute", "hour", "gram", "milligram", "ampere",
      "kelvin", "mole", "candela", "kilobyte", "kibibyte", "megabyte",
      "mebibyte", "gigabyte", "gibibyte"]
-
 // What each measure may stand in for, by index; 0 is "nothing".  The
 // measures the language ships with stand in for nothing: a length is
 // not an index into anything.
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn unit_decays() → i64[]:
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
 // nothing written beside the measures the language ships with
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn unit_none_names() → str[]:
     ["", "", "", "", "", "", "", "", "", "", "", "", "", "",
      "", "", "", "", "", "", "", "", "", "", "", "", ""]
-
+// answered fresh each time: a parse seeds its own tables from this
+// and then adds to them, so a shared one would carry one file's
+// declarations into the next
 @export
 fn unit_marks() → str[]:
     ["", "ptrdiff", "B", "m", "s", "kg", "count",
@@ -149,7 +167,6 @@ fn unit_marks() → str[]:
      "μs", "min", "h", "g", "mg", "A",
      "K", "mol", "cd", "kB", "KiB", "MB",
      "MiB", "GB", "GiB"]
-
 // core-2 holds four widths, so two bits say which; the five bits that
 // spelling a width out used to take now say which measure the value
 // carries, and a measure is an index into the file's list of them.

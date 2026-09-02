@@ -6689,6 +6689,10 @@ class Evaluator:
         su = unwrap_optional(shape_val)
         du = unwrap_optional(data_val)
 
+        # a measured count -- #v is a ¤ptrdiff -- is a count, as the
+        # compiler reads it
+        if isinstance(su, UnitValue):
+            su = su.inner
         if isinstance(su, IntValue):
             dims = [su.value]
         elif isinstance(su, TupleValue):
@@ -6716,9 +6720,11 @@ class Evaluator:
         source: list[Value]
         backing: list[Value] | None = None
         etype: str | None = None
-        if isinstance(du, (IntValue, EnumValue)):
-            # An enumerator is a value like any other, and a table of
-            # them starts out filled with one.
+        if isinstance(du, (IntValue, EnumValue, BoolValue, StrValue,
+                           CharValue, FloatValue, UnitValue)):
+            # A scalar of any kind fills a table: an enumerator, a truth
+            # value, a string are values like a number is, and the
+            # compiler fills with each of them.
             source = [du]
         elif isinstance(du, ObjectValue) and isinstance(du.obj, ArrayValue):
             arr = du.obj

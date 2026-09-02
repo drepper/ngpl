@@ -229,25 +229,21 @@ fn build_members() → str:
      " looked for and what the compiler is asked for; host_target and output_dir are what it
      " holds"""
 
-// the algorithms, in the order hash_algs() names them
+// the algorithms, in the order HASH_ALGS names them
 let HALG_SHA256 : i64 = 0
 
 @export
-fn hash_algs() → str[]:
-    ["sha256"]
-
+let HASH_ALGS : str[] = ["sha256"]
 // How many bytes each answers.  The width is part of what digest()
 // hands back -- a u8[32], not a u8[] -- so it has to be known while
 // the program is being read, not while it runs.
 @export
-fn hash_digest_bytes() → i64[]:
-    [32]
-
+let HASH_DIGEST_BYTES : i64[] = [32]
 // the same names as a diagnostic says them
 @export
 @post(r: #r > 0)
 fn hash_algs_named() → str:
-    let algs := hash_algs()
+    let algs := HASH_ALGS
     let out : mut str = ""
     foreach k := 0…#algs:
         out ← out ⧺ (if k = 0: "" else: ", ") ⧺ algs[k]

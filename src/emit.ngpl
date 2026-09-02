@@ -548,14 +548,12 @@ impl Emit:
 
     // Forget that any parameter is in reg, reg having just been written
     fn pkill(&mut self, reg : i64):
-        if #self.pkeep > 0:
-            foreach j := 0…#self.pkeep:
-                if arch_x86_64.arg_reg_p(@dropunit(j), self.self_priv) = reg:
-                    self.pkeep[j] ← 0
+        foreach j := 0…#self.pkeep:
+            if arch_x86_64.arg_reg_p(@dropunit(j), self.self_priv) = reg:
+                self.pkeep[j] ← 0
 
     fn pclear(&mut self):
-        while #self.pkeep > 0:
-            _ ← self.pkeep.pop() ?? 0
+        self.pkeep ← []
 
     fn load(&mut self, reg : i64, slot : i64):
         // A parameter still in the register it came in: a move from
@@ -660,10 +658,9 @@ impl Emit:
     // every check in a function that reports the same way.
     fn jabort(&mut self, opcode2 : i64, target : i64):
         let at : mut i64 = ⁻1
-        if #self.ab_kind > 0:
-            foreach i := 0…#self.ab_kind:
-                if self.ab_kind[i] = target:
-                    at ← self.ab_lab[i]
+        foreach i := 0…#self.ab_kind:
+            if self.ab_kind[i] = target:
+                at ← self.ab_lab[i]
         if at = ⁻1:
             self.labels.push(⁻1)
             at ← @dropunit(#self.labels) - 1
@@ -674,13 +671,11 @@ impl Emit:
     // …and the stubs themselves, once the body is behind them.
     // Nothing returns from one, so a call is the whole of it.
     fn abort_stubs(&mut self):
-        if #self.ab_kind > 0:
-            foreach i := 0…#self.ab_kind:
-                self.set_label(self.ab_lab[i])
-                self.jglobal(232, ⁻1, self.ab_kind[i])
-        while #self.ab_kind > 0:
-            _ ← self.ab_kind.pop() ?? 0
-            _ ← self.ab_lab.pop() ?? 0
+        foreach i := 0…#self.ab_kind:
+            self.set_label(self.ab_lab[i])
+            self.jglobal(232, ⁻1, self.ab_kind[i])
+        self.ab_kind ← []
+        self.ab_lab ← []
 
     fn set_label(&mut self, l : i64):
         // a label is a join point; what rax held on one way in says
@@ -689,22 +684,19 @@ impl Emit:
         self.labels[l × 1¤ptrdiff] ← self.here()
 
     fn resolve_locals(&mut self):
-        if #self.lf_pos > 0:
-            foreach i := 0…#self.lf_pos:
-                let pos : i64 = self.lf_pos[i]
-                let target : i64 = self.labels[self.lf_label[i] × 1¤ptrdiff]
-                // an unset label once escaped this path as begin_fn(1)
-                // against a routine that used two
-                assert(target ≠ ⁻1, "every jumped-to label was placed")
-                self.patch32(pos, target - (pos + 4))
-        while #self.lf_pos > 0:
-            _ ← self.lf_pos.pop() ?? 0
-            _ ← self.lf_label.pop() ?? 0
+        foreach i := 0…#self.lf_pos:
+            let pos : i64 = self.lf_pos[i]
+            let target : i64 = self.labels[self.lf_label[i] × 1¤ptrdiff]
+            // an unset label once escaped this path as begin_fn(1)
+            // against a routine that used two
+            assert(target ≠ ⁻1, "every jumped-to label was placed")
+            self.patch32(pos, target - (pos + 4))
+        self.lf_pos ← []
+        self.lf_label ← []
 
     fn begin_fn(&mut self, nlabels : i64):
         self.raxbar()
-        while #self.labels > 0:
-            _ ← self.labels.pop() ?? 0
+        self.labels ← []
         foreach i := 0…nlabels:
             self.labels.push(⁻1)
 
@@ -737,30 +729,27 @@ impl Emit:
         self.w64(0)
 
     fn resolve_jtabs(&mut self):
-        if #self.pj_id > 0:
-            foreach i := 0…#self.pj_id:
-                self.jt_starts.push(@dropunit(#self.jt_entries))
-                let n0 : i64 = self.pj_len[i]
-                let st : i64 = self.pj_start[i]
-                if n0 < 0:
-                    // a value table: the entries are the data itself
-                    let n : i64 = 0 - n0
-                    self.jt_is_code.push(0)
-                    foreach j := 0…n:
-                        self.jt_entries.push(self.pj_labels[(st + j) × 1¤ptrdiff])
-                    continue
-                self.jt_is_code.push(1)
-                let n : i64 = n0
+        foreach i := 0…#self.pj_id:
+            self.jt_starts.push(@dropunit(#self.jt_entries))
+            let n0 : i64 = self.pj_len[i]
+            let st : i64 = self.pj_start[i]
+            if n0 < 0:
+                // a value table: the entries are the data itself
+                let n : i64 = 0 - n0
+                self.jt_is_code.push(0)
                 foreach j := 0…n:
-                    let off2 : i64 = self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff]
-                    assert(off2 ≠ ⁻1, "every table target was placed")
-                    self.jt_entries.push(off2)
-        while #self.pj_id > 0:
-            _ ← self.pj_id.pop() ?? 0
-            _ ← self.pj_start.pop() ?? 0
-            _ ← self.pj_len.pop() ?? 0
-        while #self.pj_labels > 0:
-            _ ← self.pj_labels.pop() ?? 0
+                    self.jt_entries.push(self.pj_labels[(st + j) × 1¤ptrdiff])
+                continue
+            self.jt_is_code.push(1)
+            let n : i64 = n0
+            foreach j := 0…n:
+                let off2 : i64 = self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff]
+                assert(off2 ≠ ⁻1, "every table target was placed")
+                self.jt_entries.push(off2)
+        self.pj_id ← []
+        self.pj_start ← []
+        self.pj_len ← []
+        self.pj_labels ← []
 
     // A runtime routine is found through its negative id, which indexes
     // this list -- so each one says which it is and is written where it
@@ -968,17 +957,14 @@ fn str_uses(em : &Emit, n : i64) → i64[]:
     let used : mut i64[] = []
     foreach i := 0…n:
         used.push(0)
-    if #em.sf_str > 0:
-        foreach k := 0…#em.sf_str:
-            used[em.sf_str[k] × 1¤ptrdiff] ← 1
-    if #em.sd_str > 0:
-        foreach k := 0…#em.sd_str:
-            used[em.sd_str[k] × 1¤ptrdiff] ← 1
+    foreach k := 0…#em.sf_str:
+        used[em.sf_str[k] × 1¤ptrdiff] ← 1
+    foreach k := 0…#em.sd_str:
+        used[em.sd_str[k] × 1¤ptrdiff] ← 1
     used
 
 @export
-fn rt_names() → str[]:
-    [
+let RT_NAMES : str[] = [
     "RT_PRINTI",
     "RT_WRITE1",
     "RT_ABORT",
@@ -1051,7 +1037,6 @@ fn rt_names() → str[]:
     "RT_FIDENT",
     "RT_FTHERE",
     "RT_FIDP"]
-
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
 // table read, one shift and one mask instead of a ladder of compares.
@@ -1086,16 +1071,13 @@ fn utf8_class_bytes() → u8[]:
 // One word to a class: the whole transition row packed six bits to a
 // state, each field holding where that state goes next.
 @export
-fn utf8_dfa_words() → i64[]:
-    [1715657000903040, 5146139723563398, 1715657000903052, 1715657000903058,
+let UTF8_DFA_WORDS : i64[] = [1715657000903040, 5146139723563398, 1715657000903052, 1715657000903058,
      1715657000903070, 1715657000903088, 1715657000903082, 1769258294968710,
      1715657000903046, 1769264636756358, 1715657000903064, 1715657000903076]
-
 // Which runtime routine calls which, as pairs: the caller, then what it
 // calls.  A routine the program reaches drags its callees in after it,
 // and nothing else is emitted.  Getting this wrong cannot pass quietly:
 // a call whose target was never emitted stops the compiler where the
 // calls are resolved.
 @export
-fn rt_edges() → i64[]:
-    [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42, 46, 8, 47, 3, 47, 8, 53, 8, 53, 56, 54, 3, 54, 5, 54, 57, 55, 3, 55, 58, 57, 5, 58, 5, 58, 8, 58, 9, 58, 10, 58, 57, 59, 3, 61, 59, 8, 62, 10, 62, 63, 8, 63, 5, 64, 5, 65, 8, 65, 64, 65, 5, 66, 8, 66, 5, 67, 8, 67, 2, 67, 4, 67, 5, 3, 68, 68, 32, 69, 8, 69, 6, 70, 8, 70, 3, 71, 8, 72, 8, 72, 5]
+let RT_EDGES : i64[] = [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42, 46, 8, 47, 3, 47, 8, 53, 8, 53, 56, 54, 3, 54, 5, 54, 57, 55, 3, 55, 58, 57, 5, 58, 5, 58, 8, 58, 9, 58, 10, 58, 57, 59, 3, 61, 59, 8, 62, 10, 62, 63, 8, 63, 5, 64, 5, 65, 8, 65, 64, 65, 5, 66, 8, 66, 5, 67, 8, 67, 2, 67, 4, 67, 5, 3, 68, 68, 32, 69, 8, 69, 6, 70, 8, 70, 3, 71, 8, 72, 8, 72, 5]

@@ -636,15 +636,13 @@ fn a32g_epilogue(em : &mut emit.Emit, tg : &elf.Target):
 
 @export
 fn a32g_resolve(em : &mut emit.Emit, tg : &elf.Target):
-    if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos:
-            let pos : i64 = em.tf_pos[i]
-            let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
-            em.patch32(pos, machine.code_word(em, pos) + (((delta - 8) » 2) & 16777215))
-    while #em.tf_pos > 0:
-        _ ← em.tf_pos.pop() ?? 0
-        _ ← em.tf_lab.pop() ?? 0
-        _ ← em.tf_form.pop() ?? 0
+    foreach i := 0…#em.tf_pos:
+        let pos : i64 = em.tf_pos[i]
+        let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
+        em.patch32(pos, machine.code_word(em, pos) + (((delta - 8) » 2) & 16777215))
+    em.tf_pos ← []
+    em.tf_lab ← []
+    em.tf_form ← []
 
 @export
 fn a32g_patch_abs(em : &mut emit.Emit, tg : &elf.Target, pos : i64, v : i64):
